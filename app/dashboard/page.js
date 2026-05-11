@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import { useState, useEffect, useRef } from 'react'
 
@@ -122,18 +123,18 @@ export default function Dashboard() {
         </div>
 
         <div className="p-4 border-t border-gray-100">
-          <button className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition">
+          <Link href="/notas" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">
             📊 Notas e Faltas
-          </button>
-          <button className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition">
+          </Link>
+          <Link href="/calendario" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">
             📅 Calendário
-          </button>
-          <button className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition">
+          </Link>
+          <Link href="/evolucao" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">
             📈 Minha Evolução
-          </button>
-          <button className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition">
+          </Link>
+          <Link href="/trabalhos" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">
             📝 Correção de Trabalhos
-          </button>
+          </Link>
         </div>
       </div>
 
