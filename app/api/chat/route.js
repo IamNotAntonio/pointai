@@ -5,7 +5,7 @@ const cliente = new Anthropic({
 })
 
 export async function POST(req) {
-  const { mensagens, perfil, materia } = await req.json()
+  const { mensagens, perfil, materia, imagemBase64, imagemTipo } = await req.json()
 
   const sistema = `Você é o Point, assistente acadêmico pessoal de ${perfil.nome}.
 
@@ -26,16 +26,42 @@ INSTRUÇÕES:
 - Seja proativo — sugira próximos passos, exercícios ou revisões quando relevante
 - Lembre que o objetivo do aluno é: ${perfil.objetivo}
 - Nunca esqueça com quem está falando — personalize sempre
-- Quando perceber que o aluno está com dificuldade, ofereça explicações alternativas`
+- Quando perceber que o aluno está com dificuldade, ofereça explicações alternativas
+- Quando receber uma imagem de prova, exercício ou anotação, analise o conteúdo visual com atenção e ajude o aluno diretamente com o que está na imagem`
+
+  // Build API messages — attach image to the last user message when present
+  const apiMessages = mensagens.map((m, i) => {
+    const isLastMsg = i === mensagens.length - 1
+
+    if (isLastMsg && m.role === 'user' && imagemBase64) {
+      const content = [
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: imagemTipo || 'image/jpeg',
+            data: imagemBase64,
+          },
+        },
+      ]
+      if (m.content) {
+        content.push({ type: 'text', text: m.content })
+      }
+      return { role: 'user', content }
+    }
+
+    // Historical messages: use text content only
+    return {
+      role: m.role,
+      content: m.content || '[Imagem enviada anteriormente]',
+    }
+  })
 
   const resposta = await cliente.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 1500,
     system: sistema,
-    messages: mensagens.map(m => ({
-      role: m.role,
-      content: m.content
-    }))
+    messages: apiMessages,
   })
 
   return Response.json({ resposta: resposta.content[0].text })

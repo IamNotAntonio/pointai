@@ -3,15 +3,35 @@ import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import Sidebar from '../components/Sidebar'
 
+function IconCamera() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+      <circle cx="12" cy="13" r="4"/>
+    </svg>
+  )
+}
+
+function IconX() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  )
+}
+
 export default function Dashboard() {
-  const [perfil, setPerfil] = useState(null)
-  const [materias, setMaterias] = useState([])
+  const [perfil, setPerfil]             = useState(null)
+  const [materias, setMaterias]         = useState([])
   const [materiaAtiva, setMateriaAtiva] = useState(null)
-  const [mensagens, setMensagens] = useState([])
-  const [input, setInput] = useState('')
-  const [carregando, setCarregando] = useState(false)
-  const fimChat = useRef(null)
+  const [mensagens, setMensagens]       = useState([])
+  const [input, setInput]               = useState('')
+  const [carregando, setCarregando]     = useState(false)
+  const [imagem, setImagem]             = useState(null) // { dataUrl, tipo }
+
+  const fimChat     = useRef(null)
   const textareaRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     const dados = localStorage.getItem('pointai_perfil')
@@ -42,23 +62,49 @@ export default function Dashboard() {
   }, [mensagens, carregando])
 
   function salvarHistorico(msgs) {
-    localStorage.setItem(`chat_${materiaAtiva}`, JSON.stringify(msgs))
+    // Strip image data before persisting to avoid localStorage overflow
+    const paraSalvar = msgs.map(({ image, ...m }) => m)
+    localStorage.setItem(`chat_${materiaAtiva}`, JSON.stringify(paraSalvar))
+  }
+
+  function selecionarImagem(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => setImagem({ dataUrl: ev.target.result, tipo: file.type })
+    reader.readAsDataURL(file)
+    e.target.value = '' // allow re-selecting the same file
   }
 
   async function enviar() {
-    if (!input.trim() || carregando) return
-    const novaMensagem = { role: 'user', content: input }
+    const temConteudo = input.trim() || imagem
+    if (!temConteudo || carregando) return
+
+    const novaMensagem = {
+      role: 'user',
+      content: input,
+      ...(imagem && { image: imagem.dataUrl }),
+    }
     const novasMensagens = [...mensagens, novaMensagem]
     setMensagens(novasMensagens)
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
+
+    const imagemParaEnviar = imagem
+    setImagem(null)
     setCarregando(true)
 
     try {
+      const body = { mensagens: novasMensagens, perfil, materia: materiaAtiva }
+      if (imagemParaEnviar) {
+        body.imagemBase64 = imagemParaEnviar.dataUrl.split(',')[1]
+        body.imagemTipo   = imagemParaEnviar.tipo
+      }
+
       const resp = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: novasMensagens, perfil, materia: materiaAtiva })
+        body: JSON.stringify(body),
       })
       const dados = await resp.json()
       const finais = [...novasMensagens, { role: 'assistant', content: dados.resposta }]
@@ -72,10 +118,7 @@ export default function Dashboard() {
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      enviar()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() }
   }
 
   function handleInput(e) {
@@ -87,6 +130,7 @@ export default function Dashboard() {
   function trocarMateria(m) {
     setMateriaAtiva(m)
     setMensagens([])
+    setImagem(null)
   }
 
   if (!perfil) return (
@@ -94,6 +138,8 @@ export default function Dashboard() {
       <p style={{ color: 'var(--text-4)' }}>Carregando...</p>
     </div>
   )
+
+  const podaEnviar = !carregando && (input.trim() || imagem)
 
   return (
     <div className="app-shell">
@@ -104,7 +150,6 @@ export default function Dashboard() {
         onMateriaChange={trocarMateria}
       />
 
-      {/* Chat pane */}
       <div className="page-area">
 
         {/* Header */}
@@ -125,10 +170,20 @@ export default function Dashboard() {
               <div key={i} className={`chat-bubble-wrap ${isUser ? 'user' : ''}`}>
                 {!isUser && <div className="chat-avatar">P</div>}
                 <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
-                  {isUser
-                    ? msg.content
-                    : <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  }
+                  {isUser ? (
+                    <>
+                      {msg.image && (
+                        <img
+                          src={msg.image}
+                          alt="Imagem enviada"
+                          className="chat-bubble-img"
+                        />
+                      )}
+                      {msg.content && <span>{msg.content}</span>}
+                    </>
+                  ) : (
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  )}
                 </div>
               </div>
             )
@@ -152,7 +207,41 @@ export default function Dashboard() {
 
         {/* Input */}
         <div className="chat-input-bar">
+
+          {/* Image preview */}
+          {imagem && (
+            <div className="chat-img-preview">
+              <img src={imagem.dataUrl} alt="Preview da imagem" />
+              <button
+                className="chat-img-remove"
+                onClick={() => setImagem(null)}
+                aria-label="Remover imagem"
+              >
+                <IconX />
+              </button>
+            </div>
+          )}
+
           <div className="chat-input-row">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png"
+              onChange={selecionarImagem}
+              style={{ display: 'none' }}
+            />
+
+            {/* Attach button */}
+            <button
+              className={`chat-attach-btn ${imagem ? 'active' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              title="Enviar foto da prova ou tarefa"
+              aria-label="Anexar imagem"
+            >
+              <IconCamera />
+            </button>
+
             <textarea
               ref={textareaRef}
               className="chat-textarea"
@@ -162,10 +251,11 @@ export default function Dashboard() {
               placeholder={`Pergunte sobre ${materiaAtiva}…`}
               rows={1}
             />
+
             <button
               className="chat-send-btn"
               onClick={enviar}
-              disabled={carregando || !input.trim()}
+              disabled={!podaEnviar}
               aria-label="Enviar"
             >
               ↑
@@ -173,6 +263,7 @@ export default function Dashboard() {
           </div>
           <p className="chat-hint">Enter para enviar · Shift+Enter para nova linha</p>
         </div>
+
       </div>
     </div>
   )
