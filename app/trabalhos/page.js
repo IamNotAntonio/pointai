@@ -1,7 +1,16 @@
 'use client'
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
+import Sidebar from '../components/Sidebar'
+
+const TIPOS = [
+  { value: 'artigo',    label: 'Artigo científico' },
+  { value: 'resenha',   label: 'Resenha' },
+  { value: 'relatorio', label: 'Relatório' },
+  { value: 'tcc',       label: 'TCC / Monografia' },
+  { value: 'redacao',   label: 'Redação' },
+  { value: 'outro',     label: 'Outro' },
+]
 
 export default function Trabalhos() {
   const [perfil, setPerfil] = useState(null)
@@ -27,14 +36,13 @@ export default function Trabalhos() {
     if (!texto.trim()) return
     setCarregando(true)
     setResultado(null)
-
     try {
-      const resposta = await fetch('/api/corrigir', {
+      const resp = await fetch('/api/corrigir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto, tipo, materia, perfil })
       })
-      const dados = await resposta.json()
+      const dados = await resp.json()
       setResultado(dados.resultado)
     } catch (e) {
       console.error(e)
@@ -43,97 +51,141 @@ export default function Trabalhos() {
     }
   }
 
-  if (!perfil) return <div className="min-h-screen flex items-center justify-center"><p className="text-gray-400">Carregando...</p></div>
+  if (!perfil) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'var(--text-4)' }}>Carregando...</p>
+    </div>
+  )
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className="app-shell">
+      <Sidebar perfil={perfil} />
 
-      {/* Sidebar */}
-      <div className="w-64 bg-gray-50 border-r border-gray-100 flex flex-col">
-        <div className="p-5 border-b border-gray-100">
-          <Link href="/dashboard" className="text-green-600 font-extrabold text-xl">Point.AI</Link>
-          <p className="text-gray-500 text-sm mt-1">{perfil.nome}</p>
-          <p className="text-gray-400 text-xs">{perfil.curso} • {perfil.semestre}</p>
+      <div className="page-area">
+        <div className="page-header">
+          <h1 className="page-title">Correção de Trabalhos</h1>
+          <p className="page-subtitle">Cole seu texto e receba feedback detalhado com nota estimada</p>
         </div>
 
-        <div className="p-4 flex-1 border-t border-gray-100">
-          <Link href="/dashboard" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">💬 Chat</Link>
-          <Link href="/notas" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">📊 Notas e Faltas</Link>
-          <Link href="/calendario" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">📅 Calendário</Link>
-          <Link href="/evolucao" className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:bg-gray-200 transition block">📈 Minha Evolução</Link>
-          <Link href="/trabalhos" className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 transition block">📝 Correção de Trabalhos</Link>
+        <div className="page-scroll">
+          <div style={{ display: 'grid', gridTemplateColumns: resultado ? '1fr 1fr' : '1fr', gap: 20, alignItems: 'start' }}>
+
+            {/* Formulário */}
+            <div>
+              <div className="card" style={{ marginBottom: 16 }}>
+                <p className="card-title">Configuração</p>
+                <div className="grid-2">
+                  <div>
+                    <label className="label">Tipo de trabalho</label>
+                    <select
+                      value={tipo}
+                      onChange={e => setTipo(e.target.value)}
+                      className="input"
+                    >
+                      {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Matéria</label>
+                    <select
+                      value={materia}
+                      onChange={e => setMateria(e.target.value)}
+                      className="input"
+                    >
+                      {materias.map((m, i) => <option key={i} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <p className="card-title" style={{ margin: 0 }}>Seu texto</p>
+                  <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{texto.length} caracteres</span>
+                </div>
+                <textarea
+                  value={texto}
+                  onChange={e => setTexto(e.target.value)}
+                  placeholder="Cole aqui o texto do seu trabalho para receber feedback detalhado..."
+                  rows={16}
+                  className="input"
+                  style={{ resize: 'vertical', lineHeight: 1.6 }}
+                />
+              </div>
+
+              <button
+                onClick={corrigir}
+                disabled={carregando || !texto.trim()}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '12px 18px', fontSize: 15 }}
+              >
+                {carregando ? (
+                  <>
+                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
+                    Analisando seu trabalho…
+                  </>
+                ) : (
+                  '🔍 Corrigir trabalho'
+                )}
+              </button>
+            </div>
+
+            {/* Resultado */}
+            {resultado && (
+              <div className="card" style={{ position: 'sticky', top: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: 'var(--brand)', color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: 13, flexShrink: 0
+                  }}>P</div>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Feedback do Point.AI</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-4)' }}>
+                      {TIPOS.find(t => t.value === tipo)?.label} · {materia}
+                    </p>
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: 14, lineHeight: 1.65, color: 'var(--text-2)',
+                  maxHeight: '70vh', overflowY: 'auto', paddingRight: 4
+                }}>
+                  <ReactMarkdown
+                    components={{
+                      h2: ({children}) => (
+                        <h2 style={{
+                          fontSize: 14, fontWeight: 700, color: 'var(--text-1)',
+                          margin: '16px 0 6px', paddingBottom: 4,
+                          borderBottom: '1px solid var(--border)'
+                        }}>{children}</h2>
+                      ),
+                      p: ({children}) => <p style={{ margin: '0 0 8px' }}>{children}</p>,
+                      ul: ({children}) => <ul style={{ margin: '4px 0 10px 18px' }}>{children}</ul>,
+                      li: ({children}) => <li style={{ marginBottom: 4 }}>{children}</li>,
+                      strong: ({children}) => <strong style={{ fontWeight: 700, color: 'var(--text-1)' }}>{children}</strong>,
+                    }}
+                  >
+                    {resultado}
+                  </ReactMarkdown>
+                </div>
+                <div className="divider" />
+                <button
+                  onClick={() => { setResultado(null); setTexto('') }}
+                  className="btn btn-ghost"
+                  style={{ width: '100%', fontSize: 13 }}
+                >
+                  Nova correção
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Conteúdo */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-8 max-w-3xl">
-          <h1 className="text-2xl font-extrabold text-gray-900 mb-1">📝 Correção de Trabalhos</h1>
-          <p className="text-gray-400 text-sm mb-8">Cole seu texto e receba feedback detalhado com nota estimada</p>
-
-          {/* Configuração */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="text-xs text-gray-400 font-medium block mb-1">Tipo de trabalho</label>
-              <select
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                <option value="artigo">Artigo científico</option>
-                <option value="resenha">Resenha</option>
-                <option value="relatorio">Relatório</option>
-                <option value="tcc">TCC / Monografia</option>
-                <option value="redacao">Redação</option>
-                <option value="outro">Outro</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 font-medium block mb-1">Matéria</label>
-              <select
-                value={materia}
-                onChange={(e) => setMateria(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                {materias.map((m, i) => <option key={i} value={m}>{m}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Texto */}
-          <div className="mb-4">
-            <label className="text-xs text-gray-400 font-medium block mb-1">Cole seu texto aqui</label>
-            <textarea
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="Cole aqui o texto do seu trabalho para receber feedback detalhado..."
-              rows={12}
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
-            />
-            <p className="text-xs text-gray-400 mt-1">{texto.length} caracteres</p>
-          </div>
-
-          <button
-            onClick={corrigir}
-            disabled={carregando || !texto.trim()}
-            className="w-full bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 transition disabled:opacity-50 mb-8"
-          >
-            {carregando ? '🔍 Analisando seu trabalho...' : '🔍 Corrigir trabalho'}
-          </button>
-
-          {/* Resultado */}
-          {resultado && (
-  <div className="bg-gray-50 rounded-2xl p-6 text-gray-800">
-    <h2 className="font-bold text-gray-800 mb-4">📋 Feedback do Point.AI</h2>
-    <div className="prose prose-gray max-w-none text-gray-800 [&>h2]:text-gray-900 [&>h2]:font-bold [&>h2]:mt-4 [&>h2]:mb-2 [&>p]:text-gray-700 [&>ul]:text-gray-700 [&>ol]:text-gray-700 [&>strong]:text-gray-900">
-      <ReactMarkdown>
-        {resultado}
-      </ReactMarkdown>
-    </div>
-  </div>
-)}
-        </div>
-      </div>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   )
 }
