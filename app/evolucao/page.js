@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Sidebar from '../components/Sidebar'
+import * as db from '../lib/db'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend,
@@ -57,16 +58,16 @@ export default function Evolucao() {
   const [eventos, setEventos] = useState([])
 
   useEffect(() => {
-    const p = localStorage.getItem('pointai_perfil')
-    if (p) {
-      const parsed = JSON.parse(p)
-      setPerfil(parsed)
-      setMaterias(parsed.materias.split(',').map(m => m.trim()))
+    async function carregar() {
+      const [p, n, evs] = await Promise.all([db.getPerfil(), db.getNotas(), db.getEventos()])
+      if (p) {
+        setPerfil(p)
+        setMaterias(p.materias.split(',').map(m => m.trim()))
+      }
+      if (n) setDados(n)
+      setEventos(evs)
     }
-    const n = localStorage.getItem('pointai_notas')
-    if (n) setDados(JSON.parse(n))
-    const e = localStorage.getItem('pointai_eventos')
-    if (e) setEventos(JSON.parse(e))
+    carregar()
   }, [])
 
   function faltasRestantes(materia) {

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { savePerfil, getUserId } from '../lib/db'
 
 const perguntas = [
   { id: 'nome', texto: 'Olá! Eu sou o Point, seu assistente acadêmico pessoal. Antes de começar, qual é o seu nome?', placeholder: 'Digite seu nome...' },
@@ -22,7 +23,7 @@ export default function Onboarding() {
     ? perguntaAtual.texto(respostas) 
     : perguntaAtual.texto
 
-  function avancar() {
+  async function avancar() {
     if (!input.trim()) return
     const novasRespostas = { ...respostas, [perguntaAtual.id]: input }
     setRespostas(novasRespostas)
@@ -31,7 +32,8 @@ export default function Onboarding() {
     if (etapa < perguntas.length - 1) {
       setEtapa(etapa + 1)
     } else {
-      localStorage.setItem('pointai_perfil', JSON.stringify(novasRespostas))
+      getUserId() // ensure UUID is generated before first async call
+      await savePerfil(novasRespostas)
       router.push('/dashboard')
     }
   }

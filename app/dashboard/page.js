@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import { gerarPDFChat } from '../lib/pdfExport'
+import * as db from '../lib/db'
 
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
 
@@ -37,36 +38,40 @@ export default function Dashboard() {
   const fileInputRef = useRef(null)
 
   useEffect(() => {
-    const dados = localStorage.getItem('pointai_perfil')
-    if (dados) {
-      const p = JSON.parse(dados)
-      setPerfil(p)
-      const lista = p.materias.split(',').map(m => m.trim())
-      setMaterias(lista)
-      setMateriaAtiva(lista[0])
+    async function carregarPerfil() {
+      const p = await db.getPerfil()
+      if (p) {
+        setPerfil(p)
+        const lista = p.materias.split(',').map(m => m.trim())
+        setMaterias(lista)
+        setMateriaAtiva(lista[0])
+      }
     }
+    carregarPerfil()
   }, [])
 
   useEffect(() => {
     if (!materiaAtiva || !perfil) return
-    const historico = localStorage.getItem(`chat_${materiaAtiva}`)
-    if (historico) {
-      setMensagens(JSON.parse(historico))
-    } else {
-      setMensagens([{
-        role: 'assistant',
-        content: `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${materiaAtiva}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
-      }])
+    async function carregarChat() {
+      const historico = await db.getChat(materiaAtiva)
+      if (historico?.length) {
+        setMensagens(historico)
+      } else {
+        setMensagens([{
+          role: 'assistant',
+          content: `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${materiaAtiva}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
+        }])
+      }
     }
+    carregarChat()
   }, [materiaAtiva, perfil])
 
   useEffect(() => {
     fimChat.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensagens, carregando])
 
-  function salvarHistorico(msgs) {
-    const paraSalvar = msgs.map(({ image, ...m }) => m)
-    localStorage.setItem(`chat_${materiaAtiva}`, JSON.stringify(paraSalvar))
+  async function salvarHistorico(msgs) {
+    await db.saveChat(materiaAtiva, msgs)
   }
 
   function selecionarImagem(e) {

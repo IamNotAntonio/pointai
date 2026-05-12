@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
+import * as db from '../lib/db'
 
 const VAZIO = { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
 
@@ -27,26 +28,28 @@ export default function Notas() {
   const importFileRef = useRef(null)
 
   useEffect(() => {
-    const p = localStorage.getItem('pointai_perfil')
-    if (!p) return
-    const parsed = JSON.parse(p)
-    setPerfil(parsed)
-    const lista = parsed.materias.split(',').map(m => m.trim())
-    setMaterias(lista)
-    setMateriaAtiva(lista[0])
-    const salvo = localStorage.getItem('pointai_notas')
-    if (salvo) {
-      setDados(JSON.parse(salvo))
-    } else {
-      const inicial = {}
-      lista.forEach(m => { inicial[m] = { ...VAZIO, notas: ['', '', ''] } })
-      setDados(inicial)
+    async function carregar() {
+      const p = await db.getPerfil()
+      if (!p) return
+      setPerfil(p)
+      const lista = p.materias.split(',').map(m => m.trim())
+      setMaterias(lista)
+      setMateriaAtiva(lista[0])
+      const salvo = await db.getNotas()
+      if (salvo) {
+        setDados(salvo)
+      } else {
+        const inicial = {}
+        lista.forEach(m => { inicial[m] = { ...VAZIO, notas: ['', '', ''] } })
+        setDados(inicial)
+      }
     }
+    carregar()
   }, [])
 
   function salvar(novo) {
     setDados(novo)
-    localStorage.setItem('pointai_notas', JSON.stringify(novo))
+    db.saveNotas(novo) // fire-and-forget; localStorage written synchronously inside
   }
 
   function update(materia, field, value) {

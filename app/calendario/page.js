@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
+import * as db from '../lib/db'
 
 const TIPO_CONFIG = {
   prova:        { label: 'Prova',        cls: 'badge badge-red',    emoji: '📝' },
@@ -49,33 +50,38 @@ export default function Calendario() {
   const importFileRef = useRef(null)
 
   useEffect(() => {
-    const p = localStorage.getItem('pointai_perfil')
-    if (p) {
-      const parsed = JSON.parse(p)
-      setPerfil(parsed)
-      const lista = parsed.materias.split(',').map(m => m.trim())
-      setMaterias(lista)
-      setForm(prev => ({ ...prev, materia: lista[0] }))
+    async function carregar() {
+      const p = await db.getPerfil()
+      if (p) {
+        setPerfil(p)
+        const lista = p.materias.split(',').map(m => m.trim())
+        setMaterias(lista)
+        setForm(prev => ({ ...prev, materia: lista[0] }))
+      }
+      const evs = await db.getEventos()
+      setEventos(evs)
     }
-    const e = localStorage.getItem('pointai_eventos')
-    if (e) setEventos(JSON.parse(e))
+    carregar()
   }, [])
 
-  function salvarEventos(novos) {
+  function syncLocal(novos) {
     setEventos(novos)
     localStorage.setItem('pointai_eventos', JSON.stringify(novos))
   }
 
-  function salvarEvento() {
+  async function salvarEvento() {
     if (!form.titulo || !form.data) return
-    const novos = [...eventos, { ...form, id: Date.now() }]
+    const eventoBase = { ...form, id: Date.now() }
+    const eventoSalvo = await db.saveEvento(eventoBase)
+    const novos = [...eventos, eventoSalvo]
       .sort((a, b) => new Date(a.data) - new Date(b.data))
-    salvarEventos(novos)
+    syncLocal(novos)
     setForm({ titulo: '', data: '', tipo: 'prova', materia: materias[0] })
   }
 
-  function removerEvento(id) {
-    salvarEventos(eventos.filter(e => e.id !== id))
+  async function removerEvento(id) {
+    await db.deleteEvento(id)
+    syncLocal(eventos.filter(e => e.id !== id))
   }
 
   // ── Import modal ──
@@ -136,22 +142,22 @@ export default function Calendario() {
     })
   }
 
-  function confirmarImport() {
+  async function confirmarImport() {
     const { preview, selecionados } = modal
     if (!preview?.eventos?.length) return
 
-    const novos = preview.eventos
+    const paraImportar = preview.eventos
       .filter((_, i) => selecionados.has(i))
       .map(e => ({
-        id: Date.now() + Math.random(),
         titulo: e.titulo,
         data: e.data,
         tipo: ['prova', 'trabalho', 'apresentacao', 'outro'].includes(e.tipo) ? e.tipo : 'outro',
         materia: e.materia || (materias[0] || ''),
       }))
 
-    const todos = [...eventos, ...novos].sort((a, b) => new Date(a.data) - new Date(b.data))
-    salvarEventos(todos)
+    const salvos = await Promise.all(paraImportar.map(e => db.saveEvento({ ...e, id: Date.now() + Math.random() })))
+    const todos = [...eventos, ...salvos].sort((a, b) => new Date(a.data) - new Date(b.data))
+    syncLocal(todos)
     fecharModal()
   }
 
