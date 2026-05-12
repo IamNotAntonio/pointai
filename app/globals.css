@@ -760,6 +760,134 @@ body {
 .dark .btn-ghost { background: var(--surface-3); border-color: var(--border); color: var(--text-2); }
 .dark .btn-ghost:hover:not(:disabled) { background: #222; }
 
+/* ── PDF button ── */
+.pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  font-family: inherit;
+}
+.pdf-btn:hover { background: var(--surface-3); color: var(--text-1); border-color: var(--brand); }
+
+/* ── Rich message: Code blocks ── */
+.chat-code-block {
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin: 8px 0;
+  font-size: 13px;
+}
+.chat-code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border);
+}
+.chat-code-lang {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-4);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.chat-code-copy {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color .12s;
+  font-family: inherit;
+}
+.chat-code-copy:hover { color: var(--brand); }
+.chat-code-pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  overflow-x: auto;
+  line-height: 1.55;
+  font-size: 12.5px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-1);
+}
+.chat-inline-code {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+}
+
+/* ── Rich message: Tables ── */
+.chat-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.chat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.chat-th {
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-weight: 700;
+  font-size: 11.5px;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.chat-td {
+  padding: 8px 12px;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.chat-table tr:last-child .chat-td { border-bottom: none; }
+.chat-table tr:hover .chat-td { background: var(--surface-2); }
+
+/* ── Rich message: Charts ── */
+.chat-chart-block {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 12px 8px;
+  margin: 8px 0;
+}
+.chat-chart-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+/* ── KaTeX dark mode overrides ── */
+.dark .katex { color: var(--text-1); }
+
+/* ── Recharts tooltip dark ── */
+.dark .recharts-tooltip-wrapper { filter: none; }
+
+/* ── Evolucao charts ── */
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-sm); }
+
 /* ── Import modal ── */
 .modal-backdrop {
   position: fixed;

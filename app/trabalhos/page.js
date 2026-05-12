@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import ReactMarkdown from 'react-markdown'
 import Sidebar from '../components/Sidebar'
+import RichMessage from '../components/RichMessage'
+import { gerarPDFFeedback } from '../lib/pdfExport'
 
 const TIPOS = [
   { value: 'artigo',    label: 'Artigo científico' },
@@ -13,10 +14,10 @@ const TIPOS = [
 ]
 
 export default function Trabalhos() {
-  const [perfil, setPerfil] = useState(null)
-  const [texto, setTexto] = useState('')
-  const [tipo, setTipo] = useState('artigo')
-  const [materia, setMateria] = useState('')
+  const [perfil, setPerfil]     = useState(null)
+  const [texto, setTexto]       = useState('')
+  const [tipo, setTipo]         = useState('artigo')
+  const [materia, setMateria]   = useState('')
   const [materias, setMaterias] = useState([])
   const [resultado, setResultado] = useState(null)
   const [carregando, setCarregando] = useState(false)
@@ -24,9 +25,9 @@ export default function Trabalhos() {
   useEffect(() => {
     const p = localStorage.getItem('pointai_perfil')
     if (p) {
-      const perfil = JSON.parse(p)
-      setPerfil(perfil)
-      const lista = perfil.materias.split(',').map(m => m.trim())
+      const parsed = JSON.parse(p)
+      setPerfil(parsed)
+      const lista = parsed.materias.split(',').map(m => m.trim())
       setMaterias(lista)
       setMateria(lista[0])
     }
@@ -40,7 +41,7 @@ export default function Trabalhos() {
       const resp = await fetch('/api/corrigir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto, tipo, materia, perfil })
+        body: JSON.stringify({ texto, tipo, materia, perfil }),
       })
       const dados = await resp.json()
       setResultado(dados.resultado)
@@ -77,21 +78,13 @@ export default function Trabalhos() {
                 <div className="grid-2">
                   <div>
                     <label className="label">Tipo de trabalho</label>
-                    <select
-                      value={tipo}
-                      onChange={e => setTipo(e.target.value)}
-                      className="input"
-                    >
+                    <select value={tipo} onChange={e => setTipo(e.target.value)} className="input">
                       {TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="label">Matéria</label>
-                    <select
-                      value={materia}
-                      onChange={e => setMateria(e.target.value)}
-                      className="input"
-                    >
+                    <select value={materia} onChange={e => setMateria(e.target.value)} className="input">
                       {materias.map((m, i) => <option key={i} value={m}>{m}</option>)}
                     </select>
                   </div>
@@ -119,56 +112,41 @@ export default function Trabalhos() {
                 className="btn btn-primary"
                 style={{ width: '100%', padding: '12px 18px', fontSize: 15 }}
               >
-                {carregando ? (
-                  <>
-                    <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
-                    Analisando seu trabalho…
-                  </>
-                ) : (
-                  '🔍 Corrigir trabalho'
-                )}
+                {carregando ? '⟳ Analisando seu trabalho…' : '🔍 Corrigir trabalho'}
               </button>
             </div>
 
             {/* Resultado */}
             {resultado && (
               <div className="card" style={{ position: 'sticky', top: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: '50%',
-                    background: 'var(--brand)', color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 700, fontSize: 13, flexShrink: 0
-                  }}>P</div>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Feedback do Point.AI</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-4)' }}>
-                      {TIPOS.find(t => t.value === tipo)?.label} · {materia}
-                    </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      background: 'var(--brand)', color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 700, fontSize: 13, flexShrink: 0,
+                    }}>P</div>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Feedback do Point.AI</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-4)' }}>
+                        {TIPOS.find(t => t.value === tipo)?.label} · {materia}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <div style={{
-                  fontSize: 14, lineHeight: 1.65, color: 'var(--text-2)',
-                  maxHeight: '70vh', overflowY: 'auto', paddingRight: 4
-                }}>
-                  <ReactMarkdown
-                    components={{
-                      h2: ({children}) => (
-                        <h2 style={{
-                          fontSize: 14, fontWeight: 700, color: 'var(--text-1)',
-                          margin: '16px 0 6px', paddingBottom: 4,
-                          borderBottom: '1px solid var(--border)'
-                        }}>{children}</h2>
-                      ),
-                      p: ({children}) => <p style={{ margin: '0 0 8px' }}>{children}</p>,
-                      ul: ({children}) => <ul style={{ margin: '4px 0 10px 18px' }}>{children}</ul>,
-                      li: ({children}) => <li style={{ marginBottom: 4 }}>{children}</li>,
-                      strong: ({children}) => <strong style={{ fontWeight: 700, color: 'var(--text-1)' }}>{children}</strong>,
-                    }}
+                  <button
+                    className="pdf-btn"
+                    onClick={() => gerarPDFFeedback({ resultado, tipo: TIPOS.find(t => t.value === tipo)?.label, materia, perfil })}
+                    style={{ flexShrink: 0, marginTop: 0 }}
                   >
-                    {resultado}
-                  </ReactMarkdown>
+                    📄 Baixar PDF
+                  </button>
                 </div>
+
+                <div style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-2)', maxHeight: '70vh', overflowY: 'auto', paddingRight: 4 }}>
+                  <RichMessage content={resultado} />
+                </div>
+
                 <div className="divider" />
                 <button
                   onClick={() => { setResultado(null); setTexto('') }}
@@ -182,10 +160,6 @@ export default function Trabalhos() {
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   )
 }

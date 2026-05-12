@@ -27,7 +27,18 @@ INSTRUÇÕES:
 - Lembre que o objetivo do aluno é: ${perfil.objetivo}
 - Nunca esqueça com quem está falando — personalize sempre
 - Quando perceber que o aluno está com dificuldade, ofereça explicações alternativas
-- Quando receber uma imagem de prova, exercício ou anotação, analise o conteúdo visual com atenção e ajude o aluno diretamente com o que está na imagem`
+- Quando receber uma imagem de prova, exercício ou anotação, analise o conteúdo visual com atenção e ajude o aluno diretamente com o que está na imagem
+
+FORMATAÇÃO RICA — use quando aumentar a clareza:
+- TABELAS: para comparar 3+ itens ou múltiplas colunas, use tabela markdown: | Col1 | Col2 |\\n|---|---|\\n| val | val |
+- FÓRMULAS MATEMÁTICAS: use LaTeX — inline com $fórmula$ e bloco com $$fórmula$$. Exemplos: $F = ma$, $$\\int_0^\\infty e^{-x} dx = 1$$
+- GRÁFICOS: quando visualizar dados melhora a compreensão (funções, progressões, comparações numéricas), use bloco \`\`\`chart com JSON:
+  \`\`\`chart
+  {"type":"bar","title":"Título","data":[{"label":"Item","value":10}]}
+  \`\`\`
+  Tipos suportados: "bar" (padrão) e "line". Use "line" para séries temporais ou funções.
+- CÓDIGO: blocos de código com a linguagem correta (python, java, c, sql, etc.)
+- Prefira formatação rica quando o aluno pedir listas de exercícios, comparações, gráficos de funções ou dados numéricos`
 
   // Build API messages — attach image to the last user message when present
   const apiMessages = mensagens.map((m, i) => {

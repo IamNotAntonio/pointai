@@ -1,7 +1,10 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import ReactMarkdown from 'react-markdown'
 import Sidebar from '../components/Sidebar'
+import RichMessage from '../components/RichMessage'
+import { gerarPDFChat } from '../lib/pdfExport'
+
+const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
 
 function IconCamera() {
   return (
@@ -27,10 +30,10 @@ export default function Dashboard() {
   const [mensagens, setMensagens]       = useState([])
   const [input, setInput]               = useState('')
   const [carregando, setCarregando]     = useState(false)
-  const [imagem, setImagem]             = useState(null) // { dataUrl, tipo }
+  const [imagem, setImagem]             = useState(null)
 
-  const fimChat     = useRef(null)
-  const textareaRef = useRef(null)
+  const fimChat      = useRef(null)
+  const textareaRef  = useRef(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -62,7 +65,6 @@ export default function Dashboard() {
   }, [mensagens, carregando])
 
   function salvarHistorico(msgs) {
-    // Strip image data before persisting to avoid localStorage overflow
     const paraSalvar = msgs.map(({ image, ...m }) => m)
     localStorage.setItem(`chat_${materiaAtiva}`, JSON.stringify(paraSalvar))
   }
@@ -73,12 +75,14 @@ export default function Dashboard() {
     const reader = new FileReader()
     reader.onload = ev => setImagem({ dataUrl: ev.target.result, tipo: file.type })
     reader.readAsDataURL(file)
-    e.target.value = '' // allow re-selecting the same file
+    e.target.value = ''
   }
 
   async function enviar() {
     const temConteudo = input.trim() || imagem
     if (!temConteudo || carregando) return
+
+    const pdfRequested = PDF_REGEX.test(input)
 
     const novaMensagem = {
       role: 'user',
@@ -107,7 +111,10 @@ export default function Dashboard() {
         body: JSON.stringify(body),
       })
       const dados = await resp.json()
-      const finais = [...novasMensagens, { role: 'assistant', content: dados.resposta }]
+      const finais = [
+        ...novasMensagens,
+        { role: 'assistant', content: dados.resposta, hasPdfBtn: pdfRequested },
+      ]
       setMensagens(finais)
       salvarHistorico(finais)
     } catch (e) {
@@ -151,7 +158,6 @@ export default function Dashboard() {
       />
 
       <div className="page-area">
-
         {/* Header */}
         <div className="chat-header">
           <div className="chat-header-avatar">P</div>
@@ -169,20 +175,26 @@ export default function Dashboard() {
             return (
               <div key={i} className={`chat-bubble-wrap ${isUser ? 'user' : ''}`}>
                 {!isUser && <div className="chat-avatar">P</div>}
-                <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
-                  {isUser ? (
-                    <>
-                      {msg.image && (
-                        <img
-                          src={msg.image}
-                          alt="Imagem enviada"
-                          className="chat-bubble-img"
-                        />
-                      )}
-                      {msg.content && <span>{msg.content}</span>}
-                    </>
-                  ) : (
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <div>
+                  <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
+                    {isUser ? (
+                      <>
+                        {msg.image && (
+                          <img src={msg.image} alt="Imagem enviada" className="chat-bubble-img" />
+                        )}
+                        {msg.content && <span>{msg.content}</span>}
+                      </>
+                    ) : (
+                      <RichMessage content={msg.content} />
+                    )}
+                  </div>
+                  {!isUser && msg.hasPdfBtn && (
+                    <button
+                      className="pdf-btn"
+                      onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: materiaAtiva })}
+                    >
+                      📄 Baixar em PDF
+                    </button>
                   )}
                 </div>
               </div>
@@ -207,23 +219,16 @@ export default function Dashboard() {
 
         {/* Input */}
         <div className="chat-input-bar">
-
-          {/* Image preview */}
           {imagem && (
             <div className="chat-img-preview">
               <img src={imagem.dataUrl} alt="Preview da imagem" />
-              <button
-                className="chat-img-remove"
-                onClick={() => setImagem(null)}
-                aria-label="Remover imagem"
-              >
+              <button className="chat-img-remove" onClick={() => setImagem(null)} aria-label="Remover imagem">
                 <IconX />
               </button>
             </div>
           )}
 
           <div className="chat-input-row">
-            {/* Hidden file input */}
             <input
               ref={fileInputRef}
               type="file"
@@ -231,8 +236,6 @@ export default function Dashboard() {
               onChange={selecionarImagem}
               style={{ display: 'none' }}
             />
-
-            {/* Attach button */}
             <button
               className={`chat-attach-btn ${imagem ? 'active' : ''}`}
               onClick={() => fileInputRef.current?.click()}
@@ -263,7 +266,6 @@ export default function Dashboard() {
           </div>
           <p className="chat-hint">Enter para enviar · Shift+Enter para nova linha</p>
         </div>
-
       </div>
     </div>
   )
