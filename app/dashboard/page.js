@@ -7,6 +7,19 @@ import * as db from '../lib/db'
 
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
 
+const QUICK_CHIPS = [
+  'Me explica o conteúdo desta matéria',
+  'Cria um simulado com 5 questões',
+  'Quais são os tópicos mais cobrados?',
+  'Resumo dos principais conceitos',
+]
+
+function formatHora(iso) {
+  if (!iso) return ''
+  try { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }
+  catch { return '' }
+}
+
 function IconCamera() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -56,6 +69,16 @@ export default function Dashboard() {
     setTopicos(db.getTopicos())
   }, [])
 
+  // Track last access per materia
+  useEffect(() => {
+    if (!materiaAtiva) return
+    try {
+      const acc = JSON.parse(localStorage.getItem('pointai_last_access') || '{}')
+      acc[materiaAtiva] = Date.now()
+      localStorage.setItem('pointai_last_access', JSON.stringify(acc))
+    } catch {}
+  }, [materiaAtiva])
+
   useEffect(() => {
     if (!chatKey || !perfil) return
     async function carregarChat() {
@@ -90,15 +113,17 @@ export default function Dashboard() {
     e.target.value = ''
   }
 
-  async function enviar() {
-    const temConteudo = input.trim() || imagem
+  async function enviar(textoParam) {
+    const textoFinal   = typeof textoParam === 'string' ? textoParam : input
+    const temConteudo  = textoFinal.trim() || imagem
     if (!temConteudo || carregando) return
 
-    const pdfRequested = PDF_REGEX.test(input)
+    const pdfRequested = PDF_REGEX.test(textoFinal)
 
     const novaMensagem = {
       role: 'user',
-      content: input,
+      content: textoFinal,
+      timestamp: new Date().toISOString(),
       ...(imagem && { image: imagem.dataUrl }),
     }
     const novasMensagens = [...mensagens, novaMensagem]
@@ -205,7 +230,10 @@ export default function Dashboard() {
             <p className="chat-header-title">{tituloChat}</p>
             <p className="chat-header-sub">Point.AI · Assistente acadêmico</p>
           </div>
-          <div className="online-dot" title="Online" />
+          <div className="chat-online-wrap">
+            <div className="online-dot" />
+            <span className="chat-online-label">Online</span>
+          </div>
         </div>
 
         {/* Mensagens */}
@@ -228,6 +256,9 @@ export default function Dashboard() {
                       <RichMessage content={msg.content} />
                     )}
                   </div>
+                  {msg.timestamp && (
+                    <p className={`chat-msg-time ${isUser ? 'user' : ''}`}>{formatHora(msg.timestamp)}</p>
+                  )}
                   {!isUser && msg.hasPdfBtn && (
                     <button
                       className="pdf-btn"
@@ -240,6 +271,16 @@ export default function Dashboard() {
               </div>
             )
           })}
+
+          {mensagens.length === 1 && !carregando && (
+            <div className="chat-chips-wrap">
+              <div className="chat-chips">
+                {QUICK_CHIPS.map(c => (
+                  <button key={c} className="chat-chip" onClick={() => enviar(c)}>{c}</button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {carregando && (
             <div className="chat-bubble-wrap">

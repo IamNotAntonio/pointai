@@ -178,6 +178,9 @@ export default function Notas() {
       <Sidebar perfil={perfil} />
 
       <div className="page-area">
+        {/* Breadcrumb */}
+        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point.AI</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Notas e Faltas</span></nav>
+
         {/* Header */}
         <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>

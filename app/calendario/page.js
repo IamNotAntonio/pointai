@@ -175,6 +175,9 @@ export default function Calendario() {
       <Sidebar perfil={perfil} />
 
       <div className="page-area">
+        {/* Breadcrumb */}
+        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point.AI</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Calendário</span></nav>
+
         <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h1 className="page-title">Calendário Acadêmico</h1>

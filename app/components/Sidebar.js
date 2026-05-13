@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import * as db from '../lib/db'
+import Notificacoes from './Notificacoes'
 
 /* ── Icons ───────────────────────────────────────────────────── */
 function IcChevron() {
@@ -206,7 +207,10 @@ export default function Sidebar({
       <aside className="sidebar">
         {/* ── Logo ── */}
         <div className="sidebar-header">
-          <Link href="/dashboard" className="sidebar-logo">Point.AI</Link>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+            <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }}>Point.AI</Link>
+            <Notificacoes />
+          </div>
 
           {/* ── Account trigger + dropdown ── */}
           {perfil && (
@@ -292,9 +296,13 @@ export default function Sidebar({
                   <button
                     onClick={() => onMateriaChange?.(m)}
                     className={`sidebar-materia-btn ${materiaAtiva === m ? 'active' : ''}`}
+                    title={m}
                   >
                     <span className="sidebar-materia-dot" />
                     <span className="sidebar-materia-text">{m}</span>
+                    {(topicos[m]?.length > 0) && (
+                      <span className="sidebar-topico-count">{topicos[m].length}</span>
+                    )}
                   </button>
 
                   {/* Expandable topics */}

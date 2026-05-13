@@ -63,6 +63,9 @@ export default function Trabalhos() {
       <Sidebar perfil={perfil} />
 
       <div className="page-area">
+        {/* Breadcrumb */}
+        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point.AI</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Trabalhos</span></nav>
+
         <div className="page-header">
           <h1 className="page-title">Correção de Trabalhos</h1>
           <p className="page-subtitle">Cole seu texto e receba feedback detalhado com nota estimada</p>
