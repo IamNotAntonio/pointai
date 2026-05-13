@@ -365,25 +365,8 @@ export default function Home() {
         .lp-tname{font-size:13px;font-weight:700;color:#e4e4e7}
         .lp-tcourse{font-size:11px;color:#71717a;margin-top:1px}
 
-        /* ── Pricing ── */
-        .lp-pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:56px}
-        .lp-pcard{background:#0d0d0d;border:1px solid #1a1a1a;border-radius:20px;padding:28px 24px;display:flex;flex-direction:column;position:relative;transition:border-color .22s}
-        .lp-pcard:hover:not(.lp-pcard-feat){border-color:#2a2a2a}
-        .lp-pcard-feat{background:#091109;border-color:rgba(26,122,74,.44);box-shadow:0 0 56px rgba(26,122,74,.09),inset 0 1px 0 rgba(34,197,94,.08)}
-        .lp-ptag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:#1a7a4a;color:#fff;font-size:11px;font-weight:700;padding:4px 14px;border-radius:99px;white-space:nowrap;border:1px solid rgba(34,197,94,.34)}
-        .lp-pname{font-size:12.5px;font-weight:600;color:#71717a;margin-bottom:8px}
-        .lp-pval{font-size:38px;font-weight:900;color:#fff;letter-spacing:-2px;margin-bottom:4px;line-height:1}
-        .lp-pval span{font-size:15px;font-weight:500;color:#52525b;letter-spacing:0}
-        .lp-pdesc{font-size:12.5px;color:#71717a;margin-bottom:24px;line-height:1.55}
-        .lp-pfeats{flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
-        .lp-pfeat{display:flex;align-items:center;gap:8px;font-size:13px}
-        .lp-pfeat-on{color:#a1a1aa}
-        .lp-pfeat-off{color:#2a2a2a}
-        .lp-pbtn{display:block;width:100%;padding:11px;border-radius:10px;font-size:14px;font-weight:600;text-align:center;text-decoration:none;transition:all .16s}
-        .lp-pbtn-solid{background:#1a7a4a;color:#fff;border:1px solid rgba(34,197,94,.28)}
-        .lp-pbtn-solid:hover{background:#155f3a}
-        .lp-pbtn-ghost{background:transparent;color:#52525b;border:1px solid #1c1c1c}
-        .lp-pbtn-ghost:hover{border-color:#2a2a2a;color:#a1a1aa}
+        /* ── CTA mid ── */
+        .lp-cta-mid{background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(26,122,74,.09) 0%,transparent 70%)}
 
         /* ── Final CTA ── */
         .lp-fcta{padding:120px 24px;text-align:center;background:radial-gradient(ellipse 60% 55% at 50% 0%,rgba(26,122,74,.12) 0%,transparent 70%);border-top:1px solid #141414}
@@ -414,7 +397,6 @@ export default function Home() {
           <span className="lp-logo">Point.AI</span>
           <div className="lp-nav-links">
             <a href="#features"  className="lp-navlink">Funcionalidades</a>
-            <a href="#precos"    className="lp-navlink">Preços</a>
             <Link href="/onboarding" className="lp-navlink">Entrar</Link>
             <Link href="/onboarding" className="lp-navbtn">Começar grátis</Link>
           </div>
@@ -563,52 +545,18 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ─── Pricing ──────────────────────────────────────────── */}
-        <section className="lp-sec" id="precos">
-          <div className="lp-wrap">
-            <div className="lp-reveal" style={{ textAlign:'center', maxWidth:520, margin:'0 auto' }}>
-              <p className="lp-sec-label">Preços</p>
-              <h2 className="lp-sec-title">Acesso completo,<br />sem surpresas.</h2>
-              <p className="lp-sec-sub" style={{ margin:'0 auto' }}>Experimente sem comprometimento. Assine quando tiver certeza.</p>
-            </div>
-
-            <div className="lp-pricing-grid">
-              <div className="lp-pcard lp-reveal lp-d1">
-                <p className="lp-pname">Experimental</p>
-                <p className="lp-pval">R$0</p>
-                <p className="lp-pdesc">Acesso total por 7 dias. Sem cartão, sem cobrança automática.</p>
-                <div className="lp-pfeats">
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">7 dias de acesso completo</span></div>
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Todas as funcionalidades</span></div>
-                  <div className="lp-pfeat"><Ic.X /><span className="lp-pfeat-off">Acesso contínuo</span></div>
-                </div>
-                <Link href="/onboarding" className="lp-pbtn lp-pbtn-ghost">Começar grátis</Link>
-              </div>
-
-              <div className="lp-pcard lp-pcard-feat lp-reveal lp-d2">
-                <div className="lp-ptag">Mais escolhido</div>
-                <p className="lp-pname" style={{ color:'#22c55e' }}>Mensal</p>
-                <p className="lp-pval">R$14,90<span>/mês</span></p>
-                <p className="lp-pdesc">Acesso ilimitado. Cancele a qualquer momento, sem burocracia.</p>
-                <div className="lp-pfeats">
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Chat ilimitado por matéria</span></div>
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Todas as funcionalidades</span></div>
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Sem limite de disciplinas</span></div>
-                </div>
-                <Link href="/onboarding" className="lp-pbtn lp-pbtn-solid">Assinar agora</Link>
-              </div>
-
-              <div className="lp-pcard lp-reveal lp-d3">
-                <p className="lp-pname">Semestral</p>
-                <p className="lp-pval">R$59,90<span>/sem</span></p>
-                <p className="lp-pdesc">O equivalente a R$10/mês. Um semestre inteiro de tutoria personalizada.</p>
-                <div className="lp-pfeats">
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Tudo do plano mensal</span></div>
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Economia de 33%</span></div>
-                  <div className="lp-pfeat"><Ic.Check /><span className="lp-pfeat-on">Cobertura de um semestre</span></div>
-                </div>
-                <Link href="/onboarding" className="lp-pbtn lp-pbtn-ghost">Assinar semestral</Link>
-              </div>
+        {/* ─── CTA ─────────────────────────────────────────────── */}
+        <section className="lp-sec lp-cta-mid" id="comece">
+          <div className="lp-wrap" style={{ textAlign:'center' }}>
+            <div className="lp-reveal" style={{ maxWidth:560, margin:'0 auto' }}>
+              <p className="lp-sec-label">Comece agora</p>
+              <h2 className="lp-sec-title" style={{ textAlign:'center' }}>Comece grátis hoje.</h2>
+              <p className="lp-sec-sub" style={{ textAlign:'center', margin:'0 auto 36px' }}>
+                Sem cartão de crédito. Sem compromisso. Só você e seu potencial acadêmico.
+              </p>
+              <Link href="/onboarding" className="lp-btn-primary lp-reveal lp-d1" style={{ display:'inline-block' }}>
+                Criar minha conta agora &rarr;
+              </Link>
             </div>
           </div>
         </section>
@@ -619,7 +567,7 @@ export default function Home() {
             Performance acadêmica<br />não é talento. É método.
           </h2>
           <p className="lp-fcta-s lp-reveal lp-d1">
-            Os primeiros 7 dias são completamente gratuitos. Sem cartão de crédito.
+            É 100% grátis. Sem cartão de crédito. Sem compromisso.
           </p>
           <div className="lp-reveal lp-d2">
             <Link href="/onboarding" className="lp-btn-primary">

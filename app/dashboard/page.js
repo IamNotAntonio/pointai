@@ -25,53 +25,60 @@ function IconX() {
 }
 
 export default function Dashboard() {
-  const [perfil, setPerfil]             = useState(null)
-  const [materias, setMaterias]         = useState([])
-  const [materiaAtiva, setMateriaAtiva] = useState(null)
-  const [mensagens, setMensagens]       = useState([])
-  const [input, setInput]               = useState('')
-  const [carregando, setCarregando]     = useState(false)
-  const [imagem, setImagem]             = useState(null)
+  const [perfil,        setPerfil]        = useState(null)
+  const [materias,      setMaterias]      = useState([])
+  const [materiaAtiva,  setMateriaAtiva]  = useState(null)
+  const [topicos,       setTopicos]       = useState({})
+  const [topicoAtivo,   setTopicoAtivo]   = useState(null)
+  const [mensagens,     setMensagens]     = useState([])
+  const [input,         setInput]         = useState('')
+  const [carregando,    setCarregando]    = useState(false)
+  const [imagem,        setImagem]        = useState(null)
 
   const fimChat      = useRef(null)
   const textareaRef  = useRef(null)
   const fileInputRef = useRef(null)
+
+  // Derived chat key — combines materia + topico
+  const chatKey = db.getChatKey(materiaAtiva, topicoAtivo)
 
   useEffect(() => {
     async function carregarPerfil() {
       const p = await db.getPerfil()
       if (p) {
         setPerfil(p)
-        const lista = p.materias.split(',').map(m => m.trim())
+        const lista = p.materias.split(',').map(m => m.trim()).filter(Boolean)
         setMaterias(lista)
         setMateriaAtiva(lista[0])
       }
     }
     carregarPerfil()
+    setTopicos(db.getTopicos())
   }, [])
 
   useEffect(() => {
-    if (!materiaAtiva || !perfil) return
+    if (!chatKey || !perfil) return
     async function carregarChat() {
-      const historico = await db.getChat(materiaAtiva)
+      const historico = await db.getChat(chatKey)
       if (historico?.length) {
         setMensagens(historico)
       } else {
+        const contexto = topicoAtivo ? `${materiaAtiva} → ${topicoAtivo}` : materiaAtiva
         setMensagens([{
           role: 'assistant',
-          content: `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${materiaAtiva}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
+          content: `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${contexto}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
         }])
       }
     }
     carregarChat()
-  }, [materiaAtiva, perfil])
+  }, [chatKey, perfil])
 
   useEffect(() => {
     fimChat.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensagens, carregando])
 
   async function salvarHistorico(msgs) {
-    await db.saveChat(materiaAtiva, msgs)
+    await db.saveChat(chatKey, msgs)
   }
 
   function selecionarImagem(e) {
@@ -104,13 +111,13 @@ export default function Dashboard() {
     setCarregando(true)
 
     try {
-      const body = { mensagens: novasMensagens, perfil, materia: materiaAtiva }
+      const body = { mensagens: novasMensagens, perfil, materia: materiaAtiva, topico: topicoAtivo }
       if (imagemParaEnviar) {
         body.imagemBase64 = imagemParaEnviar.dataUrl.split(',')[1]
         body.imagemTipo   = imagemParaEnviar.tipo
       }
 
-      const resp = await fetch('/api/chat', {
+      const resp  = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -141,17 +148,40 @@ export default function Dashboard() {
 
   function trocarMateria(m) {
     setMateriaAtiva(m)
+    setTopicoAtivo(null)
     setMensagens([])
     setImagem(null)
   }
 
+  function trocarTopico(t) {
+    setTopicoAtivo(t)
+    setMensagens([])
+    setImagem(null)
+  }
+
+  function handlePerfilUpdate(novoPerf) {
+    setPerfil(novoPerf)
+    const lista = novoPerf.materias.split(',').map(m => m.trim()).filter(Boolean)
+    setMaterias(lista)
+    if (!lista.includes(materiaAtiva)) {
+      setMateriaAtiva(lista[0] || null)
+      setTopicoAtivo(null)
+      setMensagens([])
+    }
+  }
+
+  function handleTopicosUpdate(novosTopicos) {
+    setTopicos(novosTopicos)
+  }
+
   if (!perfil) return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ color: 'var(--text-4)' }}>Carregando...</p>
+    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <p style={{ color:'var(--text-4)' }}>Carregando...</p>
     </div>
   )
 
-  const podaEnviar = !carregando && (input.trim() || imagem)
+  const podeEnviar = !carregando && (input.trim() || imagem)
+  const tituloChat = topicoAtivo ? `${materiaAtiva} / ${topicoAtivo}` : materiaAtiva
 
   return (
     <div className="app-shell">
@@ -160,6 +190,11 @@ export default function Dashboard() {
         materias={materias}
         materiaAtiva={materiaAtiva}
         onMateriaChange={trocarMateria}
+        topicos={topicos}
+        topicoAtivo={topicoAtivo}
+        onTopicoChange={trocarTopico}
+        onTopicosUpdate={handleTopicosUpdate}
+        onPerfilUpdate={handlePerfilUpdate}
       />
 
       <div className="page-area">
@@ -167,7 +202,7 @@ export default function Dashboard() {
         <div className="chat-header">
           <div className="chat-header-avatar">P</div>
           <div>
-            <p className="chat-header-title">{materiaAtiva}</p>
+            <p className="chat-header-title">{tituloChat}</p>
             <p className="chat-header-sub">Point.AI · Assistente acadêmico</p>
           </div>
           <div className="online-dot" title="Online" />
@@ -196,7 +231,7 @@ export default function Dashboard() {
                   {!isUser && msg.hasPdfBtn && (
                     <button
                       className="pdf-btn"
-                      onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: materiaAtiva })}
+                      onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: tituloChat })}
                     >
                       📄 Baixar em PDF
                     </button>
@@ -209,7 +244,7 @@ export default function Dashboard() {
           {carregando && (
             <div className="chat-bubble-wrap">
               <div className="chat-avatar">P</div>
-              <div className="chat-bubble assistant" style={{ padding: '4px 6px' }}>
+              <div className="chat-bubble assistant" style={{ padding:'4px 6px' }}>
                 <div className="typing-dots">
                   <div className="typing-dot" />
                   <div className="typing-dot" />
@@ -239,7 +274,7 @@ export default function Dashboard() {
               type="file"
               accept="image/jpeg,image/jpg,image/png"
               onChange={selecionarImagem}
-              style={{ display: 'none' }}
+              style={{ display:'none' }}
             />
             <button
               className={`chat-attach-btn ${imagem ? 'active' : ''}`}
@@ -256,14 +291,14 @@ export default function Dashboard() {
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              placeholder={`Pergunte sobre ${materiaAtiva}…`}
+              placeholder={`Pergunte sobre ${topicoAtivo || materiaAtiva}…`}
               rows={1}
             />
 
             <button
               className="chat-send-btn"
               onClick={enviar}
-              disabled={!podaEnviar}
+              disabled={!podeEnviar}
               aria-label="Enviar"
             >
               ↑

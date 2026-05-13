@@ -181,3 +181,35 @@ export async function deleteEvento(id) {
     console.warn('[db] deleteEvento offline:', e.message)
   }
 }
+
+// ── Tópicos ─────────────────────────────────────────────────────
+export function getTopicos() {
+  if (typeof window === 'undefined') return {}
+  const local = localStorage.getItem('pointai_topicos')
+  return local ? JSON.parse(local) : {}
+}
+
+export function saveTopicos(topicos) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('pointai_topicos', JSON.stringify(topicos))
+}
+
+export function addTopico(materia, topico) {
+  const topicos = getTopicos()
+  if (!topicos[materia]) topicos[materia] = []
+  if (!topicos[materia].includes(topico)) topicos[materia].push(topico)
+  saveTopicos(topicos)
+  return { ...topicos }
+}
+
+export function removeTopico(materia, topico) {
+  const topicos = getTopicos()
+  if (!topicos[materia]) return topicos
+  topicos[materia] = topicos[materia].filter(t => t !== topico)
+  saveTopicos(topicos)
+  return { ...topicos }
+}
+
+export function getChatKey(materia, topico) {
+  return topico ? `${materia}__${topico}` : materia
+}

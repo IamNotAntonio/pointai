@@ -38,12 +38,14 @@ const perguntas = [
 
 export default function Onboarding() {
   const router  = useRouter()
-  const [etapa, setEtapa]           = useState(0)
-  const [respostas, setRespostas]   = useState({})
-  const [historico, setHistorico]   = useState([])
-  const [input, setInput]           = useState('')
-  const [typing, setTyping]         = useState(false)
-  const [saindo, setSaindo]         = useState(false)
+  const [etapa, setEtapa]                     = useState(0)
+  const [respostas, setRespostas]             = useState({})
+  const [historico, setHistorico]             = useState([])
+  const [input, setInput]                     = useState('')
+  const [typing, setTyping]                   = useState(false)
+  const [saindo, setSaindo]                   = useState(false)
+  const [sugestoes, setSugestoes]             = useState([])
+  const [carregandoSugestoes, setCarregandoSugestoes] = useState(false)
 
   const inputRef = useRef(null)
   const fimRef   = useRef(null)
@@ -55,6 +57,22 @@ export default function Onboarding() {
   useEffect(() => {
     if (!typing && !saindo) inputRef.current?.focus()
   }, [etapa, typing, saindo])
+
+  // Fetch subject suggestions when reaching the materias step
+  useEffect(() => {
+    const isMateriaStep = etapa === 4
+    if (!isMateriaStep || !respostas.curso || !respostas.universidade || !respostas.semestre) return
+    setCarregandoSugestoes(true)
+    setSugestoes([])
+    fetch('/api/sugestoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ curso: respostas.curso, universidade: respostas.universidade, semestre: respostas.semestre }),
+    })
+      .then(r => r.json())
+      .then(data => { setSugestoes(data.materias || []); setCarregandoSugestoes(false) })
+      .catch(() => setCarregandoSugestoes(false))
+  }, [etapa])
 
   const pergAtual = perguntas[etapa]
   const textoAtual = typeof pergAtual.texto === 'function'
@@ -188,6 +206,12 @@ export default function Onboarding() {
         .ob-send:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
         .ob-hint{text-align:center;font-size:11.5px;color:#3f3f46;margin-top:8px}
 
+        /* ── Suggestion chips ── */
+        .ob-sugg{display:flex;flex-wrap:wrap;gap:6px;max-width:640px;margin:0 auto 10px;padding:0 24px}
+        .ob-sugg-chip{background:rgba(26,122,74,.13);border:1px solid rgba(26,122,74,.28);color:#86efac;font-size:12.5px;font-weight:500;padding:5px 13px;border-radius:99px;cursor:pointer;transition:background .12s,border-color .12s;font-family:inherit}
+        .ob-sugg-chip:hover{background:rgba(26,122,74,.24);border-color:rgba(26,122,74,.5)}
+        .ob-sugg-loading{font-size:12px;color:#52525b;font-style:italic;padding:5px 0}
+
         /* ── Keyframes ── */
         @keyframes obMsgIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
         @keyframes obDot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-6px);opacity:1}}
@@ -268,6 +292,25 @@ export default function Onboarding() {
 
         {/* ── Input ── */}
         <div className="ob-footer">
+          {/* Subject suggestions (only on materias step) */}
+          {etapa === 4 && (carregandoSugestoes || sugestoes.length > 0) && (
+            <div className="ob-sugg">
+              {carregandoSugestoes ? (
+                <span className="ob-sugg-loading">Buscando matérias típicas para {respostas.curso}…</span>
+              ) : (
+                sugestoes.map((s, i) => (
+                  <button
+                    key={i}
+                    className="ob-sugg-chip"
+                    onClick={() => setInput(prev => prev ? `${prev}, ${s}` : s)}
+                  >
+                    + {s}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
           <div className="ob-input-wrap">
             <input
               ref={inputRef}
