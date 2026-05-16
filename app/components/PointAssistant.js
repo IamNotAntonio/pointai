@@ -1,0 +1,243 @@
+'use client'
+import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { usePathname } from 'next/navigation'
+import RichMessage from './RichMessage'
+
+const FIRST_MSG = {
+  '/dashboard':  'Quer dicas de como perguntar para a IA de forma mais eficiente? 💡',
+  '/notas':      'Já cadastrou suas notas? Posso te explicar como funciona o controle de faltas!',
+  '/calendario': 'Tem alguma prova chegando? Posso te ajudar a pensar num plano de revisão! 📅',
+  '/evolucao':   'Como está indo o semestre? Veja seu progresso e me conta se precisar de ajuda!',
+  '/analise':    'Sabia que você pode mandar foto da sua prova e eu analiso cada erro? 🔬',
+  '/relatorio':  'Já gerou seu relatório semanal? É uma ótima forma de ver onde melhorar! 📊',
+  '/trabalhos':  'Precisa de feedback no seu trabalho? Cola o texto aqui e a IA analisa tudo!',
+}
+
+const HIDE_ON = ['/', '/login', '/onboarding']
+
+function IcX() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  )
+}
+
+export default function PointAssistant() {
+  const pathname = usePathname()
+
+  const [mounted,    setMounted]    = useState(false)
+  const [aberto,     setAberto]     = useState(false)
+  const [perfil,     setPerfil]     = useState(null)
+  const [mensagens,  setMensagens]  = useState([])
+  const [input,      setInput]      = useState('')
+  const [carregando, setCarregando] = useState(false)
+  const [badge,      setBadge]      = useState(false)
+
+  const fimRef   = useRef(null)
+  const inputRef = useRef(null)
+
+  // Only render on the client (required for createPortal)
+  useEffect(() => { setMounted(true) }, [])
+
+  // Load profile from localStorage
+  useEffect(() => {
+    try {
+      const p = JSON.parse(localStorage.getItem('pointai_perfil') || 'null')
+      if (p) setPerfil(p)
+    } catch {}
+  }, [])
+
+  // Reset chat on page change and queue badge notification
+  useEffect(() => {
+    setBadge(false)
+    if (aberto) return
+
+    const key = `pa_hist_${pathname}`
+    try {
+      const hist = JSON.parse(localStorage.getItem(key) || 'null')
+      if (hist?.length) { setMensagens(hist); return }
+    } catch {}
+
+    const msg = FIRST_MSG[pathname] || '👋 Olá! Sou o Point Assistant. Como posso ajudar?'
+    setMensagens([{ role: 'assistant', content: msg }])
+
+    const t = setTimeout(() => setBadge(true), 3000)
+    return () => clearTimeout(t)
+  }, [pathname])
+
+  useEffect(() => {
+    fimRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [mensagens, carregando])
+
+  useEffect(() => {
+    if (aberto) {
+      setBadge(false)
+      setTimeout(() => inputRef.current?.focus(), 120)
+    }
+  }, [aberto])
+
+  function salvar(msgs) {
+    try { localStorage.setItem(`pa_hist_${pathname}`, JSON.stringify(msgs)) } catch {}
+  }
+
+  async function enviar() {
+    const texto = input.trim()
+    if (!texto || carregando) return
+    const userMsg = { role: 'user', content: texto }
+    const novas   = [...mensagens, userMsg]
+    setMensagens(novas)
+    setInput('')
+    setCarregando(true)
+    try {
+      const resp = await fetch('/api/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagens: novas, perfil, pagina: pathname }),
+      })
+      const dados  = await resp.json()
+      const finais = [...novas, { role: 'assistant', content: dados.resposta }]
+      setMensagens(finais)
+      salvar(finais)
+    } catch {}
+    setCarregando(false)
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() }
+  }
+
+  // Don't render until mounted (SSR safety) or on public pages
+  if (!mounted || HIDE_ON.includes(pathname)) return null
+
+  // Inline styles guarantee positioning even when parent CSS interferes
+  const fabStyle = {
+    position: 'fixed',
+    bottom: '24px',
+    right: '24px',
+    width: '52px',
+    height: '52px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg,#1a7a4a 0%,#22c55e 100%)',
+    color: '#fff',
+    fontSize: '19px',
+    fontWeight: '800',
+    border: 'none',
+    cursor: 'pointer',
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 4px 18px rgba(26,122,74,.45)',
+    transition: 'transform .15s, box-shadow .15s',
+    letterSpacing: '-.5px',
+  }
+
+  const windowStyle = {
+    position: 'fixed',
+    bottom: '88px',
+    right: '24px',
+    width: '360px',
+    height: '500px',
+    zIndex: 9998,
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: '20px',
+    overflow: 'hidden',
+    boxShadow: '0 16px 48px rgba(0,0,0,.18)',
+  }
+
+  const badgeStyle = {
+    position: 'absolute',
+    top: '2px',
+    right: '2px',
+    width: '13px',
+    height: '13px',
+    borderRadius: '50%',
+    background: '#ef4444',
+    border: '2px solid #0a0a0a',
+  }
+
+  return createPortal(
+    <>
+      {/* Floating button */}
+      <button
+        style={fabStyle}
+        onClick={() => setAberto(o => !o)}
+        aria-label="Point Assistant"
+        title="Point Assistant — Coach do app"
+      >
+        P
+        {badge && !aberto && <span style={badgeStyle} />}
+      </button>
+
+      {/* Chat window */}
+      {aberto && (
+        <div className="pa-window" style={windowStyle}>
+          {/* Header */}
+          <div className="pa-header">
+            <div className="pa-header-left">
+              <div className="pa-avatar">P</div>
+              <div>
+                <p className="pa-title">Point Assistant</p>
+                <p className="pa-subtitle">Coach do app · Sempre aqui</p>
+              </div>
+            </div>
+            <button className="pa-close" onClick={() => setAberto(false)} aria-label="Fechar">
+              <IcX />
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="pa-messages">
+            {mensagens.map((msg, i) => (
+              <div key={i} className={`pa-msg ${msg.role}`}>
+                {msg.role === 'assistant' && <div className="pa-msg-avatar">P</div>}
+                <div className="pa-bubble">
+                  <RichMessage content={msg.content} />
+                </div>
+              </div>
+            ))}
+
+            {carregando && (
+              <div className="pa-msg assistant">
+                <div className="pa-msg-avatar">P</div>
+                <div className="pa-bubble">
+                  <div className="typing-dots">
+                    <div className="typing-dot" />
+                    <div className="typing-dot" />
+                    <div className="typing-dot" />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={fimRef} />
+          </div>
+
+          {/* Input */}
+          <div className="pa-input-area">
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Mensagem…"
+              className="pa-input"
+              disabled={carregando}
+            />
+            <button
+              className="pa-send"
+              onClick={enviar}
+              disabled={!input.trim() || carregando}
+              aria-label="Enviar"
+            >
+              ↑
+            </button>
+          </div>
+        </div>
+      )}
+    </>,
+    document.body
+  )
+}

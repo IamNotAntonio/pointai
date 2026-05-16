@@ -75,19 +75,33 @@ Use esse contexto naturalmente quando relevante ("Da última vez você...", "Com
       return { role: 'user', content }
     }
 
-    // Historical messages: use text content only
     return {
       role: m.role,
       content: m.content || '[Imagem enviada anteriormente]',
     }
   })
 
-  const resposta = await cliente.messages.create({
+  // Stream the response
+  const stream = await cliente.messages.stream({
     model: 'claude-sonnet-4-5',
     max_tokens: 1500,
     system: sistema,
     messages: apiMessages,
   })
 
-  return Response.json({ resposta: resposta.content[0].text })
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
+          controller.enqueue(encoder.encode(chunk.delta.text))
+        }
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(readable, {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  })
 }
