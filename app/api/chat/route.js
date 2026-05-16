@@ -5,7 +5,7 @@ const cliente = new Anthropic({
 })
 
 export async function POST(req) {
-  const { mensagens, perfil, materia, topico, imagemBase64, imagemTipo } = await req.json()
+  const { mensagens, perfil, materia, topico, imagemBase64, imagemTipo, resumo } = await req.json()
 
   const contextoAtual = topico ? `${materia} → ${topico}` : materia
 
@@ -48,7 +48,11 @@ FORMATAÇÃO RICA — use quando aumentar a clareza:
   \`\`\`
   Tipos suportados: "bar" (padrão) e "line". Use "line" para séries temporais ou funções.
 - CÓDIGO: blocos de código com a linguagem correta (python, java, c, sql, etc.)
-- Prefira formatação rica quando o aluno pedir listas de exercícios, comparações, gráficos de funções ou dados numéricos`
+- Prefira formatação rica quando o aluno pedir listas de exercícios, comparações, gráficos de funções ou dados numéricos${resumo ? `
+
+MEMÓRIA DE CONVERSAS ANTERIORES:
+${resumo}
+Use esse contexto naturalmente quando relevante ("Da última vez você...", "Como você estudou antes..."). Não mencione que existe uma memória — apenas use-a.` : ''}`
 
   // Build API messages — attach image to the last user message when present
   const apiMessages = mensagens.map((m, i) => {

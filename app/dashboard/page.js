@@ -2,8 +2,10 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
+import UpgradeModal from '../components/UpgradeModal'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
+import { getPlanInfo, incrementarMensagem } from '../lib/plano'
 
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
 
@@ -47,6 +49,9 @@ export default function Dashboard() {
   const [input,         setInput]         = useState('')
   const [carregando,    setCarregando]    = useState(false)
   const [imagem,        setImagem]        = useState(null)
+  const [planInfo,      setPlanInfo]      = useState({ plano: 'gratis', mensagensHoje: 0, limite: 20 })
+  const [showUpgrade,   setShowUpgrade]   = useState(false)
+  const [resumo,        setResumo]        = useState(null)
 
   const fimChat      = useRef(null)
   const textareaRef  = useRef(null)
@@ -67,6 +72,7 @@ export default function Dashboard() {
     }
     carregarPerfil()
     setTopicos(db.getTopicos())
+    setPlanInfo(getPlanInfo())
   }, [])
 
   // Track last access per materia
@@ -82,7 +88,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!chatKey || !perfil) return
     async function carregarChat() {
-      const historico = await db.getChat(chatKey)
+      const [historico, r] = await Promise.all([
+        db.getChat(chatKey),
+        db.getResumo(chatKey),
+      ])
+      setResumo(r)
       if (historico?.length) {
         setMensagens(historico)
       } else {
@@ -118,6 +128,13 @@ export default function Dashboard() {
     const temConteudo  = textoFinal.trim() || imagem
     if (!temConteudo || carregando) return
 
+    // Enforce daily message limit
+    const info = getPlanInfo()
+    if (info.plano === 'gratis' && info.mensagensHoje >= info.limite) {
+      setShowUpgrade(true)
+      return
+    }
+
     const pdfRequested = PDF_REGEX.test(textoFinal)
 
     const novaMensagem = {
@@ -136,7 +153,7 @@ export default function Dashboard() {
     setCarregando(true)
 
     try {
-      const body = { mensagens: novasMensagens, perfil, materia: materiaAtiva, topico: topicoAtivo }
+      const body = { mensagens: novasMensagens, perfil, materia: materiaAtiva, topico: topicoAtivo, resumo }
       if (imagemParaEnviar) {
         body.imagemBase64 = imagemParaEnviar.dataUrl.split(',')[1]
         body.imagemTipo   = imagemParaEnviar.tipo
@@ -154,6 +171,25 @@ export default function Dashboard() {
       ]
       setMensagens(finais)
       salvarHistorico(finais)
+
+      // Update plan counter
+      incrementarMensagem()
+      setPlanInfo(getPlanInfo())
+
+      // Every 10 user messages, generate a long-memory summary in the background
+      const userCount = finais.filter(m => m.role === 'user').length
+      if (userCount > 0 && userCount % 10 === 0) {
+        fetch('/api/resumir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mensagens: finais.slice(-20), materia: materiaAtiva, perfil }),
+        }).then(r => r.json()).then(d => {
+          if (d.resumo) {
+            setResumo(d.resumo)
+            db.saveResumo(chatKey, d.resumo)
+          }
+        }).catch(() => {})
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -345,9 +381,24 @@ export default function Dashboard() {
               ↑
             </button>
           </div>
-          <p className="chat-hint">Enter para enviar · Shift+Enter para nova linha</p>
+          <p className="chat-hint">
+            Enter para enviar · Shift+Enter para nova linha
+            {planInfo.plano === 'gratis' && (
+              <span className={`plan-counter ${planInfo.mensagensHoje >= planInfo.limite - 4 ? 'warning' : ''} ${planInfo.mensagensHoje >= planInfo.limite ? 'danger' : ''}`}>
+                {' '}· {planInfo.mensagensHoje}/{planInfo.limite} mensagens hoje
+              </span>
+            )}
+          </p>
         </div>
       </div>
+
+      {showUpgrade && (
+        <UpgradeModal
+          onClose={() => setShowUpgrade(false)}
+          mensagensHoje={planInfo.mensagensHoje}
+          limite={planInfo.limite}
+        />
+      )}
     </div>
   )
 }

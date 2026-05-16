@@ -213,3 +213,37 @@ export function removeTopico(materia, topico) {
 export function getChatKey(materia, topico) {
   return topico ? `${materia}__${topico}` : materia
 }
+
+// ── Resumo (long memory) ────────────────────────────────────────
+export async function saveResumo(chatKey, resumo) {
+  localStorage.setItem(`resumo_${chatKey}`, resumo)
+  try {
+    const userId = getUserId()
+    const { error } = await supabase.from('chats').upsert(
+      { user_id: userId, materia: chatKey, resumo, atualizado_em: new Date().toISOString() },
+      { onConflict: 'user_id,materia' }
+    )
+    if (error) console.warn('[db] saveResumo:', error.message)
+  } catch (e) {
+    console.warn('[db] saveResumo offline:', e.message)
+  }
+}
+
+export async function getResumo(chatKey) {
+  try {
+    const userId = getUserId()
+    const { data, error } = await supabase
+      .from('chats')
+      .select('resumo')
+      .eq('user_id', userId)
+      .eq('materia', chatKey)
+      .maybeSingle()
+    if (!error && data?.resumo) {
+      localStorage.setItem(`resumo_${chatKey}`, data.resumo)
+      return data.resumo
+    }
+  } catch (e) {
+    console.warn('[db] getResumo offline:', e.message)
+  }
+  return localStorage.getItem(`resumo_${chatKey}`) || null
+}

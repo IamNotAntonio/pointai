@@ -77,6 +77,23 @@ function IcPlus() {
   )
 }
 
+function IcSearch() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  )
+}
+function IcReport() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+    </svg>
+  )
+}
+
 /* ── Constants ───────────────────────────────────────────────── */
 const PLANS = [
   { id: 'free',     name: 'Grátis',    price: 'R$0',     period: '',     desc: 'Acesso completo sem limite de uso.',           current: true,  featured: false },
@@ -90,6 +107,8 @@ const NAV_ITEMS = [
   { href: '/calendario',icon: '📅', label: 'Calendário' },
   { href: '/evolucao',  icon: '📈', label: 'Minha Evolução' },
   { href: '/trabalhos', icon: '📝', label: 'Correção de Trabalhos' },
+  { href: '/analise',   icon: null, label: 'Análise de Materiais', pro: true, svgIcon: 'search' },
+  { href: '/relatorio', icon: null, label: 'Relatório Semanal',    pro: true, svgIcon: 'report' },
 ]
 
 /* ── Component ───────────────────────────────────────────────── */
@@ -109,6 +128,7 @@ export default function Sidebar({
   const isDashboard = pathname === '/dashboard'
 
   const [tema,           setTema]           = useState('dark')
+  const [plano,          setPlano]          = useState('gratis')
   const [dropdownOpen,   setDropdownOpen]   = useState(false)
   const [editOpen,       setEditOpen]       = useState(false)
   const [planosOpen,     setPlanosOpen]     = useState(false)
@@ -125,6 +145,10 @@ export default function Sidebar({
     const saved = localStorage.getItem('pointai_tema') || 'dark'
     setTema(saved)
     document.documentElement.classList.toggle('dark', saved === 'dark')
+    try {
+      const p = JSON.parse(localStorage.getItem('pointai_plano') || '{}')
+      setPlano(p.plano || 'gratis')
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -257,7 +281,7 @@ export default function Sidebar({
                       onClick={() => { setDropdownOpen(false); setPlanosOpen(true) }}
                     >
                       <span className="sb-dd-icon"><IcStar /></span>
-                      Plano Grátis · Ver planos
+                      {plano === 'pro' ? '✨ Plano Pro · Ativo' : 'Plano Grátis · Ver planos'}
                     </button>
 
                     <div className="sb-dd-divider" />
@@ -359,14 +383,17 @@ export default function Sidebar({
         <div className="sidebar-section sidebar-nav-main">
           <p className="sidebar-section-label">Menu</p>
           <nav className="sidebar-nav">
-            {NAV_ITEMS.map(({ href, icon, label }) => (
+            {NAV_ITEMS.map(({ href, icon, label, pro, svgIcon }) => (
               <Link
                 key={href}
                 href={href}
                 className={`sidebar-nav-link ${pathname === href ? 'active' : ''}`}
               >
-                <span className="sidebar-nav-icon">{icon}</span>
+                <span className="sidebar-nav-icon">
+                  {svgIcon === 'search' ? <IcSearch /> : svgIcon === 'report' ? <IcReport /> : icon}
+                </span>
                 <span>{label}</span>
+                {pro && <span className="sb-pro-badge">Pro</span>}
               </Link>
             ))}
           </nav>
