@@ -1,11 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-)
+// Lazy singleton — avoids SSR instantiation
+let _client = null
+function getClient() {
+  if (typeof window === 'undefined') return null
+  if (!_client) {
+    _client = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
+  }
+  return _client
+}
 
 // ── User identity ──────────────────────────────────────────────
+// Legacy fallback UUID — kept for backward-compat (onboarding calls it)
 export function getUserId() {
   if (typeof window === 'undefined') return null
   let id = localStorage.getItem('pointai_user_id')
@@ -16,17 +25,54 @@ export function getUserId() {
   return id
 }
 
+// Returns the authenticated user's ID; falls back to the local UUID
+async function resolveUserId() {
+  try {
+    const { data: { user } } = await getClient().auth.getUser()
+    if (user?.id) return user.id
+  } catch {}
+  return getUserId()
+}
+
+// ── Auth helpers ───────────────────────────────────────────────
+export async function getSession() {
+  try {
+    const { data: { session } } = await getClient().auth.getSession()
+    return session
+  } catch {
+    return null
+  }
+}
+
+export async function getUser() {
+  try {
+    const { data: { user } } = await getClient().auth.getUser()
+    return user
+  } catch {
+    return null
+  }
+}
+
+export async function signOut() {
+  try {
+    await getClient().auth.signOut()
+  } catch {}
+  // Clear all local app data
+  if (typeof window !== 'undefined') {
+    const keys = []
+    for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i))
+    keys.forEach(k => localStorage.removeItem(k))
+  }
+}
+
 // ── Perfil ─────────────────────────────────────────────────────
 export async function savePerfil(perfil) {
   localStorage.setItem('pointai_perfil', JSON.stringify(perfil))
   try {
-    const userId = getUserId()
-    const { error } = await supabase
+    const userId = await resolveUserId()
+    const { error } = await getClient()
       .from('perfis')
-      .upsert(
-        { user_id: userId, ...perfil },
-        { onConflict: 'user_id' }
-      )
+      .upsert({ user_id: userId, ...perfil }, { onConflict: 'user_id' })
     if (error) console.warn('[db] savePerfil:', error.message)
   } catch (e) {
     console.warn('[db] savePerfil offline:', e.message)
@@ -35,8 +81,8 @@ export async function savePerfil(perfil) {
 
 export async function getPerfil() {
   try {
-    const userId = getUserId()
-    const { data, error } = await supabase
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
       .from('perfis')
       .select('nome,curso,universidade,semestre,materias,objetivo,tema')
       .eq('user_id', userId)
@@ -57,8 +103,8 @@ export async function saveChat(materia, mensagens) {
   const paraSalvar = mensagens.map(({ image, hasPdfBtn, pdfRequest, ...m }) => m)
   localStorage.setItem(`chat_${materia}`, JSON.stringify(paraSalvar))
   try {
-    const userId = getUserId()
-    const { error } = await supabase
+    const userId = await resolveUserId()
+    const { error } = await getClient()
       .from('chats')
       .upsert(
         { user_id: userId, materia, mensagens: paraSalvar, atualizado_em: new Date().toISOString() },
@@ -72,8 +118,8 @@ export async function saveChat(materia, mensagens) {
 
 export async function getChat(materia) {
   try {
-    const userId = getUserId()
-    const { data, error } = await supabase
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
       .from('chats')
       .select('mensagens')
       .eq('user_id', userId)
@@ -94,8 +140,8 @@ export async function getChat(materia) {
 export async function saveNotas(dados) {
   localStorage.setItem('pointai_notas', JSON.stringify(dados))
   try {
-    const userId = getUserId()
-    const { error } = await supabase
+    const userId = await resolveUserId()
+    const { error } = await getClient()
       .from('notas')
       .upsert(
         { user_id: userId, dados, atualizado_em: new Date().toISOString() },
@@ -109,8 +155,8 @@ export async function saveNotas(dados) {
 
 export async function getNotas() {
   try {
-    const userId = getUserId()
-    const { data, error } = await supabase
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
       .from('notas')
       .select('dados')
       .eq('user_id', userId)
@@ -129,8 +175,8 @@ export async function getNotas() {
 // ── Eventos ────────────────────────────────────────────────────
 export async function saveEvento(evento) {
   try {
-    const userId = getUserId()
-    const { data, error } = await supabase
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
       .from('eventos')
       .insert({
         user_id: userId,
@@ -145,14 +191,13 @@ export async function saveEvento(evento) {
   } catch (e) {
     console.warn('[db] saveEvento offline:', e.message)
   }
-  // Fallback: return with local id
   return evento
 }
 
 export async function getEventos() {
   try {
-    const userId = getUserId()
-    const { data, error } = await supabase
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
       .from('eventos')
       .select('id,titulo,data,tipo,materia')
       .eq('user_id', userId)
@@ -170,8 +215,8 @@ export async function getEventos() {
 
 export async function deleteEvento(id) {
   try {
-    const userId = getUserId()
-    const { error } = await supabase
+    const userId = await resolveUserId()
+    const { error } = await getClient()
       .from('eventos')
       .delete()
       .eq('id', id)
@@ -218,8 +263,8 @@ export function getChatKey(materia, topico) {
 export async function saveResumo(chatKey, resumo) {
   localStorage.setItem(`resumo_${chatKey}`, resumo)
   try {
-    const userId = getUserId()
-    const { error } = await supabase.from('chats').upsert(
+    const userId = await resolveUserId()
+    const { error } = await getClient().from('chats').upsert(
       { user_id: userId, materia: chatKey, resumo, atualizado_em: new Date().toISOString() },
       { onConflict: 'user_id,materia' }
     )
@@ -231,8 +276,8 @@ export async function saveResumo(chatKey, resumo) {
 
 export async function getResumo(chatKey) {
   try {
-    const userId = getUserId()
-    const { data, error } = await supabase
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
       .from('chats')
       .select('resumo')
       .eq('user_id', userId)

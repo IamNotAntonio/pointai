@@ -129,6 +129,7 @@ export default function Sidebar({
 
   const [tema,           setTema]           = useState('dark')
   const [plano,          setPlano]          = useState('gratis')
+  const [userMeta,       setUserMeta]       = useState(null)
   const [dropdownOpen,   setDropdownOpen]   = useState(false)
   const [editOpen,       setEditOpen]       = useState(false)
   const [planosOpen,     setPlanosOpen]     = useState(false)
@@ -149,6 +150,16 @@ export default function Sidebar({
       const p = JSON.parse(localStorage.getItem('pointai_plano') || '{}')
       setPlano(p.plano || 'gratis')
     } catch {}
+
+    // Load Google user metadata (avatar, email)
+    db.getUser().then(user => {
+      if (user) {
+        setUserMeta({
+          avatar: user.user_metadata?.avatar_url || null,
+          email:  user.email || null,
+        })
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -182,9 +193,9 @@ export default function Sidebar({
     document.documentElement.classList.toggle('dark', novo === 'dark')
   }
 
-  function sair() {
-    localStorage.clear()
-    router.push('/')
+  async function sair() {
+    await db.signOut()
+    router.push('/login')
   }
 
   async function salvarPerfil() {
@@ -224,6 +235,9 @@ export default function Sidebar({
   }
 
   const inicialNome    = perfil?.nome?.charAt(0)?.toUpperCase() || '?'
+  const avatarEl       = userMeta?.avatar
+    ? <img src={userMeta.avatar} alt={perfil?.nome} className="sidebar-avatar" style={{ padding:0, objectFit:'cover', borderRadius:'50%' }} referrerPolicy="no-referrer" />
+    : <div className="sidebar-avatar">{inicialNome}</div>
   const topicosMateria = topicos[materiaAtiva] || []
 
   return (
@@ -244,7 +258,7 @@ export default function Sidebar({
                 onClick={() => setDropdownOpen(o => !o)}
                 aria-label="Menu da conta"
               >
-                <div className="sidebar-avatar">{inicialNome}</div>
+                {avatarEl}
                 <div className="sidebar-profile-info">
                   <p className="sidebar-profile-name">{perfil.nome}</p>
                   <p className="sidebar-profile-sub">{perfil.curso} · {perfil.semestre}</p>
@@ -258,11 +272,14 @@ export default function Sidebar({
                 <div className="sb-dropdown">
                   {/* Header */}
                   <div className="sb-dd-header">
-                    <div className="sb-dd-avatar">{inicialNome}</div>
+                    {userMeta?.avatar
+                      ? <img src={userMeta.avatar} alt={perfil.nome} className="sb-dd-avatar" style={{ padding:0, objectFit:'cover', borderRadius:'50%' }} referrerPolicy="no-referrer" />
+                      : <div className="sb-dd-avatar">{inicialNome}</div>
+                    }
                     <div className="sb-dd-info">
                       <p className="sb-dd-name">{perfil.nome}</p>
                       <p className="sb-dd-meta">{perfil.curso}</p>
-                      <p className="sb-dd-meta">{perfil.universidade}</p>
+                      <p className="sb-dd-meta">{userMeta?.email || perfil.universidade}</p>
                     </div>
                   </div>
 
