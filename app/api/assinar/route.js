@@ -42,6 +42,7 @@ export async function POST(request) {
       payer_email: email,
       external_reference: userId || 'anonymous',
       back_url: `${baseUrl}/assinar/sucesso`,
+      notification_url: 'https://pointai-two.vercel.app/api/webhook-mp',
       status: 'pending',
     }
 
