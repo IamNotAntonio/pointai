@@ -33,16 +33,19 @@ export async function POST(request) {
       return NextResponse.json({ erro: 'E-mail obrigatório' }, { status: 400 })
     }
 
-    const proto   = request.headers.get('x-forwarded-proto') || 'http'
-    const host    = request.headers.get('host') || 'localhost:3001'
-    const baseUrl = `${proto}://${host}`
+    // NEXT_PUBLIC_APP_URL must be set to a publicly accessible URL (required by MP)
+    // e.g. https://pointai-two.vercel.app or your ngrok tunnel for local testing
+    const proto   = request.headers.get('x-forwarded-proto') || 'https'
+    const host    = request.headers.get('host') || ''
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+      (host ? `${proto}://${host}` : 'https://pointai-two.vercel.app')
 
     const body = {
       ...config,
       payer_email: email,
       external_reference: userId || 'anonymous',
       back_url: `${baseUrl}/assinar/sucesso`,
-      notification_url: 'https://pointai-two.vercel.app/api/webhook-mp',
+      notification_url: `${baseUrl}/api/webhook-mp`,
       status: 'pending',
     }
 
