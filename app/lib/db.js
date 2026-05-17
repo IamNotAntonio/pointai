@@ -259,6 +259,35 @@ export function getChatKey(materia, topico) {
   return topico ? `${materia}__${topico}` : materia
 }
 
+// ── Plano ──────────────────────────────────────────────────────
+export async function getPlanoFromDB() {
+  try {
+    const userId = await resolveUserId()
+    const { data, error } = await getClient()
+      .from('perfis')
+      .select('plano,plano_expira')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (!error && data?.plano) return data
+  } catch (e) {
+    console.warn('[db] getPlano offline:', e.message)
+  }
+  return null
+}
+
+export async function updatePlano(plano, planoExpira = null) {
+  try {
+    const userId = await resolveUserId()
+    const { error } = await getClient()
+      .from('perfis')
+      .update({ plano, plano_expira: planoExpira })
+      .eq('user_id', userId)
+    if (error) console.warn('[db] updatePlano:', error.message)
+  } catch (e) {
+    console.warn('[db] updatePlano offline:', e.message)
+  }
+}
+
 // ── Resumo (long memory) ────────────────────────────────────────
 export async function saveResumo(chatKey, resumo) {
   localStorage.setItem(`resumo_${chatKey}`, resumo)

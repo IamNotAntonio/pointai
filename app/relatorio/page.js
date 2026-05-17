@@ -4,7 +4,7 @@ import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
-import { isPro } from '../lib/plano'
+import { fetchPlano } from '../lib/plano'
 import { ClipboardList, Rocket, Sparkles } from 'lucide-react'
 
 /* ── Icons ────────────────────────────────────────────────────── */
@@ -128,7 +128,8 @@ export default function Relatorio() {
         setPerfil(p)
         setMaterias(p.materias.split(',').map(m => m.trim()).filter(Boolean))
       }
-      setPro(isPro())
+      const plano = await fetchPlano()
+      setPro(plano === 'pro')
     }
     carregar()
   }, [])
