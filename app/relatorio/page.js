@@ -5,6 +5,7 @@ import RichMessage from '../components/RichMessage'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
 import { isPro } from '../lib/plano'
+import { ClipboardList, Rocket, Sparkles } from 'lucide-react'
 
 /* ── Icons ────────────────────────────────────────────────────── */
 function IcBarChart() {
@@ -69,11 +70,11 @@ const BENEFITS = [
 ]
 
 const GEN_PREVIEW = [
-  '📊 Panorama geral do seu desempenho',
-  '📚 Análise individual de cada matéria',
-  '⚠️ Alertas de risco — notas e faltas',
-  '🎯 5 ações priorizadas para a próxima semana',
-  '💬 Mensagem motivacional personalizada',
+  'Panorama geral do seu desempenho',
+  'Análise individual de cada matéria',
+  'Alertas de risco — notas e faltas',
+  '5 ações priorizadas para a próxima semana',
+  'Mensagem motivacional personalizada',
 ]
 
 /* ── Section helpers ──────────────────────────────────────────── */
@@ -229,8 +230,8 @@ export default function Relatorio() {
                   </div>
 
                   {/* CTA button */}
-                  <button className="block w-full max-w-xs mx-auto py-3.5 bg-gradient-to-br from-green-700 to-green-500 text-white text-[15px] font-semibold rounded-xl border-0 cursor-pointer transition-all duration-150 hover:opacity-90 hover:-translate-y-0.5 active:scale-[.98] mb-3">
-                    ✨ Assinar Pro agora
+                  <button className="w-full max-w-xs mx-auto py-3.5 bg-gradient-to-br from-green-700 to-green-500 text-white text-[15px] font-semibold rounded-xl border-0 cursor-pointer transition-all duration-150 hover:opacity-90 hover:-translate-y-0.5 active:scale-[.98] mb-3 flex items-center justify-center gap-2">
+                    <Sparkles size={16} strokeWidth={1.8} /> Assinar Pro agora
                   </button>
                   <p className="text-xs text-gray-400 dark:text-zinc-600">
                     Cancele quando quiser · Pagamento integrado em breve
@@ -244,7 +245,9 @@ export default function Relatorio() {
           {pro && !relatorio && !carregando && (
             <div className="max-w-[500px] mx-auto">
               <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl px-10 py-12 text-center">
-                <span className="text-5xl block mb-4">📋</span>
+                <div className="flex justify-center mb-4 text-gray-300 dark:text-zinc-600">
+                  <ClipboardList size={52} strokeWidth={1.2} />
+                </div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-zinc-100 mb-2.5">
                   Gerar relatório da semana
                 </h2>
@@ -267,9 +270,9 @@ export default function Relatorio() {
 
                 <button
                   onClick={gerarRelatorio}
-                  className="w-full py-3.5 bg-gradient-to-br from-green-700 to-green-500 text-white text-[15px] font-semibold rounded-xl border-0 cursor-pointer transition-all duration-150 hover:opacity-90 hover:-translate-y-0.5 active:scale-[.98]"
+                  className="w-full py-3.5 bg-gradient-to-br from-green-700 to-green-500 text-white text-[15px] font-semibold rounded-xl border-0 cursor-pointer transition-all duration-150 hover:opacity-90 hover:-translate-y-0.5 active:scale-[.98] flex items-center justify-center gap-2"
                 >
-                  🚀 Gerar relatório
+                  <Rocket size={16} strokeWidth={1.8} /> Gerar relatório
                 </button>
               </div>
             </div>

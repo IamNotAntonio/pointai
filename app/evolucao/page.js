@@ -6,6 +6,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from 'recharts'
+import { AlertTriangle, TrendingUp } from 'lucide-react'
 
 function calcularMedia(notas) {
   const v = notas.filter(n => n !== '' && !isNaN(parseFloat(n)))
@@ -175,13 +176,13 @@ export default function Evolucao() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
               {emRisco.map(m => (
                 <div key={m} className="alert alert-red">
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>🚨</span>
+                  <AlertTriangle size={18} strokeWidth={1.8} style={{ color: '#dc2626', flexShrink: 0 }} />
                   <p><strong>{m}</strong> — Próximo do limite de faltas! Restam <strong>{faltasRestantes(m)}</strong>.</p>
                 </div>
               ))}
               {abaixoDaMedia.map(m => (
                 <div key={m} className="alert alert-yellow">
-                  <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
+                  <AlertTriangle size={18} strokeWidth={1.8} style={{ color: '#d97706', flexShrink: 0 }} />
                   <p><strong>{m}</strong> — Média <strong>{calcularMedia(dados[m].notas)}</strong> abaixo de 7.0. Foque!</p>
                 </div>
               ))}
@@ -342,7 +343,9 @@ export default function Evolucao() {
 
           {semDados && proximosEventos.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-4)' }}>
-              <p style={{ fontSize: 40, marginBottom: 12 }}>📈</p>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                <TrendingUp size={40} strokeWidth={1.3} style={{ color: 'var(--text-4)' }} />
+              </div>
               <p style={{ fontWeight: 600, color: 'var(--text-3)' }}>Nenhum dado ainda</p>
               <p style={{ fontSize: 13, marginTop: 4 }}>Adicione notas e eventos para ver sua evolução aqui</p>
             </div>

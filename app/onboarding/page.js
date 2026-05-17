@@ -1,340 +1,678 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { savePerfil, getUserId } from '../lib/db'
+import { User, GraduationCap, Building2, Calendar, BookOpen, Zap, Target, TrendingUp, ClipboardList, Pencil, CheckCircle } from 'lucide-react'
 
-const perguntas = [
-  {
-    id: 'nome',
-    texto: 'Olá! Eu sou o Point, seu assistente acadêmico pessoal. Antes de começar, qual é o seu nome?',
-    placeholder: 'Digite seu nome…',
-  },
-  {
-    id: 'curso',
-    texto: (r) => `Que ótimo te conhecer, ${r.nome}! Qual curso você faz?`,
-    placeholder: 'Ex: Medicina, Engenharia, Direito…',
-  },
-  {
-    id: 'universidade',
-    texto: () => 'Incrível! E em qual universidade você estuda?',
-    placeholder: 'Ex: USP, UNICAMP, UFMG…',
-  },
-  {
-    id: 'semestre',
-    texto: () => 'Legal! Você está em qual semestre?',
-    placeholder: 'Ex: 3º semestre',
-  },
-  {
-    id: 'materias',
-    texto: () => 'Quais matérias você está tendo esse semestre? Separa por vírgula.',
-    placeholder: 'Ex: Anatomia, Bioquímica, Fisiologia…',
-  },
-  {
-    id: 'objetivo',
-    texto: (r) => `Última pergunta, ${r.nome}. Qual é o seu principal objetivo agora?`,
-    placeholder: 'Ex: Passar em todas, melhorar minha média, não reprovar em Cálculo…',
-  },
+const CURSOS = [
+  'Administração','Agronomia','Arquitetura e Urbanismo','Biomedicina',
+  'Ciência da Computação','Ciências Contábeis','Ciências Econômicas',
+  'Comunicação Social','Direito','Educação Física','Enfermagem',
+  'Engenharia Civil','Engenharia de Computação','Engenharia de Produção',
+  'Engenharia Elétrica','Engenharia Mecânica','Engenharia Química',
+  'Farmácia','Filosofia','Fisioterapia','Fonoaudiologia',
+  'Jornalismo','Letras','Matemática','Medicina','Medicina Veterinária',
+  'Nutrição','Odontologia','Pedagogia','Psicologia',
+  'Publicidade e Propaganda','Química','Relações Internacionais',
+  'Serviço Social','Sistemas de Informação',
 ]
 
+const UNIVERSIDADES = [
+  'USP','UNICAMP','UNESP','UFMG','UFRJ','UFPR','UFSC','UFBA',
+  'UFC','UFPE','UFPA','UFAM','UFRGS','UnB','UFRN','UFES','UFU',
+  'PUC-SP','PUC-RJ','PUC-MG','PUC-RS','FGV','INSPER','IBMEC',
+  'Mackenzie','UFF','UFSCAR','UNIFESP','FEI','ITA','IME',
+  'FATEC','Anhanguera','Estácio','UNIP','Cruzeiro do Sul',
+]
+
+const SEMESTRES = ['1º','2º','3º','4º','5º','6º','7º','8º','9º','10º']
+
+const OBJETIVOS = [
+  { id:'passar', label:'Passar em todas as matérias',           Icon: Target },
+  { id:'media',  label:'Melhorar minha média geral',            Icon: TrendingUp },
+  { id:'prova',  label:'Me preparar para uma prova específica', Icon: BookOpen },
+  { id:'faltas', label:'Não reprovar por faltas',               Icon: ClipboardList },
+  { id:'outro',  label:'Outro (digitar)',                       Icon: Pencil },
+]
+
+function getError(etapa, { nome, curso, universidade, semestre, materias, objetivo, outroTexto }) {
+  if (etapa === 0) {
+    if (!nome || nome.trim().length < 2) return 'Pelo menos 2 caracteres'
+    if (!/^[a-zA-ZÀ-ÿ\s'-]+$/.test(nome.trim())) return 'Use apenas letras e espaços'
+    return null
+  }
+  if (etapa === 1) return (!curso || curso.trim().length < 3) ? 'Informe seu curso (mín. 3 letras)' : null
+  if (etapa === 2) return (!universidade || universidade.trim().length < 2) ? 'Informe sua universidade' : null
+  if (etapa === 3) return !semestre ? 'Selecione seu semestre' : null
+  if (etapa === 4) return (!materias || materias.length === 0) ? 'Adicione ao menos uma matéria' : null
+  if (etapa === 5) {
+    if (!objetivo) return 'Escolha um objetivo'
+    if (objetivo === 'outro' && (!outroTexto || outroTexto.trim().length < 3)) return 'Descreva seu objetivo'
+    return null
+  }
+  return null
+}
+
 export default function Onboarding() {
-  const router  = useRouter()
-  const [etapa, setEtapa]                     = useState(0)
-  const [respostas, setRespostas]             = useState({})
-  const [historico, setHistorico]             = useState([])
-  const [input, setInput]                     = useState('')
-  const [typing, setTyping]                   = useState(false)
-  const [saindo, setSaindo]                   = useState(false)
-  const [sugestoes, setSugestoes]             = useState([])
-  const [carregandoSugestoes, setCarregandoSugestoes] = useState(false)
+  const router = useRouter()
+  const [etapa,        setEtapa]        = useState(0)
+  const [animKey,      setAnimKey]      = useState(0)
+  const [dir,          setDir]          = useState(1)
+  const [touched,      setTouched]      = useState(false)
 
-  const inputRef = useRef(null)
-  const fimRef   = useRef(null)
+  const [nome,         setNome]         = useState('')
+  const [curso,        setCurso]        = useState('')
+  const [universidade, setUniversidade] = useState('')
+  const [semestre,     setSemestre]     = useState('')
+  const [materias,     setMaterias]     = useState([])
+  const [novaMateria,  setNovaMateria]  = useState('')
+  const [objetivo,     setObjetivo]     = useState('')
+  const [outroTexto,   setOutroTexto]   = useState('')
+
+  const [cursoFoco,    setCursoFoco]    = useState(false)
+  const [uniFoco,      setUniFoco]      = useState(false)
+
+  const [sugestoes,    setSugestoes]    = useState([])
+  const [loadingSubj,  setLoadingSubj]  = useState(false)
+
+  const [saving,       setSaving]       = useState(false)
+  const [done,         setDone]         = useState(false)
+
+  const st  = { nome, curso, universidade, semestre, materias, objetivo, outroTexto }
+  const err = getError(etapa, st)
+  const ok  = err === null
 
   useEffect(() => {
-    fimRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [historico, typing])
-
-  useEffect(() => {
-    if (!typing && !saindo) inputRef.current?.focus()
-  }, [etapa, typing, saindo])
-
-  // Fetch subject suggestions when reaching the materias step
-  useEffect(() => {
-    const isMateriaStep = etapa === 4
-    if (!isMateriaStep || !respostas.curso || !respostas.universidade || !respostas.semestre) return
-    setCarregandoSugestoes(true)
+    if (etapa !== 4) return
+    setLoadingSubj(true)
     setSugestoes([])
     fetch('/api/sugestoes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ curso: respostas.curso, universidade: respostas.universidade, semestre: respostas.semestre }),
+      body: JSON.stringify({ curso, universidade, semestre }),
     })
       .then(r => r.json())
-      .then(data => { setSugestoes(data.materias || []); setCarregandoSugestoes(false) })
-      .catch(() => setCarregandoSugestoes(false))
+      .then(d => { setSugestoes(d.materias || []); setLoadingSubj(false) })
+      .catch(() => setLoadingSubj(false))
   }, [etapa])
 
-  const pergAtual = perguntas[etapa]
-  const textoAtual = typeof pergAtual.texto === 'function'
-    ? pergAtual.texto(respostas)
-    : pergAtual.texto
+  const cursoOptions = cursoFoco && curso.length >= 1
+    ? CURSOS.filter(c => c.toLowerCase().includes(curso.toLowerCase())).slice(0, 6)
+    : []
+  const uniOptions = uniFoco && universidade.length >= 1
+    ? UNIVERSIDADES.filter(u => u.toLowerCase().includes(universidade.toLowerCase())).slice(0, 6)
+    : []
 
-  const nomeLetra = historico[0]?.resposta?.charAt(0).toUpperCase() || '?'
-  const progresso  = Math.round(((etapa + (typing ? 0.5 : 0)) / perguntas.length) * 100)
-
-  async function avancar() {
-    if (!input.trim() || typing || saindo) return
-    const resposta      = input.trim()
-    const novasResp     = { ...respostas, [pergAtual.id]: resposta }
-    setRespostas(novasResp)
-    setInput('')
-
-    const novoHistorico = [...historico, { pergunta: textoAtual, resposta }]
-    setHistorico(novoHistorico)
-    setTyping(true)
-
-    if (etapa < perguntas.length - 1) {
-      setTimeout(() => {
-        setTyping(false)
-        setEtapa(etapa + 1)
-      }, 650)
-    } else {
-      getUserId()
-      await savePerfil(novasResp)
-      setTimeout(() => {
-        setTyping(false)
-        setSaindo(true)
-        setTimeout(() => router.push('/dashboard'), 700)
-      }, 900)
-    }
+  function next() {
+    if (saving) return
+    if (!ok) { setTouched(true); return }
+    if (etapa === 5) { finalize(); return }
+    setDir(1)
+    setAnimKey(k => k + 1)
+    setTouched(false)
+    setEtapa(e => e + 1)
   }
 
-  function handleKeyDown(e) {
-    if (e.key === 'Enter') avancar()
+  function back() {
+    if (etapa === 0 || saving) return
+    setDir(-1)
+    setAnimKey(k => k + 1)
+    setTouched(false)
+    setEtapa(e => e - 1)
+  }
+
+  async function finalize() {
+    setSaving(true)
+    const objLabel = objetivo === 'outro'
+      ? outroTexto.trim()
+      : OBJETIVOS.find(o => o.id === objetivo)?.label || objetivo
+    getUserId()
+    await savePerfil({
+      nome: nome.trim(),
+      curso: curso.trim(),
+      universidade: universidade.trim(),
+      semestre,
+      materias: materias.join(', '),
+      objetivo: objLabel,
+    })
+    setDone(true)
+  }
+
+  function addMateria(m) {
+    const s = m.trim()
+    if (!s || materias.some(x => x.toLowerCase() === s.toLowerCase())) return
+    setMaterias(ms => [...ms, s])
+  }
+  function removeMateria(i) { setMaterias(ms => ms.filter((_, idx) => idx !== i)) }
+  function acceptAll() { sugestoes.forEach(s => addMateria(s)); setSugestoes([]) }
+
+  const progresso = Math.round((etapa / 5) * 100)
+  const nome1     = nome.trim().split(' ')[0] || 'você'
+  const objLabel  = objetivo === 'outro'
+    ? outroTexto
+    : OBJETIVOS.find(o => o.id === objetivo)?.label || ''
+
+  if (done) {
+    return (
+      <>
+        <style>{CSS}</style>
+        <div className="ob">
+          <div className="ob-grid" /><div className="ob-orb" />
+          <main className="ob-main">
+            <div className="ob-final">
+              <div className="ob-confetti-row" aria-hidden>
+                {[0,1,2,3,4].map(i => (
+                  <span key={i} className="ob-confetti-piece" style={{ animationDelay: `${i * 90}ms`, color: '#22c55e' }}>
+                    <CheckCircle size={22} strokeWidth={1.5} />
+                  </span>
+                ))}
+              </div>
+              <div className="ob-final-emoji">🎉</div>
+              <h1 className="ob-final-h1">Tudo pronto, {nome1}!</h1>
+              <p className="ob-final-p">Seu perfil foi criado. Veja o resumo:</p>
+              <div className="ob-summary">
+                {[
+                  ['Nome',         nome.trim()],
+                  ['Curso',        curso.trim()],
+                  ['Universidade', universidade.trim()],
+                  ['Semestre',     semestre],
+                  ['Matérias',     materias.join(', ')],
+                  ['Objetivo',     objLabel],
+                ].map(([l, v]) => (
+                  <div key={l} className="ob-sum-row">
+                    <span className="ob-sum-lbl">{l}</span>
+                    <span className="ob-sum-val">{v}</span>
+                  </div>
+                ))}
+              </div>
+              <button className="ob-final-btn" onClick={() => router.push('/dashboard')}>
+                Começar a usar o Point.AI →
+              </button>
+            </div>
+          </main>
+        </div>
+      </>
+    )
   }
 
   return (
     <>
-      <style>{`
-        /* ── Root ── */
-        .ob{background:#0a0a0a;color:#f4f4f5;font-family:var(--font-geist-sans,system-ui,sans-serif);
-          -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;
-          position:relative;overflow:hidden;
-          transition:opacity .6s ease}
+      <style>{CSS}</style>
+      <div className="ob">
+        <div className="ob-grid" /><div className="ob-orb" />
 
-        /* ── Grid bg (same as landing) ── */
-        .ob-grid{position:fixed;inset:0;pointer-events:none;z-index:0;
-          background-image:linear-gradient(rgba(26,122,74,.07) 1px,transparent 1px),
-            linear-gradient(90deg,rgba(26,122,74,.07) 1px,transparent 1px);
-          background-size:56px 56px;
-          mask-image:radial-gradient(ellipse 85% 75% at 50% 50%,black 30%,transparent 100%);
-          -webkit-mask-image:radial-gradient(ellipse 85% 75% at 50% 50%,black 30%,transparent 100%);
-          animation:obGridDrift 28s linear infinite}
-        .ob-scan{position:fixed;inset:0;pointer-events:none;z-index:0;
-          background:linear-gradient(180deg,transparent 0%,rgba(26,122,74,.03) 50%,transparent 100%);
-          animation:obScan 10s ease-in-out infinite}
-        .ob-orb{position:fixed;top:-10%;left:50%;transform:translateX(-50%);
-          width:600px;height:600px;border-radius:50%;pointer-events:none;z-index:0;
-          background:radial-gradient(circle,rgba(26,122,74,.16) 0%,rgba(26,122,74,.05) 50%,transparent 70%);
-          filter:blur(4px)}
-
-        /* ── Header ── */
-        .ob-header{position:fixed;top:0;left:0;right:0;z-index:100;
-          padding:18px 28px 16px;
-          background:linear-gradient(180deg,rgba(10,10,10,.95) 0%,transparent 100%);
-          display:flex;align-items:center;gap:16px}
-        .ob-logo{font-size:16px;font-weight:800;color:#22c55e;letter-spacing:-.3px;white-space:nowrap}
-        .ob-prog-track{flex:1;height:3px;background:#1a1a1a;border-radius:99px;overflow:hidden}
-        .ob-prog-fill{height:100%;background:linear-gradient(90deg,#1a7a4a,#22c55e);
-          border-radius:99px;transition:width .5s cubic-bezier(.4,0,.2,1)}
-        .ob-step-lbl{font-size:11px;font-weight:600;color:#52525b;white-space:nowrap}
-
-        /* ── Chat scroll area ── */
-        .ob-chat{flex:1;overflow-y:auto;padding:96px 0 140px;
-          display:flex;flex-direction:column;
-          scrollbar-width:none;position:relative;z-index:1}
-        .ob-chat::-webkit-scrollbar{width:0}
-        .ob-inner{width:100%;max-width:640px;margin:0 auto;padding:0 24px;
-          display:flex;flex-direction:column;gap:6px}
-
-        /* ── Messages ── */
-        .ob-row{display:flex;align-items:flex-end;gap:10px}
-        .ob-row.user{flex-direction:row-reverse}
-
-        .ob-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;
-          background:#1a7a4a;color:#fff;font-size:11px;font-weight:700;
-          display:flex;align-items:center;justify-content:center;
-          box-shadow:0 0 0 1px rgba(26,122,74,.35)}
-        .ob-av.user{background:#1c1c1c;color:#71717a;box-shadow:0 0 0 1px #2a2a2a}
-
-        .ob-bubble{max-width:78%;padding:11px 15px;border-radius:18px;
-          font-size:14.5px;line-height:1.62;word-break:break-word}
-        .ob-bubble.ai{background:#141414;border:1px solid #1f1f1f;color:#e4e4e7;
-          border-bottom-left-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.3)}
-        .ob-bubble.user{background:#1a7a4a;color:#fff;
-          border-bottom-right-radius:4px;box-shadow:0 2px 8px rgba(26,122,74,.25)}
-
-        /* Typing dots */
-        .ob-typing-wrap{display:flex;align-items:center;gap:5px;padding:4px 2px}
-        .ob-dot{width:7px;height:7px;border-radius:50%;background:#3f3f46;
-          animation:obDot 1.1s ease-in-out infinite both}
-
-        /* ── Input area ── */
-        .ob-footer{position:fixed;bottom:0;left:0;right:0;z-index:100;
-          padding:16px 24px 24px;
-          background:linear-gradient(0deg,rgba(10,10,10,1) 0%,rgba(10,10,10,.9) 80%,transparent 100%)}
-        .ob-input-wrap{max-width:640px;margin:0 auto;
-          display:flex;align-items:flex-end;gap:10px;
-          background:#141414;border:1px solid #1f1f1f;border-radius:16px;
-          padding:8px 8px 8px 16px;
-          transition:border-color .15s,box-shadow .15s}
-        .ob-input-wrap:focus-within{border-color:rgba(26,122,74,.5);
-          box-shadow:0 0 0 3px rgba(26,122,74,.10)}
-        .ob-input{flex:1;background:transparent;border:none;outline:none;
-          font-size:14.5px;color:#f4f4f5;line-height:1.5;
-          font-family:inherit;resize:none;padding:6px 0;max-height:120px}
-        .ob-input::placeholder{color:#3f3f46}
-        .ob-input:disabled{opacity:.5;cursor:not-allowed}
-        .ob-send{width:38px;height:38px;border-radius:11px;flex-shrink:0;
-          background:#1a7a4a;color:#fff;border:none;cursor:pointer;
-          font-size:18px;display:flex;align-items:center;justify-content:center;
-          transition:background .15s,transform .12s,box-shadow .15s;
-          box-shadow:0 0 16px rgba(26,122,74,.3)}
-        .ob-send:hover:not(:disabled){background:#155f3a;transform:translateY(-1px);
-          box-shadow:0 0 24px rgba(26,122,74,.5)}
-        .ob-send:active:not(:disabled){transform:scale(.93)}
-        .ob-send:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
-        .ob-hint{text-align:center;font-size:11.5px;color:#3f3f46;margin-top:8px}
-
-        /* ── Suggestion chips ── */
-        .ob-sugg{display:flex;flex-wrap:wrap;gap:6px;max-width:640px;margin:0 auto 10px;padding:0 24px}
-        .ob-sugg-chip{background:rgba(26,122,74,.13);border:1px solid rgba(26,122,74,.28);color:#86efac;font-size:12.5px;font-weight:500;padding:5px 13px;border-radius:99px;cursor:pointer;transition:background .12s,border-color .12s;font-family:inherit}
-        .ob-sugg-chip:hover{background:rgba(26,122,74,.24);border-color:rgba(26,122,74,.5)}
-        .ob-sugg-loading{font-size:12px;color:#52525b;font-style:italic;padding:5px 0}
-
-        /* ── Keyframes ── */
-        @keyframes obMsgIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-        @keyframes obDot{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-6px);opacity:1}}
-        @keyframes obGridDrift{from{background-position:0 0,0 0}to{background-position:56px 56px,56px 56px}}
-        @keyframes obScan{0%,100%{transform:translateY(-120%);opacity:0}20%{opacity:1}80%{opacity:1}95%{opacity:0}}
-      `}</style>
-
-      <div className="ob" style={{ opacity: saindo ? 0 : 1 }}>
-        <div className="ob-grid" aria-hidden />
-        <div className="ob-scan"  aria-hidden />
-        <div className="ob-orb"   aria-hidden />
-
-        {/* ── Header ── */}
-        <header className="ob-header">
+        <header className="ob-hdr">
           <span className="ob-logo">Point.AI</span>
-          <div className="ob-prog-track">
-            <div className="ob-prog-fill" style={{ width: `${progresso}%` }} />
+          <div className="ob-prog-area">
+            <div className="ob-prog-track">
+              <div className="ob-prog-fill" style={{ width: `${progresso}%` }} />
+            </div>
+            <span className="ob-prog-pct">{progresso}%</span>
           </div>
-          <span className="ob-step-lbl">{etapa + 1} / {perguntas.length}</span>
+          <span className="ob-step-count">{etapa + 1} / 6</span>
         </header>
 
-        {/* ── Chat ── */}
-        <div className="ob-chat">
-          <div className="ob-inner">
-
-            {/* Previous exchanges */}
-            {historico.map((item, i) => (
-              <div key={i} style={{ display: 'contents' }}>
-                <div className="ob-row">
-                  <div className="ob-av">P</div>
-                  <div className="ob-bubble ai">{item.pergunta}</div>
-                </div>
-                <div className="ob-row user" style={{ animation: 'obMsgIn .32s cubic-bezier(.16,1,.3,1) both' }}>
-                  <div className="ob-av user">{nomeLetra}</div>
-                  <div className="ob-bubble user">{item.resposta}</div>
-                </div>
+        <main className="ob-main">
+          <div
+            key={animKey}
+            className="ob-card"
+            style={{ animation: `${dir > 0 ? 'obSlideIn' : 'obSlideBack'} .38s cubic-bezier(.16,1,.3,1) both` }}
+          >
+            {/* ── 0: Nome ── */}
+            {etapa === 0 && (<>
+              <div className="ob-step-em"><User size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
+              <h2 className="ob-title">Qual é o seu nome?</h2>
+              <p className="ob-sub">Vou te chamar assim durante toda a experiência.</p>
+              <div className={`ob-field${touched && err ? ' ob-field--err' : nome.trim().length >= 2 ? ' ob-field--ok' : ''}`}>
+                <input
+                  autoFocus
+                  className="ob-inp"
+                  placeholder="Seu nome completo…"
+                  value={nome}
+                  onChange={e => setNome(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && next()}
+                  maxLength={60}
+                />
+                {nome.trim().length >= 2 && <span className="ob-check">✓</span>}
               </div>
-            ))}
+              {touched && err && <p className="ob-err">{err}</p>}
+            </>)}
 
-            {/* Current question */}
-            {!typing && !saindo && (
-              <div
-                className="ob-row"
-                style={{ animation: 'obMsgIn .35s cubic-bezier(.16,1,.3,1) both' }}
-              >
-                <div className="ob-av">P</div>
-                <div className="ob-bubble ai">{textoAtual}</div>
-              </div>
-            )}
-
-            {/* Typing / completion indicator */}
-            {typing && !saindo && (
-              <div className="ob-row" style={{ animation: 'obMsgIn .28s ease both' }}>
-                <div className="ob-av">P</div>
-                <div className="ob-bubble ai">
-                  <div className="ob-typing-wrap">
-                    <span className="ob-dot" style={{ animationDelay: '0ms' }} />
-                    <span className="ob-dot" style={{ animationDelay: '160ms' }} />
-                    <span className="ob-dot" style={{ animationDelay: '320ms' }} />
+            {/* ── 1: Curso ── */}
+            {etapa === 1 && (<>
+              <div className="ob-step-em"><GraduationCap size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
+              <h2 className="ob-title">Qual curso você faz, {nome1}?</h2>
+              <p className="ob-sub">Digite ou escolha da lista abaixo.</p>
+              <div style={{ position: 'relative' }}>
+                <div className={`ob-field${touched && err ? ' ob-field--err' : curso.trim().length >= 3 ? ' ob-field--ok' : ''}`}>
+                  <input
+                    autoFocus
+                    className="ob-inp"
+                    placeholder="Ex: Medicina, Engenharia Civil…"
+                    value={curso}
+                    onChange={e => { setCurso(e.target.value); setCursoFoco(true) }}
+                    onFocus={() => setCursoFoco(true)}
+                    onBlur={() => setTimeout(() => setCursoFoco(false), 180)}
+                    onKeyDown={e => e.key === 'Enter' && next()}
+                    autoComplete="off"
+                  />
+                  {curso.trim().length >= 3 && <span className="ob-check">✓</span>}
+                </div>
+                {cursoFoco && cursoOptions.length > 0 && (
+                  <div className="ob-dropdown">
+                    {cursoOptions.map(c => (
+                      <button key={c} className="ob-dd-item" onMouseDown={() => { setCurso(c); setCursoFoco(false) }}>
+                        {c}
+                      </button>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
-            )}
+              {touched && err && <p className="ob-err">{err}</p>}
+            </>)}
 
-            {/* Completion message */}
-            {saindo && (
-              <div className="ob-row" style={{ animation: 'obMsgIn .35s cubic-bezier(.16,1,.3,1) both' }}>
-                <div className="ob-av">P</div>
-                <div className="ob-bubble ai">
-                  Perfeito! Preparando seu painel personalizado…
+            {/* ── 2: Universidade ── */}
+            {etapa === 2 && (<>
+              <div className="ob-step-em"><Building2 size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
+              <h2 className="ob-title">Em qual universidade você estuda?</h2>
+              <p className="ob-sub">Digite o nome ou a sigla.</p>
+              <div style={{ position: 'relative' }}>
+                <div className={`ob-field${touched && err ? ' ob-field--err' : universidade.trim().length >= 2 ? ' ob-field--ok' : ''}`}>
+                  <input
+                    autoFocus
+                    className="ob-inp"
+                    placeholder="Ex: USP, UFMG, PUC-SP…"
+                    value={universidade}
+                    onChange={e => { setUniversidade(e.target.value); setUniFoco(true) }}
+                    onFocus={() => setUniFoco(true)}
+                    onBlur={() => setTimeout(() => setUniFoco(false), 180)}
+                    onKeyDown={e => e.key === 'Enter' && next()}
+                    autoComplete="off"
+                  />
+                  {universidade.trim().length >= 2 && <span className="ob-check">✓</span>}
                 </div>
+                {uniFoco && uniOptions.length > 0 && (
+                  <div className="ob-dropdown">
+                    {uniOptions.map(u => (
+                      <button key={u} className="ob-dd-item" onMouseDown={() => { setUniversidade(u); setUniFoco(false) }}>
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+              {touched && err && <p className="ob-err">{err}</p>}
+            </>)}
 
-            <div ref={fimRef} />
-          </div>
-        </div>
+            {/* ── 3: Semestre ── */}
+            {etapa === 3 && (<>
+              <div className="ob-step-em"><Calendar size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
+              <h2 className="ob-title">Em qual semestre você está?</h2>
+              <p className="ob-sub">Isso ajuda a sugerir as matérias certas para você.</p>
+              <div className="ob-sem-grid">
+                {SEMESTRES.map((s, i) => {
+                  const val = `${i + 1}º semestre`
+                  return (
+                    <button
+                      key={s}
+                      className={`ob-sem-btn${semestre === val ? ' ob-sem-btn--sel' : ''}`}
+                      onClick={() => setSemestre(val)}
+                    >
+                      {s}
+                    </button>
+                  )
+                })}
+              </div>
+              {semestre && <p className="ob-sem-lbl">{semestre} ✓</p>}
+              {touched && err && <p className="ob-err">{err}</p>}
+            </>)}
 
-        {/* ── Input ── */}
-        <div className="ob-footer">
-          {/* Subject suggestions (only on materias step) */}
-          {etapa === 4 && (carregandoSugestoes || sugestoes.length > 0) && (
-            <div className="ob-sugg">
-              {carregandoSugestoes ? (
-                <span className="ob-sugg-loading">Buscando matérias típicas para {respostas.curso}…</span>
-              ) : (
-                sugestoes.map((s, i) => (
-                  <button
-                    key={i}
-                    className="ob-sugg-chip"
-                    onClick={() => setInput(prev => prev ? `${prev}, ${s}` : s)}
-                  >
-                    + {s}
-                  </button>
-                ))
+            {/* ── 4: Matérias ── */}
+            {etapa === 4 && (<>
+              <div className="ob-step-em"><BookOpen size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
+              <h2 className="ob-title">Quais matérias você tem esse semestre?</h2>
+              <p className="ob-sub">Aceite as sugestões ou adicione manualmente.</p>
+
+              {loadingSubj && (
+                <p className="ob-sugg-loading">Buscando matérias de {curso}…</p>
               )}
-            </div>
-          )}
+              {!loadingSubj && sugestoes.length > 0 && (
+                <div className="ob-sugg-area">
+                  <div className="ob-sugg-chips">
+                    {sugestoes.map(s => (
+                      <button key={s} className="ob-chip-sg"
+                        onClick={() => { addMateria(s); setSugestoes(ss => ss.filter(x => x !== s)) }}>
+                        + {s}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="ob-accept-all" onClick={acceptAll}>Aceitar todas →</button>
+                </div>
+              )}
 
-          <div className="ob-input-wrap">
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={pergAtual.placeholder}
-              disabled={typing || saindo}
-              className="ob-input"
-              autoFocus
-            />
-            <button
-              onClick={avancar}
-              disabled={!input.trim() || typing || saindo}
-              className="ob-send"
-              aria-label="Enviar"
-            >
-              ↑
-            </button>
+              {materias.length > 0 && (
+                <div className="ob-added">
+                  {materias.map((m, i) => (
+                    <span key={i} className="ob-chip-ok">
+                      {m}
+                      <button className="ob-chip-x" onClick={() => removeMateria(i)}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="ob-mat-row">
+                <input
+                  autoFocus
+                  className="ob-inp-mat"
+                  placeholder="Adicionar matéria e pressionar Enter…"
+                  value={novaMateria}
+                  onChange={e => setNovaMateria(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (novaMateria.trim()) { addMateria(novaMateria); setNovaMateria('') }
+                    }
+                  }}
+                />
+                <button
+                  className="ob-mat-add"
+                  disabled={!novaMateria.trim()}
+                  onClick={() => { addMateria(novaMateria); setNovaMateria('') }}
+                >+</button>
+              </div>
+              {touched && err && <p className="ob-err">{err}</p>}
+            </>)}
+
+            {/* ── 5: Objetivo ── */}
+            {etapa === 5 && (<>
+              <div className="ob-step-em"><Zap size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
+              <h2 className="ob-title">Qual é o seu principal objetivo?</h2>
+              <p className="ob-sub">Isso personaliza como o Point.AI vai te ajudar.</p>
+              <div className="ob-obj-list">
+                {OBJETIVOS.map(o => (
+                  <button
+                    key={o.id}
+                    className={`ob-obj-btn${objetivo === o.id ? ' ob-obj-btn--sel' : ''}`}
+                    onClick={() => setObjetivo(o.id)}
+                  >
+                    <span className="ob-obj-ico"><o.Icon size={18} strokeWidth={1.5} /></span>
+                    <span>{o.label}</span>
+                    {objetivo === o.id && <span className="ob-obj-check">✓</span>}
+                  </button>
+                ))}
+              </div>
+              {objetivo === 'outro' && (
+                <input
+                  autoFocus
+                  className="ob-outro"
+                  placeholder="Descreva seu objetivo…"
+                  value={outroTexto}
+                  onChange={e => setOutroTexto(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && next()}
+                />
+              )}
+              {touched && err && <p className="ob-err">{err}</p>}
+            </>)}
+
+            {/* ── Nav ── */}
+            <div className="ob-nav">
+              {etapa > 0 && (
+                <button className="ob-back" onClick={back}>← Voltar</button>
+              )}
+              <button
+                className={`ob-next${ok ? '' : ' ob-next--dim'}`}
+                onClick={next}
+                disabled={saving}
+              >
+                {etapa === 5 ? (saving ? 'Salvando…' : 'Concluir ✓') : 'Continuar →'}
+              </button>
+            </div>
           </div>
-          <p className="ob-hint">Enter para continuar</p>
-        </div>
+        </main>
       </div>
     </>
   )
 }
+
+const CSS = `
+  .ob {
+    background: #0a0a0a; color: #f4f4f5;
+    font-family: var(--font-geist-sans, system-ui, sans-serif);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh; display: flex; flex-direction: column;
+    position: relative; overflow: hidden;
+  }
+  .ob-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(26,122,74,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(26,122,74,.07) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 85% 75% at 50% 50%, black 30%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 50%, black 30%, transparent 100%);
+    animation: obGridDrift 28s linear infinite;
+  }
+  .ob-orb {
+    position: fixed; top: -10%; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 600px; border-radius: 50%; pointer-events: none; z-index: 0;
+    background: radial-gradient(circle, rgba(26,122,74,.16) 0%, rgba(26,122,74,.05) 50%, transparent 70%);
+    filter: blur(4px);
+  }
+
+  /* Header */
+  .ob-hdr {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 16px 28px 14px;
+    background: linear-gradient(180deg, rgba(10,10,10,.96) 0%, transparent 100%);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .ob-logo { font-size: 15px; font-weight: 800; color: #22c55e; letter-spacing: -.3px; white-space: nowrap; }
+  .ob-prog-area { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .ob-prog-track { height: 3px; background: #1a1a1a; border-radius: 99px; overflow: hidden; }
+  .ob-prog-fill { height: 100%; background: linear-gradient(90deg,#1a7a4a,#22c55e); border-radius: 99px; transition: width .55s cubic-bezier(.4,0,.2,1); }
+  .ob-prog-pct { font-size: 10px; font-weight: 600; color: #52525b; }
+  .ob-step-count { font-size: 12px; font-weight: 600; color: #52525b; white-space: nowrap; }
+
+  /* Layout */
+  .ob-main {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 88px 16px 40px; position: relative; z-index: 1; min-height: 100vh;
+  }
+
+  /* Card */
+  .ob-card {
+    width: 100%; max-width: 500px;
+    background: #111; border: 1px solid #1e1e1e; border-radius: 20px;
+    padding: 36px 32px 28px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.55), 0 0 0 1px rgba(26,122,74,.06);
+  }
+
+  /* Step content */
+  .ob-step-em { display: flex; margin: 0 0 14px; }
+  .ob-title { font-size: 20px; font-weight: 700; color: #f4f4f5; margin: 0 0 6px; line-height: 1.3; }
+  .ob-sub { font-size: 13.5px; color: #71717a; margin: 0 0 20px; }
+
+  /* Field */
+  .ob-field {
+    display: flex; align-items: center;
+    background: #0d0d0d; border: 1px solid #262626; border-radius: 12px;
+    padding: 0 14px; margin-bottom: 8px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .ob-field:focus-within { border-color: rgba(26,122,74,.55); box-shadow: 0 0 0 3px rgba(26,122,74,.10); }
+  .ob-field--ok  { border-color: rgba(34,197,94,.38); }
+  .ob-field--err { border-color: rgba(239,68,68,.45); box-shadow: 0 0 0 3px rgba(239,68,68,.08); }
+  .ob-inp {
+    flex: 1; background: transparent; border: none; outline: none;
+    font-size: 14.5px; color: #f4f4f5; padding: 13px 0; font-family: inherit;
+  }
+  .ob-inp::placeholder { color: #3f3f46; }
+  .ob-check { color: #22c55e; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+
+  /* Dropdown */
+  .ob-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+    background: #151515; border: 1px solid #252525; border-radius: 12px;
+    overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  }
+  .ob-dd-item {
+    display: block; width: 100%; text-align: left; padding: 10px 14px;
+    font-size: 13.5px; color: #d4d4d8; background: transparent; border: none;
+    cursor: pointer; font-family: inherit; transition: background .1s;
+  }
+  .ob-dd-item:hover { background: #1e1e1e; color: #f4f4f5; }
+
+  /* Semester grid */
+  .ob-sem-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 12px; }
+  .ob-sem-btn {
+    padding: 10px 0; border-radius: 10px; font-size: 13px; font-weight: 600;
+    background: #161616; border: 1px solid #262626; color: #a1a1aa;
+    cursor: pointer; font-family: inherit; transition: all .12s;
+  }
+  .ob-sem-btn:hover { background: #1e1e1e; color: #d4d4d8; border-color: #333; }
+  .ob-sem-btn--sel { background: rgba(26,122,74,.2); border-color: rgba(26,122,74,.55); color: #86efac; transform: scale(1.06); }
+  .ob-sem-lbl { font-size: 12.5px; color: #4ade80; font-weight: 500; margin-bottom: 8px; }
+
+  /* Suggestions */
+  .ob-sugg-loading { font-size: 12.5px; color: #52525b; font-style: italic; margin-bottom: 12px; }
+  .ob-sugg-area { margin-bottom: 14px; }
+  .ob-sugg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .ob-chip-sg {
+    background: rgba(26,122,74,.12); border: 1px solid rgba(26,122,74,.28); color: #86efac;
+    font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 99px;
+    cursor: pointer; font-family: inherit; transition: background .12s, border-color .12s;
+  }
+  .ob-chip-sg:hover { background: rgba(26,122,74,.22); border-color: rgba(26,122,74,.5); }
+  .ob-accept-all {
+    font-size: 12.5px; color: #22c55e; font-weight: 600;
+    background: transparent; border: none; cursor: pointer; font-family: inherit;
+    text-decoration: underline; text-underline-offset: 2px; padding: 0;
+  }
+
+  /* Added chips */
+  .ob-added { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .ob-chip-ok {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(34,197,94,.1); border: 1px solid rgba(34,197,94,.25);
+    color: #86efac; font-size: 12px; padding: 4px 10px; border-radius: 99px;
+  }
+  .ob-chip-x {
+    background: transparent; border: none; color: #4ade80; cursor: pointer;
+    font-size: 15px; line-height: 1; padding: 0; font-family: inherit; opacity: .7;
+    transition: opacity .12s;
+  }
+  .ob-chip-x:hover { opacity: 1; }
+
+  /* Manual matéria input */
+  .ob-mat-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .ob-inp-mat {
+    flex: 1; background: #0d0d0d; border: 1px solid #262626; border-radius: 10px;
+    padding: 10px 14px; font-size: 13.5px; color: #f4f4f5; outline: none;
+    font-family: inherit; transition: border-color .15s;
+  }
+  .ob-inp-mat:focus { border-color: rgba(26,122,74,.55); box-shadow: 0 0 0 3px rgba(26,122,74,.08); }
+  .ob-inp-mat::placeholder { color: #3f3f46; }
+  .ob-mat-add {
+    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    background: #1a7a4a; color: #fff; border: none; cursor: pointer; font-size: 20px;
+    display: flex; align-items: center; justify-content: center; transition: background .12s;
+  }
+  .ob-mat-add:hover:not(:disabled) { background: #15693e; }
+  .ob-mat-add:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* Objetivo */
+  .ob-obj-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .ob-obj-btn {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    border-radius: 12px; text-align: left; width: 100%;
+    background: #161616; border: 1px solid #252525; color: #a1a1aa;
+    cursor: pointer; font-size: 13.5px; font-family: inherit; transition: all .12s;
+  }
+  .ob-obj-btn:hover { background: #1c1c1c; border-color: #333; color: #d4d4d8; }
+  .ob-obj-btn--sel { background: rgba(26,122,74,.15); border-color: rgba(26,122,74,.5); color: #86efac; }
+  .ob-obj-ico { font-size: 18px; flex-shrink: 0; }
+  .ob-obj-check { margin-left: auto; color: #22c55e; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .ob-outro {
+    width: 100%; box-sizing: border-box;
+    background: #0d0d0d; border: 1px solid rgba(26,122,74,.4); border-radius: 10px;
+    padding: 10px 14px; font-size: 13.5px; color: #f4f4f5; outline: none;
+    font-family: inherit; margin-top: 8px; transition: border-color .15s;
+  }
+  .ob-outro:focus { border-color: rgba(26,122,74,.65); box-shadow: 0 0 0 3px rgba(26,122,74,.10); }
+  .ob-outro::placeholder { color: #3f3f46; }
+
+  /* Error */
+  .ob-err { font-size: 12px; color: #f87171; margin: 6px 0 0; }
+
+  /* Navigation */
+  .ob-nav { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 26px; }
+  .ob-back {
+    font-size: 13px; color: #52525b; background: transparent; border: none;
+    cursor: pointer; font-family: inherit; padding: 0; transition: color .12s;
+  }
+  .ob-back:hover { color: #a1a1aa; }
+  .ob-next {
+    padding: 11px 26px; border-radius: 11px; font-size: 14px; font-weight: 600;
+    background: #1a7a4a; color: #fff; border: none; cursor: pointer; font-family: inherit;
+    box-shadow: 0 0 20px rgba(26,122,74,.35);
+    transition: background .15s, transform .12s, box-shadow .15s, opacity .15s;
+  }
+  .ob-next:hover:not(:disabled) { background: #155f3a; transform: translateY(-1px); box-shadow: 0 0 28px rgba(26,122,74,.5); }
+  .ob-next:active:not(:disabled) { transform: scale(.95); }
+  .ob-next:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+  .ob-next--dim { opacity: .55; }
+
+  /* Final screen */
+  .ob-final {
+    width: 100%; max-width: 500px;
+    background: #111; border: 1px solid #1e1e1e; border-radius: 20px;
+    padding: 36px 32px; box-shadow: 0 24px 64px rgba(0,0,0,.55);
+    animation: obFinalIn .55s cubic-bezier(.16,1,.3,1) both;
+  }
+  .ob-confetti-row { display: flex; justify-content: center; gap: 10px; font-size: 22px; margin-bottom: 16px; }
+  .ob-confetti-piece { display: inline-block; animation: obConfetti .7s cubic-bezier(.16,1,.3,1) both; }
+  .ob-final-emoji { font-size: 52px; line-height: 1; margin-bottom: 14px; }
+  .ob-final-h1 { font-size: 24px; font-weight: 800; color: #f4f4f5; margin: 0 0 8px; }
+  .ob-final-p { font-size: 13.5px; color: #71717a; margin: 0 0 20px; }
+  .ob-summary {
+    border-radius: 12px; overflow: hidden; border: 1px solid #1e1e1e; margin-bottom: 24px;
+  }
+  .ob-sum-row {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 10px 14px; background: #0d0d0d; border-bottom: 1px solid #1a1a1a;
+  }
+  .ob-sum-row:last-child { border-bottom: none; }
+  .ob-sum-lbl { font-size: 11.5px; color: #52525b; font-weight: 600; min-width: 88px; padding-top: 1px; }
+  .ob-sum-val { font-size: 13px; color: #d4d4d8; flex: 1; line-height: 1.5; word-break: break-word; }
+  .ob-final-btn {
+    width: 100%; padding: 13px; border-radius: 12px;
+    background: linear-gradient(135deg,#1a7a4a,#22c55e);
+    color: #fff; font-size: 15px; font-weight: 700; border: none; cursor: pointer;
+    font-family: inherit; box-shadow: 0 0 24px rgba(26,122,74,.4);
+    transition: opacity .15s, transform .12s;
+  }
+  .ob-final-btn:hover { opacity: .92; transform: translateY(-1px); }
+
+  /* Keyframes */
+  @keyframes obSlideIn {
+    from { opacity: 0; transform: translateX(36px) scale(.98); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes obSlideBack {
+    from { opacity: 0; transform: translateX(-36px) scale(.98); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes obFinalIn {
+    from { opacity: 0; transform: translateY(28px) scale(.97); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes obConfetti {
+    from { opacity: 0; transform: translateY(-16px) rotate(-15deg) scale(.5); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes obGridDrift {
+    from { background-position: 0 0, 0 0; }
+    to   { background-position: 56px 56px, 56px 56px; }
+  }
+`

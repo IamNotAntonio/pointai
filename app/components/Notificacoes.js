@@ -1,15 +1,16 @@
 'use client'
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { Bell, Calendar, AlertTriangle, BarChart2, BookOpen, CheckCircle } from 'lucide-react'
 
 /* ── Icons ───────────────────────────────────────────────────── */
-function IcBell() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-    </svg>
-  )
+function NotifIcon({ tipo }) {
+  const IC = { size: 16, strokeWidth: 1.8 }
+  if (tipo === 'prova')  return <Calendar {...IC} />
+  if (tipo === 'falta')  return <AlertTriangle {...IC} />
+  if (tipo === 'media')  return <BarChart2 {...IC} />
+  if (tipo === 'estudo') return <BookOpen {...IC} />
+  return <Bell {...IC} />
 }
 
 /* ── Notification data ───────────────────────────────────────── */
@@ -35,7 +36,6 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
         mensagem: materia + (materia ? ' · ' : '') + dataEvento.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
         urgencia: diff <= 2 ? 'alta' : 'media',
         link: '/calendario',
-        emoji: '📅',
       })
     })
   }
@@ -57,7 +57,6 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
         mensagem: materia,
         urgencia: restantes === 0 ? 'alta' : 'media',
         link: '/notas',
-        emoji: '⚠️',
       })
     })
   }
@@ -76,7 +75,6 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
         mensagem: 'Abaixo do mínimo de aprovação (7,0)',
         urgencia: media < 5 ? 'alta' : 'baixa',
         link: '/notas',
-        emoji: '📊',
       })
     })
   }
@@ -96,7 +94,6 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
       urgencia: 'baixa',
       link: '/dashboard',
       materia,
-      emoji: '📚',
     })
   })
 
@@ -164,7 +161,7 @@ export default function Notificacoes() {
     <>
       {/* Bell trigger */}
       <button className="sb-bell-btn" onClick={abrir} aria-label="Notificações" title="Notificações">
-        <IcBell />
+        <Bell size={16} strokeWidth={1.8} />
         {badge > 0 && (
           <span className="sb-bell-badge">{badge > 9 ? '9+' : badge}</span>
         )}
@@ -197,7 +194,7 @@ export default function Notificacoes() {
             <div className="sb-notif-list">
               {notifs.length === 0 ? (
                 <div className="sb-notif-empty">
-                  <p>🎉</p>
+                  <CheckCircle size={32} strokeWidth={1.5} style={{ color: '#22c55e' }} />
                   <p>Tudo em dia! Nenhum alerta no momento.</p>
                 </div>
               ) : (
@@ -210,7 +207,7 @@ export default function Notificacoes() {
                       onClick={() => clicar(notif)}
                     >
                       <span className={`sb-notif-icon sb-notif-icon-${notif.tipo}`}>
-                        {notif.emoji}
+                        <NotifIcon tipo={notif.tipo} />
                       </span>
                       <div className="sb-notif-content">
                         <p className="sb-notif-item-title">{notif.titulo}</p>

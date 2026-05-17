@@ -957,6 +957,10 @@ body {
 
 .modal-tab {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 8px 12px;
   border-radius: 8px;
   border: none;

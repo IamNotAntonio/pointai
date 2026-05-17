@@ -6,6 +6,7 @@ import UpgradeModal from '../components/UpgradeModal'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
 import { getPlanInfo, incrementarMensagem } from '../lib/plano'
+import { FileText, Copy } from 'lucide-react'
 
 /* ── Constants ──────────────────────────────────────────────────── */
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
@@ -477,7 +478,7 @@ export default function Dashboard() {
                         className="pdf-btn"
                         onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: tituloChat })}
                       >
-                        📄 Baixar em PDF
+                        <FileText size={13} strokeWidth={1.8} /> Baixar em PDF
                       </button>
                     )}
 
@@ -658,7 +659,7 @@ export default function Dashboard() {
                   setShareContent(null)
                 }}
               >
-                📋 Copiar para compartilhar
+                <Copy size={13} strokeWidth={1.8} /> Copiar para compartilhar
               </button>
             </div>
           </div>

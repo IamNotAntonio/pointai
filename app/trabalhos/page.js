@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import { gerarPDFFeedback } from '../lib/pdfExport'
+import { Search, FileText } from 'lucide-react'
 
 const TIPOS = [
   { value: 'artigo',    label: 'Artigo científico' },
@@ -115,7 +116,9 @@ export default function Trabalhos() {
                 className="btn btn-primary"
                 style={{ width: '100%', padding: '12px 18px', fontSize: 15 }}
               >
-                {carregando ? '⟳ Analisando seu trabalho…' : '🔍 Corrigir trabalho'}
+                {carregando ? (
+                  <><svg style={{ animation: 'spin 1s linear infinite', width: 14, height: 14, marginRight: 6 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Analisando seu trabalho…</>
+                ) : <><Search size={14} strokeWidth={1.8} style={{ marginRight: 6 }} />Corrigir trabalho</>}
               </button>
             </div>
 
@@ -140,9 +143,9 @@ export default function Trabalhos() {
                   <button
                     className="pdf-btn"
                     onClick={() => gerarPDFFeedback({ resultado, tipo: TIPOS.find(t => t.value === tipo)?.label, materia, perfil })}
-                    style={{ flexShrink: 0, marginTop: 0 }}
+                    style={{ flexShrink: 0, marginTop: 0, display: 'flex', alignItems: 'center', gap: 5 }}
                   >
-                    📄 Baixar PDF
+                    <FileText size={13} strokeWidth={1.8} /> Baixar PDF
                   </button>
                 </div>
 

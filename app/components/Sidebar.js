@@ -4,95 +4,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import * as db from '../lib/db'
 import Notificacoes from './Notificacoes'
-
-/* ── Icons ───────────────────────────────────────────────────── */
-function IcChevron() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9"/>
-    </svg>
-  )
-}
-function IcEdit() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-    </svg>
-  )
-}
-function IcStar() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-    </svg>
-  )
-}
-function IcSun() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="5"/>
-      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-    </svg>
-  )
-}
-function IcMoon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-    </svg>
-  )
-}
-function IcLogout() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-      <polyline points="16 17 21 12 16 7"/>
-      <line x1="21" y1="12" x2="9" y2="12"/>
-    </svg>
-  )
-}
-function IcChat() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
-  )
-}
-function IcFolder() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-    </svg>
-  )
-}
-function IcPlus() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-    </svg>
-  )
-}
-
-function IcSearch() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-    </svg>
-  )
-}
-function IcReport() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-    </svg>
-  )
-}
+import {
+  MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
+  ChevronDown, Edit, Star, Sun, Moon, LogOut, Folder, Plus, Sparkles,
+  MessageCircle,
+} from 'lucide-react'
 
 /* ── Constants ───────────────────────────────────────────────── */
 const PLANS = [
@@ -102,14 +18,17 @@ const PLANS = [
 ]
 
 const NAV_ITEMS = [
-  { href: '/dashboard', icon: '💬', label: 'Chat' },
-  { href: '/notas',     icon: '📊', label: 'Notas e Faltas' },
-  { href: '/calendario',icon: '📅', label: 'Calendário' },
-  { href: '/evolucao',  icon: '📈', label: 'Minha Evolução' },
-  { href: '/trabalhos', icon: '📝', label: 'Correção de Trabalhos' },
-  { href: '/analise',   icon: null, label: 'Análise de Materiais', pro: true, svgIcon: 'search' },
-  { href: '/relatorio', icon: null, label: 'Relatório Semanal',    pro: true, svgIcon: 'report' },
+  { href: '/dashboard', Icon: MessageSquare, label: 'Chat' },
+  { href: '/notas',     Icon: BookOpen,      label: 'Notas e Faltas' },
+  { href: '/calendario',Icon: Calendar,      label: 'Calendário' },
+  { href: '/evolucao',  Icon: TrendingUp,    label: 'Minha Evolução' },
+  { href: '/trabalhos', Icon: FileText,      label: 'Correção de Trabalhos' },
+  { href: '/analise',   Icon: Search,        label: 'Análise de Materiais', pro: true },
+  { href: '/relatorio', Icon: BarChart2,     label: 'Relatório Semanal',    pro: true },
 ]
+
+const IC = { size: 13, strokeWidth: 1.8 }
+const IC_NAV = { size: 14, strokeWidth: 1.8 }
 
 /* ── Component ───────────────────────────────────────────────── */
 export default function Sidebar({
@@ -151,7 +70,6 @@ export default function Sidebar({
       setPlano(p.plano || 'gratis')
     } catch {}
 
-    // Load Google user metadata (avatar, email)
     db.getUser().then(user => {
       if (user) {
         setUserMeta({
@@ -264,7 +182,7 @@ export default function Sidebar({
                   <p className="sidebar-profile-sub">{perfil.curso} · {perfil.semestre}</p>
                 </div>
                 <span style={{ marginLeft:'auto', color:'var(--text-4)', flexShrink:0, lineHeight:1 }}>
-                  <IcChevron />
+                  <ChevronDown {...IC} size={11} />
                 </span>
               </button>
 
@@ -289,7 +207,7 @@ export default function Sidebar({
                       className="sb-dd-item"
                       onClick={() => { setDropdownOpen(false); setEditOpen(true) }}
                     >
-                      <span className="sb-dd-icon"><IcEdit /></span>
+                      <span className="sb-dd-icon"><Edit {...IC} /></span>
                       Editar perfil
                     </button>
 
@@ -297,8 +215,10 @@ export default function Sidebar({
                       className="sb-dd-item"
                       onClick={() => { setDropdownOpen(false); setPlanosOpen(true) }}
                     >
-                      <span className="sb-dd-icon"><IcStar /></span>
-                      {plano === 'pro' ? '✨ Plano Pro · Ativo' : 'Plano Grátis · Ver planos'}
+                      <span className="sb-dd-icon"><Star {...IC} /></span>
+                      {plano === 'pro'
+                        ? <><Sparkles size={12} strokeWidth={1.8} style={{ display:'inline', marginRight:4 }} />Plano Pro · Ativo</>
+                        : 'Plano Grátis · Ver planos'}
                     </button>
 
                     <div className="sb-dd-divider" />
@@ -306,7 +226,7 @@ export default function Sidebar({
                     {/* Theme toggle row */}
                     <button className="sb-dd-item" onClick={toggleTema}>
                       <span className="sb-dd-icon">
-                        {tema === 'dark' ? <IcSun /> : <IcMoon />}
+                        {tema === 'dark' ? <Sun {...IC} /> : <Moon {...IC} />}
                       </span>
                       {tema === 'dark' ? 'Tema claro' : 'Tema escuro'}
                       <span className={`sb-dd-toggle ${tema === 'light' ? 'active' : ''}`}>
@@ -317,7 +237,7 @@ export default function Sidebar({
                     <div className="sb-dd-divider" />
 
                     <button className="sb-dd-item danger" onClick={sair}>
-                      <span className="sb-dd-icon"><IcLogout /></span>
+                      <span className="sb-dd-icon"><LogOut {...IC} /></span>
                       Sair
                     </button>
                   </div>
@@ -355,7 +275,7 @@ export default function Sidebar({
                           className={`sb-topico-btn ${!topicoAtivo ? 'active' : ''}`}
                           onClick={() => onTopicoChange?.(null)}
                         >
-                          <IcChat />
+                          <MessageCircle size={12} strokeWidth={1.8} />
                           <span className="sb-topico-label">Geral</span>
                         </button>
                       </div>
@@ -367,7 +287,7 @@ export default function Sidebar({
                             className={`sb-topico-btn ${topicoAtivo === t ? 'active' : ''}`}
                             onClick={() => onTopicoChange?.(t)}
                           >
-                            <IcFolder />
+                            <Folder size={12} strokeWidth={1.8} />
                             <span className="sb-topico-label">{t}</span>
                           </button>
                           <button
@@ -382,7 +302,7 @@ export default function Sidebar({
 
                       {/* Add topic */}
                       <button className="sb-topico-add" onClick={() => setAddTopicoOpen(true)}>
-                        <IcPlus /> Novo tópico
+                        <Plus size={11} strokeWidth={2.5} /> Novo tópico
                       </button>
                     </div>
                   )}
@@ -390,7 +310,7 @@ export default function Sidebar({
               ))}
 
               <button className="sb-add-materia" onClick={() => setAddMateriaOpen(true)}>
-                <IcPlus /> Nova matéria
+                <Plus size={11} strokeWidth={2.5} /> Nova matéria
               </button>
             </nav>
           </div>
@@ -400,14 +320,14 @@ export default function Sidebar({
         <div className="sidebar-section sidebar-nav-main">
           <p className="sidebar-section-label">Menu</p>
           <nav className="sidebar-nav">
-            {NAV_ITEMS.map(({ href, icon, label, pro, svgIcon }) => (
+            {NAV_ITEMS.map(({ href, Icon, label, pro }) => (
               <Link
                 key={href}
                 href={href}
                 className={`sidebar-nav-link ${pathname === href ? 'active' : ''}`}
               >
                 <span className="sidebar-nav-icon">
-                  {svgIcon === 'search' ? <IcSearch /> : svgIcon === 'report' ? <IcReport /> : icon}
+                  <Icon {...IC_NAV} />
                 </span>
                 <span>{label}</span>
                 {pro && <span className="sb-pro-badge">Pro</span>}

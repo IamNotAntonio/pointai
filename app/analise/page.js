@@ -4,6 +4,7 @@ import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
+import { FileText, ClipboardList, File, BookOpen, Search } from 'lucide-react'
 
 /* ── Icons ── */
 function IcUpload() {
@@ -43,10 +44,10 @@ function IcStar() {
 
 /* ── Constants ── */
 const ABAS = [
-  { key: 'Prova',    emoji: '📝', label: 'Prova',    desc: 'Diagnóstico completo com nota estimada e pontos a revisar' },
-  { key: 'Tarefa',   emoji: '📋', label: 'Tarefa',   desc: 'Feedback detalhado sobre acertos, erros e conceitos falhos' },
-  { key: 'Trabalho', emoji: '📄', label: 'Trabalho', desc: 'Análise acadêmica com sugestões de melhoria estruturadas' },
-  { key: 'Anotação', emoji: '📓', label: 'Anotação', desc: 'Verifique se suas anotações estão corretas e completas' },
+  { key: 'Prova',    Icon: FileText,      label: 'Prova',    desc: 'Diagnóstico completo com nota estimada e pontos a revisar' },
+  { key: 'Tarefa',   Icon: ClipboardList, label: 'Tarefa',   desc: 'Feedback detalhado sobre acertos, erros e conceitos falhos' },
+  { key: 'Trabalho', Icon: File,          label: 'Trabalho', desc: 'Análise acadêmica com sugestões de melhoria estruturadas' },
+  { key: 'Anotação', Icon: BookOpen,      label: 'Anotação', desc: 'Verifique se suas anotações estão corretas e completas' },
 ]
 
 const BAR = {
@@ -199,7 +200,7 @@ export default function Analise() {
                     : 'bg-transparent text-gray-500 dark:text-zinc-400 hover:text-gray-700 dark:hover:text-zinc-200'
                 }`}
               >
-                <span>{aba.emoji}</span>
+                <aba.Icon size={14} strokeWidth={1.8} />
                 {aba.label}
               </button>
             ))}
@@ -298,7 +299,7 @@ export default function Analise() {
                     Analisando…
                   </>
                 ) : (
-                  <>🔬 Analisar {abaAtiva}</>
+                  <><Search size={14} strokeWidth={1.8} /> Analisar {abaAtiva}</>
                 )}
               </button>
             </div>
@@ -307,8 +308,8 @@ export default function Analise() {
             {hasResult && (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-semibold text-gray-700 dark:text-zinc-300">
-                    {abaConfig.emoji} Análise — {materia}
+                  <span className="text-sm font-semibold text-gray-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <abaConfig.Icon size={14} strokeWidth={1.8} /> Análise — {materia}
                   </span>
                   <button
                     onClick={() => gerarPDFChat({ conteudo: resultado, perfil, materia: `Análise de ${abaAtiva} — ${materia}` })}

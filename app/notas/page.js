@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import * as db from '../lib/db'
+import { Download, Target, CheckCircle, Camera, ClipboardList } from 'lucide-react'
 
 const VAZIO = { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
 
@@ -188,8 +189,8 @@ export default function Notas() {
             <p className="page-subtitle">Acompanhe seu desempenho em cada matéria</p>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button onClick={abrirModal} className="btn btn-ghost" style={{ fontSize: 13 }}>
-              📥 Importar do portal
+            <button onClick={abrirModal} className="btn btn-ghost" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Download size={13} strokeWidth={1.8} /> Importar do portal
             </button>
             <select
               value={materiaAtiva || ''}
@@ -286,13 +287,13 @@ export default function Notas() {
           {/* Alertas */}
           {notaFalta !== null && (
             <div className="alert alert-yellow">
-              <span style={{ fontSize: 20 }}>🎯</span>
+              <Target size={18} strokeWidth={1.8} style={{ color: '#d97706', flexShrink: 0 }} />
               <p>Para atingir média <strong>7.0</strong>, você precisa tirar pelo menos <strong>{notaFalta}</strong> na próxima avaliação.</p>
             </div>
           )}
           {media !== null && parseFloat(media) >= 7 && (
             <div className="alert" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
-              <span style={{ fontSize: 20 }}>✅</span>
+              <CheckCircle size={18} strokeWidth={1.8} style={{ color: '#166534', flexShrink: 0 }} />
               <p>Ótimo trabalho! Você está <strong>aprovado</strong> em {materiaAtiva} com média {media}.</p>
             </div>
           )}
@@ -317,7 +318,9 @@ export default function Notas() {
                       className={`modal-tab ${modal.aba === aba ? 'active' : ''}`}
                       onClick={() => setModal(p => ({ ...p, aba, erro: null }))}
                     >
-                      {aba === 'foto' ? '📷 Enviar foto' : '📋 Colar texto'}
+                      {aba === 'foto'
+                        ? <><Camera size={13} strokeWidth={1.8} /> Enviar foto</>
+                        : <><ClipboardList size={13} strokeWidth={1.8} /> Colar texto</>}
                     </button>
                   ))}
                 </div>
@@ -335,7 +338,9 @@ export default function Notas() {
                       </div>
                     ) : (
                       <div className="modal-dropzone" onClick={() => importFileRef.current?.click()}>
-                        <p style={{ fontSize: 32, marginBottom: 10 }}>📸</p>
+                        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: 'var(--text-4)' }}>
+                          <Camera size={32} strokeWidth={1.3} />
+                        </div>
                         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4 }}>Clique para enviar uma foto</p>
                         <p style={{ fontSize: 12, color: 'var(--text-4)' }}>Screenshot do portal, foto da tela ou printscreen</p>
                       </div>
@@ -360,7 +365,9 @@ export default function Notas() {
                   style={{ width: '100%', marginTop: 16 }}
                   disabled={modal.carregando || (modal.aba === 'foto' ? !modal.imagem : !modal.texto.trim())}
                 >
-                  {modal.carregando ? '⏳ Analisando com IA...' : 'Extrair notas com IA →'}
+                  {modal.carregando ? (
+                    <><svg style={{ animation: 'spin 1s linear infinite', width: 14, height: 14, marginRight: 6 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Analisando com IA...</>
+                  ) : 'Extrair notas com IA →'}
                 </button>
               </>
             ) : (

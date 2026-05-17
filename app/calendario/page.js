@@ -2,12 +2,13 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import * as db from '../lib/db'
+import { Download, Calendar, Camera, ClipboardList, FileText, File, Mic, Bookmark } from 'lucide-react'
 
 const TIPO_CONFIG = {
-  prova:        { label: 'Prova',        cls: 'badge badge-red',    emoji: '📝' },
-  trabalho:     { label: 'Trabalho',     cls: 'badge badge-blue',   emoji: '📄' },
-  apresentacao: { label: 'Apresentação', cls: 'badge badge-purple', emoji: '🎤' },
-  outro:        { label: 'Outro',        cls: 'badge badge-gray',   emoji: '📌' },
+  prova:        { label: 'Prova',        cls: 'badge badge-red',    Icon: FileText },
+  trabalho:     { label: 'Trabalho',     cls: 'badge badge-blue',   Icon: File },
+  apresentacao: { label: 'Apresentação', cls: 'badge badge-purple', Icon: Mic },
+  outro:        { label: 'Outro',        cls: 'badge badge-gray',   Icon: Bookmark },
 }
 
 function diasRestantes(data) {
@@ -183,8 +184,8 @@ export default function Calendario() {
             <h1 className="page-title">Calendário Acadêmico</h1>
             <p className="page-subtitle">Suas provas, trabalhos e prazos em um só lugar</p>
           </div>
-          <button onClick={abrirModal} className="btn btn-ghost" style={{ fontSize: 13 }}>
-            📥 Importar calendário
+          <button onClick={abrirModal} className="btn btn-ghost" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Download size={13} strokeWidth={1.8} /> Importar calendário
           </button>
         </div>
 
@@ -205,10 +206,10 @@ export default function Calendario() {
               <div>
                 <label className="label">Tipo</label>
                 <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} className="input">
-                  <option value="prova">📝 Prova</option>
-                  <option value="trabalho">📄 Trabalho</option>
-                  <option value="apresentacao">🎤 Apresentação</option>
-                  <option value="outro">📌 Outro</option>
+                  <option value="prova">Prova</option>
+                  <option value="trabalho">Trabalho</option>
+                  <option value="apresentacao">Apresentação</option>
+                  <option value="outro">Outro</option>
                 </select>
               </div>
               <div>
@@ -236,8 +237,8 @@ export default function Calendario() {
                   return (
                     <div key={evento.id} className={`event-item ${urgencyClass(dias)}`}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                          {tipo.emoji}
+                        <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--text-3)' }}>
+                          <tipo.Icon size={18} strokeWidth={1.8} />
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', marginBottom: 3 }}>{evento.titulo}</p>
@@ -263,7 +264,9 @@ export default function Calendario() {
 
           {proximos.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-4)' }}>
-              <p style={{ fontSize: 40, marginBottom: 12 }}>📅</p>
+              <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+                <Calendar size={40} strokeWidth={1.3} />
+              </div>
               <p style={{ fontWeight: 600, color: 'var(--text-3)' }}>Nenhum evento próximo</p>
               <p style={{ fontSize: 13, marginTop: 4 }}>Adicione suas provas e prazos acima</p>
             </div>
@@ -282,7 +285,7 @@ export default function Calendario() {
                   return (
                     <div key={evento.id} className="event-item past">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-                        <span style={{ fontSize: 15 }}>{tipo.emoji}</span>
+                        <tipo.Icon size={15} strokeWidth={1.8} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
                         <p style={{ fontSize: 13, color: 'var(--text-2)' }}>{evento.titulo}</p>
                         <span style={{ fontSize: 12, color: 'var(--text-4)' }}>· {evento.materia}</span>
                       </div>
@@ -317,7 +320,9 @@ export default function Calendario() {
                       className={`modal-tab ${modal.aba === aba ? 'active' : ''}`}
                       onClick={() => setModal(p => ({ ...p, aba, erro: null }))}
                     >
-                      {aba === 'foto' ? '📷 Enviar foto' : '📋 Colar texto'}
+                      {aba === 'foto'
+                        ? <><Camera size={13} strokeWidth={1.8} /> Enviar foto</>
+                        : <><ClipboardList size={13} strokeWidth={1.8} /> Colar texto</>}
                     </button>
                   ))}
                 </div>
@@ -335,7 +340,9 @@ export default function Calendario() {
                       </div>
                     ) : (
                       <div className="modal-dropzone" onClick={() => importFileRef.current?.click()}>
-                        <p style={{ fontSize: 32, marginBottom: 10 }}>📸</p>
+                        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: 'var(--text-4)' }}>
+                          <Camera size={32} strokeWidth={1.3} />
+                        </div>
                         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4 }}>Clique para enviar uma foto</p>
                         <p style={{ fontSize: 12, color: 'var(--text-4)' }}>Foto do cronograma, screenshot do portal ou calendário impresso</p>
                       </div>
@@ -360,7 +367,9 @@ export default function Calendario() {
                   style={{ width: '100%', marginTop: 16 }}
                   disabled={modal.carregando || (modal.aba === 'foto' ? !modal.imagem : !modal.texto.trim())}
                 >
-                  {modal.carregando ? '⏳ Analisando com IA...' : 'Extrair eventos com IA →'}
+                  {modal.carregando ? (
+                    <><svg style={{ animation: 'spin 1s linear infinite', width: 14, height: 14, marginRight: 6 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Analisando com IA...</>
+                  ) : 'Extrair eventos com IA →'}
                 </button>
               </>
             ) : (
@@ -400,7 +409,7 @@ export default function Calendario() {
                           onClick={e => e.stopPropagation()}
                           style={{ width: 16, height: 16, accentColor: 'var(--brand)', flexShrink: 0 }}
                         />
-                        <span style={{ fontSize: 18 }}>{tipo.emoji}</span>
+                        <tipo.Icon size={18} strokeWidth={1.8} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
                           <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>{ev.titulo}</p>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
