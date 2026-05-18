@@ -7,17 +7,24 @@
   const POINT_AI_URL = 'https://pointai-two.vercel.app'
 
   // ── Detecção de Canvas LMS ───────────────────────────────────────
+  // Domínios Canvas conhecidos (além da detecção genérica por hostname)
+  const CANVAS_DOMAINS = [
+    'canvas.espm.br',
+    'canvas.instructure.com',
+  ]
+
   function isCanvas() {
     const host = location.hostname
-    const path = location.pathname
+
+    // Domínios explícitos conhecidos
+    if (CANVAS_DOMAINS.includes(host)) return true
 
     // URL: qualquer subdomínio de instructure.com ou "canvas" no hostname
     if (/instructure\.com$/i.test(host)) return true
     if (/\bcanvas\b/i.test(host)) return true
 
     // Meta tags injetadas pelo Canvas
-    if (document.querySelector('meta[name="canvas-"]') ||
-        document.querySelector('meta[name^="canvas-"]')) return true
+    if (document.querySelector('meta[name^="canvas-"]')) return true
 
     // Elemento raiz com data-context do Canvas
     if (document.querySelector('[data-context="course"]') ||
@@ -41,46 +48,158 @@
   }
 
   // ── Extração Canvas: página /grades ─────────────────────────────
+  // Extrai nome da matéria do título: "Notas para ALUNO: MATERIA" ou "Grades for STUDENT: COURSE"
+  function extrairNomeMateria() {
+    const title = document.title || ''
+    // Formato PT: "Notas para Nome: Matéria" — Formato EN: "Grades for Name: Course"
+    const match = title.match(/(?:Notas para|Grades for)\s+[^:]+:\s*(.+)/i)
+    if (match) return match[1].trim()
+    // Fallback: tudo após o último ":"
+    const colonIdx = title.lastIndexOf(':')
+    if (colonIdx > 0) return title.slice(colonIdx + 1).trim()
+    return ''
+  }
+
+  // Extrai o valor numérico de um elemento de nota do Canvas
+  function extrairValorNota(row) {
+    // score_value dentro de assignment_score (estrutura Canvas padrão)
+    const scoreValue = row.querySelector(
+      '.assignment_score .score_value, ' +
+      '.score_value, ' +
+      '[data-testid="score-display"] .score_value'
+    )
+    if (scoreValue) {
+      const v = scoreValue.innerText.replace(/\s+/g, ' ').trim()
+      if (v && v !== '–' && v !== '-' && v !== '') return v
+    }
+
+    // grade span direto
+    const gradeSpan = row.querySelector(
+      '.assignment_score .grade, ' +
+      '.grade_value, ' +
+      'td.score_column .grade'
+    )
+    if (gradeSpan) {
+      // pegar só o primeiro nó de texto para evitar capturar "/ 10" junto
+      const v = (gradeSpan.firstChild?.textContent || gradeSpan.innerText || '')
+        .replace(/\s+/g, ' ').trim()
+        .split('/')[0].trim()
+      if (v && v !== '–' && v !== '-') return v
+    }
+
+    return '–'
+  }
+
+  // Extrai a pontuação máxima de um assignment row
+  function extrairPontosMaximos(row) {
+    // data-points-possible no <tr> ou em filho
+    const dataAttr = row.getAttribute('data-points-possible') ||
+                     row.querySelector('[data-points-possible]')?.getAttribute('data-points-possible')
+    if (dataAttr) return dataAttr
+
+    // span .points_possible (Canvas renderiza como "/ 10")
+    const possEl = row.querySelector(
+      '.points_possible, ' +
+      '.assignment_score .points_possible, ' +
+      'td.score_column .points_possible'
+    )
+    if (possEl) {
+      return possEl.innerText.replace(/[^\d.,]/g, '').trim()
+    }
+
+    return ''
+  }
+
   function extrairCanvasGrades() {
-    const linhas = ['=== Canvas LMS — Notas ===']
+    const materia = extrairNomeMateria()
+    const linhas  = ['=== Canvas LMS — Notas ===']
     linhas.push(`URL: ${location.href}`)
     linhas.push(`Página: ${document.title}`)
+    if (materia) linhas.push(`Matéria: ${materia}`)
     linhas.push('')
 
-    // Tabela principal de notas do Canvas
-    const rows = document.querySelectorAll(
-      '#grades_summary tr, .student_assignment, [class*="grade-summary"] tr, ' +
-      '.gradebook-header, table.summary tr'
-    )
+    // ── Estratégia 1: linhas tr.student_assignment (Canvas padrão) ──
+    const assignmentRows = document.querySelectorAll('tr.student_assignment')
+    if (assignmentRows.length > 0) {
+      linhas.push('Avaliações:')
+      assignmentRows.forEach(row => {
+        // Nome do assignment
+        const nameEl = row.querySelector(
+          '.assignment-name, ' +
+          '.ig-title, ' +
+          'th.title a, ' +
+          '.title a, ' +
+          '[data-testid="assignment-title"], ' +
+          '.assignment_name, ' +
+          'th.title'
+        )
+        const nome = nameEl?.innerText?.replace(/\s+/g, ' ').trim()
+        if (!nome || nome.length < 2) return
 
-    if (rows.length > 0) {
+        const nota   = extrairValorNota(row)
+        const maximo = extrairPontosMaximos(row)
+
+        linhas.push(maximo ? `${nome}: ${nota} / ${maximo}` : `${nome}: ${nota}`)
+      })
+    }
+
+    // ── Estratégia 2: seletores de .assignment_score soltos (alguns temas Canvas) ──
+    if (assignmentRows.length === 0) {
+      const scoreEls = document.querySelectorAll('.assignment_score')
+      if (scoreEls.length > 0) {
+        linhas.push('Avaliações (extraído):')
+        scoreEls.forEach(el => {
+          const text = el.innerText.replace(/\s+/g, ' ').trim()
+          if (text.length > 1 && text.length < 200) linhas.push(text)
+        })
+      }
+    }
+
+    // ── Estratégia 3: tabela #grades_summary genérica ──
+    if (assignmentRows.length === 0 && document.querySelectorAll('.assignment_score').length === 0) {
+      const rows = document.querySelectorAll(
+        '#grades_summary tr, [class*="grade-summary"] tr, table.summary tr'
+      )
       rows.forEach(row => {
         const cells = Array.from(row.querySelectorAll('td, th'))
           .map(c => c.innerText.replace(/\s+/g, ' ').trim())
           .filter(c => c.length > 0)
         if (cells.length >= 2) linhas.push(cells.join(' | '))
       })
-    } else {
-      // Fallback: capturar via seletores de nota conhecidos do Canvas
+    }
+
+    // ── Nota final ──
+    const finalGradeEl = document.querySelector(
+      'tr.final_grade .score_value, ' +
+      'tr.final_grade .grade, ' +
+      '.final_grade .score_value, ' +
+      '.total_grade .grade, ' +
+      '[data-testid="grade-summary-total"], ' +
+      '#student-grades-right-content .final_grade .grade'
+    )
+    if (finalGradeEl) {
+      const finalText = finalGradeEl.innerText.replace(/\s+/g, ' ').trim()
+      if (finalText && finalText !== '–') {
+        linhas.push('')
+        linhas.push(`Nota final: ${finalText}`)
+      }
+    }
+
+    // ── Fallback de último recurso se nada foi extraído ──
+    const conteudo = linhas.filter(l =>
+      l && !l.startsWith('===') && !l.startsWith('URL') &&
+      !l.startsWith('Página') && !l.startsWith('Matéria') &&
+      l !== 'Avaliações:' && l !== 'Avaliações (extraído):' && l !== ''
+    )
+    if (conteudo.length === 0) {
       const gradeEls = document.querySelectorAll(
         '.score, .grade, .points, .assignment-name, ' +
-        '[class*="score"], [class*="grade_entry"], .assignment_score, ' +
-        '.final_grade, .course_grade'
+        '[class*="grade_entry"], .final_grade, .course_grade'
       )
       gradeEls.forEach(el => {
         const text = el.innerText.replace(/\s+/g, ' ').trim()
         if (text.length > 1 && text.length < 200) linhas.push(text)
       })
-    }
-
-    // Nota final / GPA
-    const finalGrade = document.querySelector(
-      '.final_grade .grade, .total_grade .grade, ' +
-      '[class*="total-grade"], [data-testid="grade-summary-total"]'
-    )
-    if (finalGrade) {
-      linhas.push('')
-      linhas.push(`Nota final: ${finalGrade.innerText.trim()}`)
     }
 
     return linhas.join('\n')
