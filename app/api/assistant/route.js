@@ -17,7 +17,7 @@ export async function POST(req) {
 
   const paginaLabel = PAGINA_LABELS[pagina] || pagina
 
-  const sistema = `Você é o Point Assistant, o coach pessoal e guia do app Point.AI.
+  const sistema = `Você é o Assistente Point, o coach pessoal e guia do app Point.AI.
 
 USUÁRIO: ${perfil?.nome || 'Estudante'} · ${perfil?.curso || ''} · ${perfil?.universidade || ''}
 SEMESTRE: ${perfil?.semestre || ''} · Matérias: ${perfil?.materias || ''}

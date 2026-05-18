@@ -38,10 +38,10 @@ export default function PointAssistant() {
   const fimRef   = useRef(null)
   const inputRef = useRef(null)
 
-  // Only render on the client (required for createPortal)
+  const isDashboard = pathname === '/dashboard'
+
   useEffect(() => { setMounted(true) }, [])
 
-  // Load profile from localStorage
   useEffect(() => {
     try {
       const p = JSON.parse(localStorage.getItem('pointai_perfil') || 'null')
@@ -49,7 +49,6 @@ export default function PointAssistant() {
     } catch {}
   }, [])
 
-  // Reset chat on page change and queue badge notification
   useEffect(() => {
     setBadge(false)
     if (aberto) return
@@ -60,7 +59,7 @@ export default function PointAssistant() {
       if (hist?.length) { setMensagens(hist); return }
     } catch {}
 
-    const msg = FIRST_MSG[pathname] || '👋 Olá! Sou o Point Assistant. Como posso ajudar?'
+    const msg = FIRST_MSG[pathname] || '👋 Olá! Sou o Assistente Point. Como posso ajudar?'
     setMensagens([{ role: 'assistant', content: msg }])
 
     const t = setTimeout(() => setBadge(true), 3000)
@@ -108,13 +107,15 @@ export default function PointAssistant() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() }
   }
 
-  // Don't render until mounted (SSR safety) or on public pages
   if (!mounted || HIDE_ON.includes(pathname)) return null
 
-  // Inline styles guarantee positioning even when parent CSS interferes
+  // No dashboard, sobe o botão acima do input bar (~110px de altura)
+  const fabBottom    = isDashboard ? '124px' : '24px'
+  const windowBottom = isDashboard ? '188px' : '88px'
+
   const fabStyle = {
     position: 'fixed',
-    bottom: '24px',
+    bottom: fabBottom,
     right: '24px',
     width: '52px',
     height: '52px',
@@ -130,13 +131,13 @@ export default function PointAssistant() {
     alignItems: 'center',
     justifyContent: 'center',
     boxShadow: '0 4px 18px rgba(26,122,74,.45)',
-    transition: 'transform .15s, box-shadow .15s',
+    transition: 'transform .15s, box-shadow .15s, bottom .3s',
     letterSpacing: '-.5px',
   }
 
   const windowStyle = {
     position: 'fixed',
-    bottom: '88px',
+    bottom: windowBottom,
     right: '24px',
     width: '360px',
     height: '500px',
@@ -146,6 +147,7 @@ export default function PointAssistant() {
     borderRadius: '20px',
     overflow: 'hidden',
     boxShadow: '0 16px 48px rgba(0,0,0,.18)',
+    transition: 'bottom .3s',
   }
 
   const badgeStyle = {
@@ -165,8 +167,9 @@ export default function PointAssistant() {
       <button
         style={fabStyle}
         onClick={() => setAberto(o => !o)}
-        aria-label="Point Assistant"
-        title="Point Assistant — Coach do app"
+        aria-label="Assistente Point"
+        title="Assistente Point — Coach do app"
+        data-tour="pa-fab"
       >
         P
         {badge && !aberto && <span style={badgeStyle} />}
@@ -180,8 +183,8 @@ export default function PointAssistant() {
             <div className="pa-header-left">
               <div className="pa-avatar">P</div>
               <div>
-                <p className="pa-title">Point Assistant</p>
-                <p className="pa-subtitle">Coach do app · Sempre aqui</p>
+                <p className="pa-title">Assistente Point</p>
+                <p className="pa-subtitle">Coach do Point.AI · Sempre aqui</p>
               </div>
             </div>
             <button className="pa-close" onClick={() => setAberto(false)} aria-label="Fechar">

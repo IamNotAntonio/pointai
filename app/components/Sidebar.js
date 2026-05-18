@@ -6,8 +6,8 @@ import * as db from '../lib/db'
 import Notificacoes from './Notificacoes'
 import {
   MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
-  ChevronDown, Edit, Star, Sun, Moon, LogOut, Folder, Plus, Sparkles,
-  MessageCircle,
+  ChevronDown, ChevronLeft, ChevronRight, Edit, Star, Sun, Moon, LogOut,
+  Folder, Plus, Sparkles, MessageCircle, Globe, HelpCircle,
 } from 'lucide-react'
 
 /* ── Constants ───────────────────────────────────────────────── */
@@ -60,6 +60,9 @@ export default function Sidebar({
   const [salvando,       setSalvando]       = useState(false)
   const [assinandoPlano, setAssinandoPlano] = useState(null)
   const [erroPlano,      setErroPlano]      = useState(null)
+  const [collapsed,      setCollapsed]      = useState(() => {
+    try { return localStorage.getItem('pointai_sidebar_collapsed') === 'true' } catch { return false }
+  })
 
   const dropdownRef = useRef(null)
 
@@ -105,6 +108,14 @@ export default function Sidebar({
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [dropdownOpen])
+
+  function toggleCollapsed() {
+    setCollapsed(c => {
+      const novo = !c
+      try { localStorage.setItem('pointai_sidebar_collapsed', String(novo)) } catch {}
+      return novo
+    })
+  }
 
   function toggleTema() {
     const novo = tema === 'dark' ? 'light' : 'dark'
@@ -191,17 +202,29 @@ export default function Sidebar({
 
   return (
     <>
-      <aside className="sidebar">
+      <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
         {/* ── Logo ── */}
         <div className="sidebar-header">
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-            <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }}>Point.AI</Link>
-            <Notificacoes />
+          <div style={{ display:'flex', alignItems:'center', justifyContent: collapsed ? 'center' : 'space-between', marginBottom: collapsed ? 0 : 14 }}>
+            {!collapsed && <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }}>Point.AI</Link>}
+            <div style={{ display:'flex', alignItems:'center', gap: collapsed ? 0 : 6 }}>
+              {!collapsed && <Notificacoes />}
+              <button
+                className="sb-collapse-btn"
+                onClick={toggleCollapsed}
+                title={collapsed ? 'Expandir sidebar' : 'Recolher sidebar'}
+              >
+                {collapsed
+                  ? <ChevronRight size={14} strokeWidth={2} />
+                  : <ChevronLeft  size={14} strokeWidth={2} />
+                }
+              </button>
+            </div>
           </div>
 
           {/* ── Account trigger + dropdown ── */}
-          {perfil && (
-            <div className="sb-dropdown-wrap" ref={dropdownRef}>
+          {!collapsed && perfil && (
+            <div className="sb-dropdown-wrap" ref={dropdownRef} data-tour="account-btn">
               <button
                 className="sidebar-account-btn"
                 onClick={() => setDropdownOpen(o => !o)}
@@ -265,6 +288,19 @@ export default function Sidebar({
                       </span>
                     </button>
 
+                    <button
+                      className="sb-dd-item"
+                      onClick={() => {
+                        try { localStorage.removeItem('pointai_tutorial_done') } catch {}
+                        setDropdownOpen(false)
+                        router.push('/dashboard')
+                        setTimeout(() => window.location.reload(), 100)
+                      }}
+                    >
+                      <span className="sb-dd-icon"><HelpCircle {...IC} /></span>
+                      Refazer tutorial
+                    </button>
+
                     <div className="sb-dd-divider" />
 
                     <button className="sb-dd-item danger" onClick={sair}>
@@ -278,12 +314,26 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* ── Matérias + tópicos (dashboard only) ── */}
-        {isDashboard && materias.length > 0 && (
-          <div className="sidebar-section">
-            <p className="sidebar-section-label">Matérias</p>
-            <nav className="sidebar-nav">
-              {materias.map((m, i) => (
+        {/* ── Chat Geral + Matérias + tópicos (dashboard only) ── */}
+        {isDashboard && (
+          <div className="sidebar-section" data-tour="materias">
+            <p className="sidebar-section-label">Conversas</p>
+
+            {/* Chat Geral */}
+            <button
+              onClick={() => onMateriaChange?.('__geral__')}
+              className={`chat-geral-btn ${materiaAtiva === '__geral__' ? 'active' : ''}`}
+              title="Chat Geral"
+            >
+              <Globe size={14} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <span className="chat-geral-text">Chat Geral</span>
+            </button>
+
+            {materias.length > 0 && (
+              <>
+                <p className="sidebar-section-label" style={{ marginTop:6 }}>Matérias</p>
+                <nav className="sidebar-nav">
+                  {materias.map((m, i) => (
                 <div key={i}>
                   <button
                     onClick={() => onMateriaChange?.(m)}
@@ -340,10 +390,12 @@ export default function Sidebar({
                 </div>
               ))}
 
-              <button className="sb-add-materia" onClick={() => setAddMateriaOpen(true)}>
-                <Plus size={11} strokeWidth={2.5} /> Nova matéria
-              </button>
-            </nav>
+                  <button className="sb-add-materia" onClick={() => setAddMateriaOpen(true)}>
+                    <Plus size={11} strokeWidth={2.5} /> Nova matéria
+                  </button>
+                </nav>
+              </>
+            )}
           </div>
         )}
 
@@ -355,6 +407,7 @@ export default function Sidebar({
               <Link
                 key={href}
                 href={href}
+                title={label}
                 className={`sidebar-nav-link ${pathname === href ? 'active' : ''}`}
               >
                 <span className="sidebar-nav-icon">

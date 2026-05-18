@@ -3,10 +3,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import UpgradeModal from '../components/UpgradeModal'
+import TutorialOverlay from '../components/TutorialOverlay'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
 import { getPlanInfo, incrementarMensagem } from '../lib/plano'
-import { FileText, Copy } from 'lucide-react'
+import { FileText, Copy, Globe } from 'lucide-react'
 
 /* ── Constants ──────────────────────────────────────────────────── */
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
@@ -16,6 +17,13 @@ const QUICK_CHIPS = [
   'Cria um simulado com 5 questões',
   'Quais são os tópicos mais cobrados?',
   'Resumo dos principais conceitos',
+]
+
+const QUICK_CHIPS_GERAL = [
+  'O que estudei recentemente?',
+  'Me ajuda a organizar meus estudos',
+  'Cria um plano de estudos para a semana',
+  'Explica um conceito que estou com dúvida',
 ]
 
 /* ── Helpers ────────────────────────────────────────────────────── */
@@ -140,6 +148,7 @@ export default function Dashboard() {
   const [shareContent,  setShareContent]  = useState(null)
   const [gravando,      setGravando]      = useState(false)
   const [vozDisp,       setVozDisp]       = useState(false)
+  const [showTutorial,  setShowTutorial]  = useState(false)
 
   const fimChat       = useRef(null)
   const textareaRef   = useRef(null)
@@ -166,6 +175,13 @@ export default function Dashboard() {
     setTopicos(db.getTopicos())
     setPlanInfo(getPlanInfo())
     setVozDisp(typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window))
+
+    // Mostrar tutorial na primeira visita
+    try {
+      if (!localStorage.getItem('pointai_tutorial_done')) {
+        setTimeout(() => setShowTutorial(true), 1200)
+      }
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -185,12 +201,12 @@ export default function Dashboard() {
       if (historico?.length) {
         setMensagens(historico)
       } else {
+        const isGeral  = materiaAtiva === '__geral__'
         const contexto = topicoAtivo ? `${materiaAtiva} → ${topicoAtivo}` : materiaAtiva
-        setMensagens([{
-          role: 'assistant',
-          content: `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${contexto}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`,
-          timestamp: new Date().toISOString(),
-        }])
+        const msg = isGeral
+          ? `Olá, **${perfil.nome}**! 👋 Aqui é o Chat Geral — pode me perguntar qualquer coisa sobre seus estudos, sem focar em uma matéria específica. Dúvidas, técnicas de estudo, planejamento... estou aqui!`
+          : `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${contexto}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
+        setMensagens([{ role: 'assistant', content: msg, timestamp: new Date().toISOString() }])
       }
     }
     carregarChat()
@@ -200,6 +216,23 @@ export default function Dashboard() {
     fimChat.current?.scrollIntoView({ behavior: 'smooth' })
   }, [mensagens, carregando])
 
+  /* ── Cross-memory para Chat Geral ──────────────────────────── */
+  function buscarHistoricoMaterias(lista) {
+    const historico = {}
+    for (const m of lista) {
+      try {
+        const raw = localStorage.getItem(`chat_${m}`)
+        if (!raw) continue
+        const msgs = JSON.parse(raw)
+        if (msgs?.length > 1) {
+          // Pega as últimas 6 mensagens (user + assistant) excluindo a boas-vindas
+          historico[m] = msgs.slice(1).slice(-6)
+        }
+      } catch {}
+    }
+    return Object.keys(historico).length ? historico : null
+  }
+
   /* ── Streaming core ─────────────────────────────────────────── */
   async function _stream(histMensagens, pdfRequested, imagemEnviada) {
     const body = {
@@ -208,6 +241,10 @@ export default function Dashboard() {
       materia: materiaAtiva,
       topico: topicoAtivo,
       resumo: resumoRef.current,
+    }
+    // No Chat Geral, incluir histórico das matérias para memória cruzada
+    if (isGeralChat && materias.length) {
+      body.historicoMaterias = buscarHistoricoMaterias(materias)
     }
     if (imagemEnviada) {
       body.imagemBase64 = imagemEnviada.dataUrl.split(',')[1]
@@ -378,7 +415,10 @@ export default function Dashboard() {
   }
 
   function trocarMateria(m) {
-    setMateriaAtiva(m); setTopicoAtivo(null); setMensagens([]); setImagem(null)
+    setMensagens([])
+    setImagem(null)
+    setTopicoAtivo(null)
+    setMateriaAtiva(m)
   }
   function trocarTopico(t) {
     setTopicoAtivo(t); setMensagens([]); setImagem(null)
@@ -397,8 +437,11 @@ export default function Dashboard() {
     </div>
   )
 
-  const podeEnviar = !carregando && (input.trim() || imagem)
-  const tituloChat = topicoAtivo ? `${materiaAtiva} / ${topicoAtivo}` : materiaAtiva
+  const podeEnviar  = !carregando && (input.trim() || imagem)
+  const isGeralChat = materiaAtiva === '__geral__'
+  const tituloChat  = isGeralChat
+    ? 'Chat Geral'
+    : (topicoAtivo ? `${materiaAtiva} / ${topicoAtivo}` : materiaAtiva)
 
   return (
     <div className="app-shell">
@@ -417,10 +460,12 @@ export default function Dashboard() {
       <div className="page-area">
         {/* Header */}
         <div className="chat-header">
-          <div className="chat-header-avatar">P</div>
+          <div className="chat-header-avatar" style={isGeralChat ? { background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)' } : {}}>
+            {isGeralChat ? <Globe size={14} strokeWidth={2} /> : 'P'}
+          </div>
           <div>
             <p className="chat-header-title">{tituloChat}</p>
-            <p className="chat-header-sub">Point.AI · Assistente acadêmico</p>
+            <p className="chat-header-sub">Assistente Point · {isGeralChat ? 'Chat livre' : 'Especialista acadêmico'}</p>
           </div>
           <div className="chat-online-wrap">
             <div className="online-dot" />
@@ -429,7 +474,7 @@ export default function Dashboard() {
         </div>
 
         {/* Messages */}
-        <div className="chat-area">
+        <div className="chat-area" data-tour="chat-area">
           {mensagens.map((msg, i) => {
             const isUser = msg.role === 'user'
             const prev   = mensagens[i - 1]
@@ -443,7 +488,7 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                <div className={`chat-bubble-wrap msg-group ${isUser ? 'user' : ''}`}>
+                <div className={`chat-bubble-wrap msg-group ${isUser ? 'user' : ''}`} {...(!isUser && i === 0 ? { 'data-tour': 'msg-bubble-first' } : {})}>
                   {!isUser && <div className="chat-avatar">P</div>}
 
                   <div>
@@ -497,7 +542,7 @@ export default function Dashboard() {
 
                     {/* Hover actions — AI messages */}
                     {!isUser && !msg.streaming && msg.content && (
-                      <div className="msg-actions">
+                      <div className="msg-actions" {...(i === 0 ? { 'data-tour': 'msg-first' } : {})}>
                         <button
                           className="msg-action-btn"
                           onClick={aprofundar}
@@ -533,7 +578,7 @@ export default function Dashboard() {
           {mensagens.length === 1 && !carregando && (
             <div className="chat-chips-wrap">
               <div className="chat-chips">
-                {QUICK_CHIPS.map(c => (
+                {(isGeralChat ? QUICK_CHIPS_GERAL : QUICK_CHIPS).map(c => (
                   <button key={c} className="chat-chip" onClick={() => enviar(c)}>{c}</button>
                 ))}
               </div>
@@ -583,6 +628,7 @@ export default function Dashboard() {
               onClick={() => fileInputRef.current?.click()}
               title="Enviar foto da prova ou tarefa"
               aria-label="Anexar imagem"
+              data-tour="camera-btn"
             >
               <IcCamera />
             </button>
@@ -605,7 +651,7 @@ export default function Dashboard() {
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              placeholder={`Pergunte sobre ${topicoAtivo || materiaAtiva}…`}
+              placeholder={isGeralChat ? 'Pergunte qualquer coisa…' : `Pergunte sobre ${topicoAtivo || materiaAtiva}…`}
               rows={1}
             />
 
@@ -629,6 +675,11 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
+
+      {/* Tutorial interativo */}
+      {showTutorial && (
+        <TutorialOverlay onDone={() => setShowTutorial(false)} />
+      )}
 
       {/* Upgrade modal */}
       {showUpgrade && (
