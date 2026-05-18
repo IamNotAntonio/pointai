@@ -1,8 +1,10 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import Sidebar from '../components/Sidebar'
+import PortalImportModal from '../components/PortalImportModal'
 import * as db from '../lib/db'
-import { Download, Target, CheckCircle, Camera, ClipboardList } from 'lucide-react'
+import { Download, Target, CheckCircle, Camera, ClipboardList, FileSpreadsheet } from 'lucide-react'
 
 const VAZIO = { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
 
@@ -16,17 +18,20 @@ function matchMateria(lista, nome) {
 }
 
 export default function Notas() {
-  const [perfil, setPerfil]       = useState(null)
-  const [materias, setMaterias]   = useState([])
-  const [dados, setDados]         = useState({})
+  const [perfil,       setPerfil]       = useState(null)
+  const [materias,     setMaterias]     = useState([])
+  const [dados,        setDados]        = useState({})
   const [materiaAtiva, setMateriaAtiva] = useState(null)
+  const [portalModal,  setPortalModal]  = useState(false)
 
   const [modal, setModal] = useState({
     aberto: false, aba: 'foto',
     imagem: null, texto: '',
     carregando: false, preview: null, erro: null,
   })
-  const importFileRef = useRef(null)
+
+  const importFileRef   = useRef(null)
+  const planilhaFileRef = useRef(null)
 
   useEffect(() => {
     async function carregar() {
@@ -50,7 +55,7 @@ export default function Notas() {
 
   function salvar(novo) {
     setDados(novo)
-    db.saveNotas(novo) // fire-and-forget; localStorage written synchronously inside
+    db.saveNotas(novo)
   }
 
   function update(materia, field, value) {
@@ -77,25 +82,24 @@ export default function Notas() {
 
   function mediaStatus(media) {
     if (media === null) return null
-    if (media >= 7) return { label: 'Aprovado', cls: 'badge badge-green' }
+    if (media >= 7) return { label: 'Aprovado',    cls: 'badge badge-green' }
     if (media >= 5) return { label: 'Recuperação', cls: 'badge badge-yellow' }
-    return { label: 'Reprovado', cls: 'badge badge-red' }
+    return             { label: 'Reprovado',   cls: 'badge badge-red' }
   }
 
   function faltaStatus(materia) {
-    const d = dados[materia] || VAZIO
+    const d   = dados[materia] || VAZIO
     const max = Math.floor(d.totalAulas * 0.25)
-    const r = max - d.faltas
-    if (r > 5) return { label: `${r} faltas restantes`, cor: 'var(--brand)' }
+    const r   = max - d.faltas
+    if (r > 5) return { label: `${r} faltas restantes`,    cor: 'var(--brand)' }
     if (r > 0) return { label: `Só ${r} faltas restantes!`, cor: '#d97706' }
-    return { label: 'Limite atingido!', cor: '#dc2626' }
+    return             { label: 'Limite atingido!',         cor: '#dc2626' }
   }
 
-  // ── Import modal ──
-  function abrirModal() {
-    setModal({ aberto: true, aba: 'foto', imagem: null, texto: '', carregando: false, preview: null, erro: null })
+  // ── AI Import modal (foto / texto / planilha) ────────────────────
+  function abrirModal(aba = 'foto') {
+    setModal({ aberto: true, aba, imagem: null, texto: '', carregando: false, preview: null, erro: null })
   }
-
   function fecharModal() { setModal(p => ({ ...p, aberto: false })) }
 
   function selecionarImagem(e) {
@@ -107,29 +111,36 @@ export default function Notas() {
     e.target.value = ''
   }
 
-  async function enviarImport() {
-    const { aba, imagem, texto } = modal
-    if (aba === 'foto' && !imagem) return
-    if (aba === 'texto' && !texto.trim()) return
-
+  function selecionarPlanilha(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
     setModal(p => ({ ...p, carregando: true, erro: null }))
-
-    try {
-      const body = { tipo: 'notas', perfil }
-      if (aba === 'foto') {
-        body.imagemBase64 = imagem.dataUrl.split(',')[1]
-        body.imagemTipo   = imagem.tipo
-      } else {
-        body.texto = texto
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      try {
+        const wb   = XLSX.read(ev.target.result, { type: 'array' })
+        const ws   = wb.Sheets[wb.SheetNames[0]]
+        const csv  = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
+        const rows = csv.split('\n').filter(r => r.trim().replace(/,/g, '').trim())
+        await enviarTexto(rows.slice(0, 120).join('\n'))
+      } catch {
+        setModal(p => ({ ...p, carregando: false, erro: 'Erro ao ler o arquivo. Verifique se é .xlsx, .xls ou .csv válido.' }))
       }
+    }
+    reader.readAsArrayBuffer(file)
+    e.target.value = ''
+  }
 
-      const resp = await fetch('/api/importar', {
+  async function enviarTexto(texto) {
+    if (!texto?.trim()) return
+    setModal(p => ({ ...p, carregando: true, erro: null }))
+    try {
+      const resp   = await fetch('/api/importar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ tipo: 'notas', perfil, texto }),
       })
       const result = await resp.json()
-
       if (result.erro) {
         setModal(p => ({ ...p, carregando: false, erro: result.erro }))
       } else {
@@ -140,21 +151,46 @@ export default function Notas() {
     }
   }
 
-  function confirmarImport() {
-    const { preview } = modal
-    if (!preview?.materias?.length) return
-    const novo = { ...dados }
+  async function enviarImport() {
+    const { aba, imagem, texto } = modal
+    if (aba === 'foto' && !imagem) return
+    if (aba === 'texto' && !texto.trim()) return
+    setModal(p => ({ ...p, carregando: true, erro: null }))
+    try {
+      const body = { tipo: 'notas', perfil }
+      if (aba === 'foto') { body.imagemBase64 = imagem.dataUrl.split(',')[1]; body.imagemTipo = imagem.tipo }
+      else { body.texto = texto }
+      const resp   = await fetch('/api/importar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const result = await resp.json()
+      if (result.erro) {
+        setModal(p => ({ ...p, carregando: false, erro: result.erro }))
+      } else {
+        setModal(p => ({ ...p, carregando: false, preview: result.dados }))
+      }
+    } catch {
+      setModal(p => ({ ...p, carregando: false, erro: 'Erro de conexão. Tente novamente.' }))
+    }
+  }
 
-    preview.materias.forEach(m => {
+  // ── Merge and save helper (used by both AI modal and Canvas) ──────
+  function aplicarPreviewNotas(previewMaterias) {
+    const novo = { ...dados }
+    previewMaterias.forEach(m => {
       const chave = matchMateria(materias, m.nome) || m.nome
       novo[chave] = {
-        notas: ([...( m.notas || [])].slice(0, 3).concat(['', '', ''])).slice(0, 3).map(n => (n === null || n === undefined) ? '' : String(n)),
-        faltas: m.faltas ?? 0,
+        notas:      ([...(m.notas || [])].slice(0, 3).concat(['', '', ''])).slice(0, 3)
+                      .map(n => (n === null || n === undefined) ? '' : String(n)),
+        faltas:     m.faltas     ?? 0,
         totalAulas: m.totalAulas ?? 60,
       }
     })
-
     salvar(novo)
+  }
+
+  function confirmarImport() {
+    const { preview } = modal
+    if (!preview?.materias?.length) return
+    aplicarPreviewNotas(preview.materias)
     fecharModal()
   }
 
@@ -179,32 +215,37 @@ export default function Notas() {
       <Sidebar perfil={perfil} />
 
       <div className="page-area">
-        {/* Breadcrumb */}
-        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point.AI</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Notas e Faltas</span></nav>
+        <nav className="page-breadcrumb">
+          <span className="page-breadcrumb-item">Point.AI</span>
+          <span className="page-breadcrumb-sep">›</span>
+          <span className="page-breadcrumb-current">Notas e Faltas</span>
+        </nav>
 
-        {/* Header */}
         <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <h1 className="page-title">Notas e Faltas</h1>
             <p className="page-subtitle">Acompanhe seu desempenho em cada matéria</p>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button onClick={abrirModal} className="btn btn-ghost" style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {/* Hidden file refs for sub-flows */}
+            <input ref={importFileRef}   type="file" accept="image/jpeg,image/jpg,image/png" onChange={selecionarImagem}   style={{ display: 'none' }} />
+            <input ref={planilhaFileRef} type="file" accept=".xlsx,.xls,.csv"                onChange={selecionarPlanilha} style={{ display: 'none' }} />
+
+            <button
+              onClick={() => setPortalModal(true)}
+              className="btn btn-ghost"
+              style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
               <Download size={13} strokeWidth={1.8} /> Importar do portal
             </button>
-            <select
-              value={materiaAtiva || ''}
-              onChange={e => setMateriaAtiva(e.target.value)}
-              className="input"
-              style={{ width: 'auto', minWidth: 180 }}
-            >
+
+            <select value={materiaAtiva || ''} onChange={e => setMateriaAtiva(e.target.value)} className="input" style={{ width: 'auto', minWidth: 180 }}>
               {materias.map((m, i) => <option key={i} value={m}>{m}</option>)}
             </select>
           </div>
         </div>
 
         <div className="page-scroll">
-          {/* Stat cards */}
           <div className="grid-3" style={{ marginBottom: 20 }}>
             <div className="stat-card">
               <p className="stat-value" style={{ color: 'var(--brand)' }}>{media ?? '—'}</p>
@@ -223,68 +264,44 @@ export default function Notas() {
             </div>
           </div>
 
-          {/* Frequência */}
           {dm.totalAulas > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <p className="card-title" style={{ margin: 0 }}>Frequência</p>
-                <span style={{ fontSize: 13, fontWeight: 600, color: dm.faltas >= maxF ? '#dc2626' : 'var(--brand)' }}>
-                  {dm.faltas}/{maxF} faltas
-                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: dm.faltas >= maxF ? '#dc2626' : 'var(--brand)' }}>{dm.faltas}/{maxF} faltas</span>
               </div>
               <div className="progress-bar">
-                <div
-                  className={`progress-fill ${dm.faltas >= maxF ? 'progress-red' : dm.faltas >= maxF - 3 ? 'progress-yellow' : 'progress-green'}`}
-                  style={{ width: `${Math.min(100, (dm.faltas / Math.max(maxF, 1)) * 100)}%` }}
-                />
+                <div className={`progress-fill ${dm.faltas >= maxF ? 'progress-red' : dm.faltas >= maxF - 3 ? 'progress-yellow' : 'progress-green'}`} style={{ width: `${Math.min(100, (dm.faltas / Math.max(maxF, 1)) * 100)}%` }} />
               </div>
             </div>
           )}
 
-          {/* Avaliações */}
           <div className="card" style={{ marginBottom: 16 }}>
             <p className="card-title">Avaliações</p>
             <div className="grid-3">
               {dm.notas.map((nota, i) => (
                 <div key={i}>
                   <label className="label">Avaliação {i + 1}</label>
-                  <input
-                    type="number" min="0" max="10" step="0.1"
-                    value={nota}
-                    onChange={e => atualizarNota(materiaAtiva, i, e.target.value)}
-                    placeholder="—"
-                    className="input"
-                    style={{ textAlign: 'center', fontSize: 20, fontWeight: 700 }}
-                  />
+                  <input type="number" min="0" max="10" step="0.1" value={nota} onChange={e => atualizarNota(materiaAtiva, i, e.target.value)} placeholder="—" className="input" style={{ textAlign: 'center', fontSize: 20, fontWeight: 700 }} />
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Faltas */}
           <div className="card" style={{ marginBottom: 16 }}>
             <p className="card-title">Controle de Faltas</p>
             <div className="grid-2">
               <div>
                 <label className="label">Total de aulas no semestre</label>
-                <input
-                  type="number" value={dm.totalAulas}
-                  onChange={e => update(materiaAtiva, 'totalAulas', parseInt(e.target.value) || 60)}
-                  className="input"
-                />
+                <input type="number" value={dm.totalAulas} onChange={e => update(materiaAtiva, 'totalAulas', parseInt(e.target.value) || 60)} className="input" />
               </div>
               <div>
                 <label className="label">Faltas até agora</label>
-                <input
-                  type="number" value={dm.faltas}
-                  onChange={e => update(materiaAtiva, 'faltas', parseInt(e.target.value) || 0)}
-                  className="input"
-                />
+                <input type="number" value={dm.faltas} onChange={e => update(materiaAtiva, 'faltas', parseInt(e.target.value) || 0)} className="input" />
               </div>
             </div>
           </div>
 
-          {/* Alertas */}
           {notaFalta !== null && (
             <div className="alert alert-yellow">
               <Target size={18} strokeWidth={1.8} style={{ color: '#d97706', flexShrink: 0 }} />
@@ -300,75 +317,91 @@ export default function Notas() {
         </div>
       </div>
 
-      {/* ── Import Modal ── */}
+      {/* ── Unified portal import modal ── */}
+      <PortalImportModal
+        aberto={portalModal}
+        tipo="notas"
+        materias={materias}
+        onClose={() => setPortalModal(false)}
+        onOutros={() => abrirModal('foto')}
+        onSaveNotas={(previewMaterias) => { aplicarPreviewNotas(previewMaterias) }}
+        onSaveEventos={() => {}}
+      />
+
+      {/* ── AI Import Modal (foto / texto / planilha) ── */}
       {modal.aberto && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && fecharModal()}>
           <div className="modal">
             <div className="modal-header">
-              <p className="modal-title">Importar Notas do Portal</p>
+              <p className="modal-title">Importar Notas — Outros portais</p>
               <button className="modal-close" onClick={fecharModal}>×</button>
             </div>
 
             {!modal.preview ? (
               <>
                 <div className="modal-tabs">
-                  {['foto', 'texto'].map(aba => (
-                    <button
-                      key={aba}
-                      className={`modal-tab ${modal.aba === aba ? 'active' : ''}`}
-                      onClick={() => setModal(p => ({ ...p, aba, erro: null }))}
-                    >
-                      {aba === 'foto'
-                        ? <><Camera size={13} strokeWidth={1.8} /> Enviar foto</>
-                        : <><ClipboardList size={13} strokeWidth={1.8} /> Colar texto</>}
+                  {[
+                    { id: 'foto',     label: 'Foto',     Icon: Camera },
+                    { id: 'texto',    label: 'Texto',    Icon: ClipboardList },
+                    { id: 'planilha', label: 'Planilha', Icon: FileSpreadsheet },
+                  ].map(({ id, label, Icon }) => (
+                    <button key={id} className={`modal-tab ${modal.aba === id ? 'active' : ''}`} onClick={() => setModal(p => ({ ...p, aba: id, erro: null }))}>
+                      <Icon size={13} strokeWidth={1.8} /> {label}
                     </button>
                   ))}
                 </div>
 
-                {modal.aba === 'foto' ? (
+                {modal.aba === 'foto' && (
                   <>
                     <input ref={importFileRef} type="file" accept="image/jpeg,image/jpg,image/png" onChange={selecionarImagem} style={{ display: 'none' }} />
                     {modal.imagem ? (
                       <div style={{ position: 'relative' }}>
                         <img src={modal.imagem.dataUrl} alt="Preview" style={{ width: '100%', borderRadius: 10, display: 'block', maxHeight: 280, objectFit: 'contain', background: 'var(--surface-2)' }} />
-                        <button
-                          onClick={() => setModal(p => ({ ...p, imagem: null }))}
-                          style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 8, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        >×</button>
+                        <button onClick={() => setModal(p => ({ ...p, imagem: null }))} style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 8, background: 'rgba(0,0,0,.6)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                       </div>
                     ) : (
                       <div className="modal-dropzone" onClick={() => importFileRef.current?.click()}>
-                        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: 'var(--text-4)' }}>
-                          <Camera size={32} strokeWidth={1.3} />
-                        </div>
+                        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: 'var(--text-4)' }}><Camera size={32} strokeWidth={1.3} /></div>
                         <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4 }}>Clique para enviar uma foto</p>
                         <p style={{ fontSize: 12, color: 'var(--text-4)' }}>Screenshot do portal, foto da tela ou printscreen</p>
                       </div>
                     )}
                   </>
-                ) : (
-                  <textarea
-                    value={modal.texto}
-                    onChange={e => setModal(p => ({ ...p, texto: e.target.value }))}
-                    className="input"
-                    placeholder="Cole aqui o texto copiado do portal da faculdade com suas notas e faltas..."
-                    rows={8}
-                    style={{ resize: 'vertical' }}
-                  />
+                )}
+
+                {modal.aba === 'texto' && (
+                  <textarea value={modal.texto} onChange={e => setModal(p => ({ ...p, texto: e.target.value }))} className="input" placeholder="Cole aqui o texto copiado do portal com suas notas e faltas..." rows={8} style={{ resize: 'vertical' }} />
+                )}
+
+                {modal.aba === 'planilha' && (
+                  <div className="modal-dropzone" onClick={() => planilhaFileRef.current?.click()}>
+                    <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center', color: 'var(--text-4)' }}><FileSpreadsheet size={32} strokeWidth={1.3} /></div>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4 }}>Clique para selecionar a planilha</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-4)' }}>Aceita .xlsx, .xls e .csv</p>
+                  </div>
                 )}
 
                 {modal.erro && <p className="modal-err">{modal.erro}</p>}
 
-                <button
-                  onClick={enviarImport}
-                  className="btn btn-primary"
-                  style={{ width: '100%', marginTop: 16 }}
-                  disabled={modal.carregando || (modal.aba === 'foto' ? !modal.imagem : !modal.texto.trim())}
-                >
-                  {modal.carregando ? (
-                    <><svg style={{ animation: 'spin 1s linear infinite', width: 14, height: 14, marginRight: 6 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Analisando com IA...</>
-                  ) : 'Extrair notas com IA →'}
-                </button>
+                {modal.aba !== 'planilha' && (
+                  <button
+                    onClick={enviarImport}
+                    className="btn btn-primary"
+                    style={{ width: '100%', marginTop: 16 }}
+                    disabled={modal.carregando || (modal.aba === 'foto' ? !modal.imagem : !modal.texto.trim())}
+                  >
+                    {modal.carregando
+                      ? <><svg style={{ animation: 'spin 1s linear infinite', width: 14, height: 14, marginRight: 6 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Analisando com IA...</>
+                      : 'Extrair notas com IA →'}
+                  </button>
+                )}
+
+                {modal.aba === 'planilha' && modal.carregando && (
+                  <div style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-3)', fontSize: 13 }}>
+                    <svg style={{ animation: 'spin 1s linear infinite', width: 18, height: 18, display: 'inline-block', marginRight: 8, verticalAlign: 'middle' }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    Lendo planilha com IA...
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -381,27 +414,21 @@ export default function Notas() {
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                             <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{m.nome}</p>
-                            {match && <span className="badge badge-green" style={{ fontSize: 10 }}>✓ {match}</span>}
+                            {match  && <span className="badge badge-green"  style={{ fontSize: 10 }}>✓ {match}</span>}
                             {!match && <span className="badge badge-yellow" style={{ fontSize: 10 }}>Nova matéria</span>}
                           </div>
                           <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
                             Notas: {(m.notas || []).filter(n => n !== null).join(' · ') || '—'}
-                            &nbsp;·&nbsp;
-                            Faltas: {m.faltas ?? 0} / {m.totalAulas ?? 60} aulas
+                            &nbsp;·&nbsp;Faltas: {m.faltas ?? 0} / {m.totalAulas ?? 60} aulas
                           </p>
                         </div>
                       </div>
                     )
                   })}
                 </div>
-
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                  <button onClick={() => setModal(p => ({ ...p, preview: null }))} className="btn btn-ghost" style={{ flex: 1 }}>
-                    ← Tentar novamente
-                  </button>
-                  <button onClick={confirmarImport} className="btn btn-primary" style={{ flex: 1 }}>
-                    ✓ Confirmar importação
-                  </button>
+                  <button onClick={() => setModal(p => ({ ...p, preview: null }))} className="btn btn-ghost" style={{ flex: 1 }}>← Tentar novamente</button>
+                  <button onClick={confirmarImport} className="btn btn-primary" style={{ flex: 1 }}>✓ Confirmar importação</button>
                 </div>
               </>
             )}
