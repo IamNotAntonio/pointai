@@ -58,6 +58,8 @@ export default function Sidebar({
   const [novaMateria,    setNovaMateria]    = useState('')
   const [novoTopico,     setNovoTopico]     = useState('')
   const [salvando,       setSalvando]       = useState(false)
+  const [assinandoPlano, setAssinandoPlano] = useState(null)
+  const [erroPlano,      setErroPlano]      = useState(null)
 
   const dropdownRef = useRef(null)
 
@@ -143,6 +145,35 @@ export default function Sidebar({
     onTopicoChange?.(nome)
     setNovoTopico('')
     setAddTopicoOpen(false)
+  }
+
+  async function assinarPlano(planoId) {
+    if (assinandoPlano) return
+    setAssinandoPlano(planoId)
+    setErroPlano(null)
+    try {
+      const user   = await db.getUser()
+      const pf     = JSON.parse(localStorage.getItem('pointai_perfil') || '{}')
+      const email  = user?.email || ''
+      const nome   = pf.nome || user?.user_metadata?.full_name || ''
+      const userId = user?.id || ''
+      if (!email) {
+        setErroPlano('Faça login para assinar.')
+        setAssinandoPlano(null)
+        return
+      }
+      const resp = await fetch('/api/assinar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ plano: planoId === 'monthly' ? 'mensal' : 'semestral', userId, email, nome }),
+      })
+      const data = await resp.json()
+      if (data.erro) { setErroPlano(data.erro); setAssinandoPlano(null); return }
+      window.location.href = data.init_point
+    } catch {
+      setErroPlano('Erro de conexão. Tente novamente.')
+      setAssinandoPlano(null)
+    }
   }
 
   function deletarTopico(e, topico) {
@@ -396,22 +427,53 @@ export default function Sidebar({
               <p className="sb-modal-title">Planos</p>
               <button className="sb-modal-close" onClick={() => setPlanosOpen(false)}>×</button>
             </div>
-            <p style={{ fontSize:13, color:'#71717a', marginBottom:16, lineHeight:1.5 }}>
-              Você está no <strong style={{ color:'#22c55e' }}>Plano Grátis</strong> com acesso completo a todas as funcionalidades.
+            <p style={{ fontSize:13, color:'var(--text-3)', marginBottom:16, lineHeight:1.5 }}>
+              Você está no <strong style={{ color:'#22c55e' }}>Plano Grátis</strong>. Assine o Pro para acesso ilimitado.
             </p>
             <div className="sb-plan-grid">
-              {PLANS.map(plan => (
-                <div key={plan.id} className={`sb-plan-card ${plan.featured ? 'featured' : ''}`}>
-                  {plan.featured && <span className="sb-plan-badge">Mais popular</span>}
-                  <p className="sb-plan-name">{plan.name}</p>
-                  <p className="sb-plan-price">{plan.price}<span>{plan.period}</span></p>
-                  <p className="sb-plan-desc">{plan.desc}</p>
-                  {plan.current && <p className="sb-plan-current">✓ Plano atual</p>}
-                </div>
-              ))}
+              {PLANS.map(plan => {
+                const carregando = assinandoPlano === plan.id
+                return (
+                  <div key={plan.id} className={`sb-plan-card ${plan.featured ? 'featured' : ''}`}>
+                    {plan.featured && <span className="sb-plan-badge">Mais popular</span>}
+                    <p className="sb-plan-name">{plan.name}</p>
+                    <p className="sb-plan-price">{plan.price}<span>{plan.period}</span></p>
+                    <p className="sb-plan-desc">{plan.desc}</p>
+                    {plan.current
+                      ? <p className="sb-plan-current">✓ Plano atual</p>
+                      : (
+                        <button
+                          onClick={() => assinarPlano(plan.id)}
+                          disabled={!!assinandoPlano}
+                          style={{
+                            marginTop: 10, width: '100%', padding: '7px 0',
+                            background: plan.featured ? '#16a34a' : 'var(--surface-2)',
+                            color: plan.featured ? '#fff' : 'var(--text-2)',
+                            border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                            cursor: assinandoPlano ? 'default' : 'pointer',
+                            opacity: assinandoPlano && !carregando ? .5 : 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          {carregando
+                            ? <><svg style={{ animation:'spin 1s linear infinite', width:12, height:12 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Redirecionando…</>
+                            : <><Sparkles size={11} strokeWidth={1.8} /> Assinar {plan.name}</>
+                          }
+                        </button>
+                      )
+                    }
+                  </div>
+                )
+              })}
             </div>
-            <p style={{ fontSize:12, color:'#3f3f46', marginTop:18, textAlign:'center' }}>
-              Pagamento integrado em breve. Aproveite o acesso gratuito completo!
+            {erroPlano && (
+              <p style={{ fontSize:12, color:'#f87171', background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.18)', borderRadius:8, padding:'7px 12px', marginTop:12, textAlign:'center' }}>
+                {erroPlano}
+              </p>
+            )}
+            <p style={{ fontSize:11.5, color:'var(--text-4)', marginTop:14, textAlign:'center' }}>
+              Pagamento seguro via Mercado Pago · Cancele quando quiser
             </p>
           </div>
         </div>

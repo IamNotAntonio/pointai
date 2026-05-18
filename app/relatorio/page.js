@@ -120,6 +120,8 @@ export default function Relatorio() {
   const [carregando, setCarregando]   = useState(false)
   const [pro, setPro]                 = useState(false)
   const [dataGeracao, setDataGeracao] = useState(null)
+  const [assinando, setAssinando]     = useState(false)
+  const [erroAssinar, setErroAssinar] = useState(null)
 
   useEffect(() => {
     async function carregar() {
@@ -133,6 +135,35 @@ export default function Relatorio() {
     }
     carregar()
   }, [])
+
+  async function assinar() {
+    if (assinando) return
+    setAssinando(true)
+    setErroAssinar(null)
+    try {
+      const user   = await db.getUser()
+      const pf     = JSON.parse(localStorage.getItem('pointai_perfil') || '{}')
+      const email  = user?.email || ''
+      const nome   = pf.nome || user?.user_metadata?.full_name || ''
+      const userId = user?.id || ''
+      if (!email) {
+        setErroAssinar('Faça login para assinar. Recarregue a página e tente novamente.')
+        setAssinando(false)
+        return
+      }
+      const resp = await fetch('/api/assinar', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ plano: 'mensal', userId, email, nome }),
+      })
+      const data = await resp.json()
+      if (data.erro) { setErroAssinar(data.erro); setAssinando(false); return }
+      window.location.href = data.init_point
+    } catch {
+      setErroAssinar('Erro de conexão. Tente novamente.')
+      setAssinando(false)
+    }
+  }
 
   function handlePerfilUpdate(novoPerf) {
     setPerfil(novoPerf)
@@ -231,11 +262,24 @@ export default function Relatorio() {
                   </div>
 
                   {/* CTA button */}
-                  <button className="w-full max-w-xs mx-auto py-3.5 bg-gradient-to-br from-green-700 to-green-500 text-white text-[15px] font-semibold rounded-xl border-0 cursor-pointer transition-all duration-150 hover:opacity-90 hover:-translate-y-0.5 active:scale-[.98] mb-3 flex items-center justify-center gap-2">
-                    <Sparkles size={16} strokeWidth={1.8} /> Assinar Pro agora
+                  {erroAssinar && (
+                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-3 text-center">
+                      {erroAssinar}
+                    </p>
+                  )}
+                  <button
+                    onClick={assinar}
+                    disabled={assinando}
+                    className="w-full max-w-xs mx-auto py-3.5 bg-gradient-to-br from-green-700 to-green-500 text-white text-[15px] font-semibold rounded-xl border-0 cursor-pointer transition-all duration-150 hover:opacity-90 hover:-translate-y-0.5 active:scale-[.98] mb-3 flex items-center justify-center gap-2"
+                    style={{ opacity: assinando ? .75 : 1, cursor: assinando ? 'default' : 'pointer' }}
+                  >
+                    {assinando
+                      ? <><svg style={{ animation:'spin 1s linear infinite', width:14, height:14 }} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity=".25"/><path fill="currentColor" opacity=".75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Redirecionando…</>
+                      : <><Sparkles size={16} strokeWidth={1.8} /> Assinar Pro agora</>
+                    }
                   </button>
                   <p className="text-xs text-gray-400 dark:text-zinc-600">
-                    Cancele quando quiser · Pagamento integrado em breve
+                    Cancele quando quiser · Pagamento seguro via Mercado Pago
                   </p>
                 </div>
               </div>
