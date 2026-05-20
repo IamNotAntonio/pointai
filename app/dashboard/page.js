@@ -12,6 +12,14 @@ import { FileText, Copy, Globe, BookOpen, Calendar, RotateCcw } from 'lucide-rea
 
 /* ── Constants ──────────────────────────────────────────────────── */
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
+const IMG_REGEX = /\b(desenh[ae]|ilustr[ae]|me\s+mostr[ae]|mostr[ae]|diagrama|esquema|mapa\s+mental|gráfico\s+de|representação\s+visual|visualiz[ae])\b/i
+
+const IMG_EXAMPLES = [
+  'Ciclo de Krebs',
+  'Rede neural',
+  'Sistema cardiovascular',
+  'Mapa mental de Direito Constitucional',
+]
 
 const QUICK_CHIPS = [
   'Me explica o conteúdo desta matéria',
@@ -161,6 +169,24 @@ function IcExpand() {
     </svg>
   )
 }
+function IcImage() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21 15 16 10 5 21"/>
+    </svg>
+  )
+}
+function IcDownload() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  )
+}
 
 /* ── Component ──────────────────────────────────────────────────── */
 export default function Dashboard() {
@@ -185,7 +211,10 @@ export default function Dashboard() {
   const [ehPro,         setEhPro]         = useState(false)
   const [showTutorial,  setShowTutorial]  = useState(false)
   const [resumoMateria,  setResumoMateria]  = useState({ mediaNotas: null, proximoEvento: null })
-  const [novoChatConfirm, setNovoChatConfirm] = useState(null)
+  const [novoChatConfirm,  setNovoChatConfirm]  = useState(null)
+  const [showImagePrompt,  setShowImagePrompt]  = useState(false)
+  const [promptImagem,     setPromptImagem]     = useState('')
+  const [gerandoImagem,    setGerandoImagem]    = useState(false)
 
   const fimChat        = useRef(null)
   const textareaRef    = useRef(null)
@@ -194,10 +223,12 @@ export default function Dashboard() {
   const resumoRef      = useRef(resumo)
   const audioRef       = useRef(null)
   const vozAtivaRef    = useRef(false)
+  const ehProRef       = useRef(false)
 
   // Keep refs in sync for use inside async functions
   useEffect(() => { resumoRef.current = resumo }, [resumo])
   useEffect(() => { vozAtivaRef.current = vozAtiva }, [vozAtiva])
+  useEffect(() => { ehProRef.current = ehPro }, [ehPro])
 
   const chatKey = db.getChatKey(materiaAtiva, topicoAtivo)
 
@@ -315,6 +346,100 @@ export default function Dashboard() {
     } catch { setFalando(false) }
   }
 
+  /* ── Image generation ──────────────────────────────────────── */
+  function extractImageSubject(text) {
+    return text
+      .replace(/\b(desenh[ae]|ilustr[ae]|me\s+mostr[ae]|mostr[ae]|faz[ae]?\s+um[a]?|cri[ae]\s+um[a]?|gera?\s+um[a]?)\b/gi, '')
+      .replace(/\b(diagrama\s+d[eo]?|esquema\s+d[eo]?|mapa\s+mental\s+d[eo]?|gráfico\s+d[eo]?|representação\s+visual\s+d[eo]?)\b/gi, '')
+      .replace(/\b(por\s+favor|para\s+mim|obrigad[ao]|se\s+possível|pra\s+mim)\b/gi, '')
+      .replace(/[.,!?]/g, '')
+      .replace(/^(o|a|os|as|um|uma)\s+/i, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ').slice(0, 10).join(' ')
+  }
+
+  async function gerarImagemParaMensagem(subject, targetTimestamp, ck) {
+    try {
+      const resp = await fetch('/api/imagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: subject, materia: materiaAtiva }),
+      })
+      const data = await resp.json()
+      setMensagens(msgs => {
+        const idx = msgs.findIndex(m => m.timestamp === targetTimestamp)
+        if (idx < 0) return msgs
+        const nova = [...msgs]
+        nova[idx] = {
+          ...nova[idx],
+          imagemStatus: data.url ? 'pronta' : 'erro',
+          imagemUrl: data.url || null,
+          imagemErroConteudo: !data.url && data.erro === 'conteudo',
+        }
+        db.saveChat(ck, nova)
+        return nova
+      })
+    } catch {
+      setMensagens(msgs => {
+        const idx = msgs.findIndex(m => m.timestamp === targetTimestamp)
+        if (idx < 0) return msgs
+        const nova = [...msgs]
+        nova[idx] = { ...nova[idx], imagemStatus: 'erro', imagemErroConteudo: false }
+        return nova
+      })
+    }
+  }
+
+  async function gerarImagemManual() {
+    const prompt = promptImagem.trim()
+    if (!prompt || gerandoImagem) return
+    setShowImagePrompt(false)
+    setPromptImagem('')
+    setGerandoImagem(true)
+
+    const tsIA   = new Date().toISOString()
+    const tsUser = new Date(Date.now() - 1).toISOString()
+    const msgUser = { role: 'user', content: `🖼️ ${prompt}`, timestamp: tsUser }
+    const msgIA   = { role: 'assistant', content: '', imagemStatus: 'gerando', imagemLegenda: prompt, timestamp: tsIA }
+
+    const novas = [...mensagens, msgUser, msgIA]
+    setMensagens(novas)
+    db.saveChat(chatKey, novas)
+
+    try {
+      const resp = await fetch('/api/imagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, materia: materiaAtiva }),
+      })
+      const data = await resp.json()
+      setMensagens(msgs => {
+        const idx = msgs.findIndex(m => m.timestamp === tsIA)
+        if (idx < 0) return msgs
+        const nova = [...msgs]
+        nova[idx] = {
+          ...nova[idx],
+          imagemStatus: data.url ? 'pronta' : 'erro',
+          imagemUrl: data.url || null,
+          imagemErroConteudo: !data.url && data.erro === 'conteudo',
+        }
+        db.saveChat(chatKey, nova)
+        return nova
+      })
+    } catch {
+      setMensagens(msgs => {
+        const idx = msgs.findIndex(m => m.timestamp === tsIA)
+        if (idx < 0) return msgs
+        const nova = [...msgs]
+        nova[idx] = { ...nova[idx], imagemStatus: 'erro', imagemErroConteudo: false }
+        return nova
+      })
+    } finally {
+      setGerandoImagem(false)
+    }
+  }
+
   /* ── Streaming core ─────────────────────────────────────────── */
   async function _stream(histMensagens, pdfRequested, imagemEnviada) {
     const body = {
@@ -359,9 +484,27 @@ export default function Dashboard() {
       hasPdfBtn: pdfRequested,
       timestamp: new Date().toISOString(),
     }
+
+    // Auto-detect visual request from the last user message
+    const lastUser = histMensagens.filter(m => m.role === 'user').pop()
+    const userText = lastUser?.content || ''
+    let autoImgSubject = null
+    if (ehProRef.current && IMG_REGEX.test(userText)) {
+      autoImgSubject = extractImageSubject(userText)
+      if (autoImgSubject) {
+        finalMsg.imagemStatus  = 'gerando'
+        finalMsg.imagemLegenda = autoImgSubject
+      }
+    }
+
     const finais = [...histMensagens, finalMsg]
     setMensagens(finais)
     db.saveChat(chatKey, finais)
+
+    // Kick off background image generation (after state update scheduled)
+    if (autoImgSubject) {
+      gerarImagemParaMensagem(autoImgSubject, finalMsg.timestamp, chatKey)
+    }
 
     // Auto-read aloud if TTS is active
     if (vozAtivaRef.current) lerTexto(fullText)
@@ -594,6 +737,67 @@ export default function Dashboard() {
           color: #22c55e !important;
           background: rgba(34,197,94,.1) !important;
         }
+        @keyframes imgShimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        @keyframes imgFadeIn {
+          from { opacity: 0; transform: scale(.97) translateY(6px); }
+          to   { opacity: 1; transform: none; }
+        }
+        .img-skeleton {
+          position: relative; overflow: hidden;
+          height: 200px; border-radius: var(--radius);
+          background: var(--surface-3);
+          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+        }
+        .img-skeleton::after {
+          content: ''; position: absolute; inset: 0;
+          background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.07) 50%, transparent 100%);
+          animation: imgShimmer 1.5s infinite;
+        }
+        .img-result { display: flex; flex-direction: column; }
+        .img-result.has-text { margin-top: 14px; }
+        .img-result-img { width: 100%; display: block; border-radius: var(--radius); animation: imgFadeIn .45s ease; }
+        .img-result-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+        .img-result-caption { font-size: 12px; color: var(--text-4); font-style: italic; }
+        .img-download-btn {
+          display: inline-flex; align-items: center; gap: 4px;
+          font-size: 12px; font-weight: 600; color: var(--brand); text-decoration: none;
+          padding: 4px 9px; border-radius: 20px; background: var(--brand-light);
+          transition: background .12s; border: 1px solid var(--brand-mid);
+        }
+        .img-download-btn:hover { background: var(--brand-mid); }
+        .img-erro-block { margin-top: 10px; padding: 10px 13px; border-radius: var(--radius-sm); background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.18); }
+        .img-erro-title { font-size: 13px; color: #ef4444; font-weight: 500; margin-bottom: 5px; }
+        .img-erro-dica  { font-size: 12.5px; color: var(--text-3); }
+        .img-erro-sugestao { background: none; border: none; padding: 0; cursor: pointer; color: var(--brand); font-weight: 600; font-size: inherit; font-family: inherit; text-decoration: underline; text-underline-offset: 2px; }
+        .img-erro-sugestao:hover { color: var(--brand-hover); }
+        .img-prompt-bar {
+          padding: 10px 14px 10px; border-top: 1px solid var(--border);
+          background: var(--surface); border-radius: var(--radius) var(--radius) 0 0;
+        }
+        .img-prompt-row { display: flex; gap: 8px; align-items: center; }
+        .img-prompt-input {
+          flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+          border-radius: var(--radius); padding: 9px 13px; font-size: 13.5px;
+          color: var(--text-1); font-family: inherit; outline: none;
+        }
+        .img-prompt-input:focus { border-color: var(--brand); }
+        .img-prompt-input::placeholder { color: var(--text-4); }
+        .img-examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .img-example-chip {
+          font-size: 12px; padding: 4px 10px; border-radius: 20px;
+          border: 1px solid var(--border); background: var(--surface-2);
+          color: var(--text-3); cursor: pointer; font-family: inherit;
+          transition: background .12s, color .12s, border-color .12s;
+        }
+        .img-example-chip:hover { background: var(--brand-light); color: var(--brand); border-color: var(--brand-mid); }
+        .img-gen-spinner {
+          position: absolute; bottom: 3px; right: 3px; width: 7px; height: 7px;
+          border-radius: 50%; background: var(--brand);
+          animation: speakPulse .9s ease-in-out infinite;
+        }
       `}</style>
 
       <Sidebar
@@ -682,7 +886,58 @@ export default function Dashboard() {
                           {msg.content && <span>{msg.content}</span>}
                         </>
                       ) : (
-                        <RichMessage content={msg.content} />
+                        <>
+                          {msg.content && <RichMessage content={msg.content} />}
+
+                          {/* Generated image — skeleton while loading */}
+                          {msg.imagemStatus === 'gerando' && (
+                            <div className={`img-skeleton${msg.content ? ' has-text' : ''}`} style={{ marginTop: msg.content ? 14 : 0 }}>
+                              <svg style={{ width: 28, height: 28, color: 'var(--text-4)', opacity: .5 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                              <p style={{ fontSize: 12.5, color: 'var(--text-4)' }}>Gerando imagem…</p>
+                            </div>
+                          )}
+
+                          {/* Image ready */}
+                          {msg.imagemStatus === 'pronta' && msg.imagemUrl && (
+                            <div className={`img-result${msg.content ? ' has-text' : ''}`}>
+                              <img src={msg.imagemUrl} alt={msg.imagemLegenda || 'Imagem gerada'} className="img-result-img" />
+                              <div className="img-result-footer">
+                                {msg.imagemLegenda && (
+                                  <p className="img-result-caption">{msg.imagemLegenda}</p>
+                                )}
+                                <a
+                                  href={msg.imagemUrl}
+                                  download="pointai-imagem.png"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="img-download-btn"
+                                >
+                                  <IcDownload /> Baixar
+                                </a>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Error state */}
+                          {msg.imagemStatus === 'erro' && (
+                            <div className="img-erro-block">
+                              <p className="img-erro-title">
+                                {msg.imagemErroConteudo
+                                  ? 'Não foi possível gerar esta imagem por restrições de conteúdo.'
+                                  : 'Não foi possível gerar a imagem.'}
+                              </p>
+                              <p className="img-erro-dica">
+                                Tente pedir:{' '}
+                                <button
+                                  className="img-erro-sugestao"
+                                  onClick={() => enviar('Desenha um diagrama do sistema nervoso central')}
+                                >
+                                  &ldquo;Desenha um diagrama do sistema nervoso central&rdquo;
+                                </button>
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -822,6 +1077,47 @@ export default function Dashboard() {
 
         {/* Input bar */}
         <div className="chat-input-bar">
+          {/* Image prompt popover */}
+          {showImagePrompt && (
+            <div className="img-prompt-bar">
+              <div className="img-prompt-row">
+                <input
+                  className="img-prompt-input"
+                  placeholder="Descreva o que quer visualizar… ex: ciclo de Krebs"
+                  value={promptImagem}
+                  onChange={e => setPromptImagem(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); gerarImagemManual() }
+                    if (e.key === 'Escape') setShowImagePrompt(false)
+                  }}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-primary"
+                  style={{ flexShrink: 0, padding: '9px 16px', fontSize: 13 }}
+                  onClick={gerarImagemManual}
+                  disabled={!promptImagem.trim()}
+                >
+                  Gerar
+                </button>
+                <button
+                  onClick={() => setShowImagePrompt(false)}
+                  style={{ flexShrink: 0, padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)' }}
+                  aria-label="Fechar"
+                >
+                  <IcX />
+                </button>
+              </div>
+              <div className="img-examples">
+                {IMG_EXAMPLES.map(ex => (
+                  <button key={ex} className="img-example-chip" onClick={() => setPromptImagem(ex)}>
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {imagem && (
             <div className="chat-img-preview">
               <img src={imagem.dataUrl} alt="Preview" />
@@ -882,6 +1178,41 @@ export default function Dashboard() {
                 style={{ position: 'relative' }}
               >
                 <IcHeadphone />
+                <span style={{
+                  position: 'absolute', top: 1, right: 1,
+                  width: 9, height: 9, borderRadius: '50%',
+                  background: '#f59e0b',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="5" height="5" viewBox="0 0 24 24" fill="white">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                </span>
+              </button>
+            )}
+
+            {/* Image generation button — Pro only */}
+            {ehPro ? (
+              <button
+                className={`chat-attach-btn${showImagePrompt ? ' active' : ''}`}
+                onClick={() => setShowImagePrompt(v => !v)}
+                title="Gerar imagem com IA"
+                aria-label="Gerar imagem"
+                style={{ position: 'relative' }}
+              >
+                <IcImage />
+                {gerandoImagem && <span className="img-gen-spinner" />}
+              </button>
+            ) : (
+              <button
+                className="chat-attach-btn"
+                onClick={() => setShowUpgrade(true)}
+                title="Gerar imagem — exclusivo Pro"
+                aria-label="Gerar imagem — exclusivo Pro"
+                style={{ position: 'relative' }}
+              >
+                <IcImage />
                 <span style={{
                   position: 'absolute', top: 1, right: 1,
                   width: 9, height: 9, borderRadius: '50%',

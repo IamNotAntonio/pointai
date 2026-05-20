@@ -12,9 +12,14 @@ function salvar(data) {
   localStorage.setItem(KEY, JSON.stringify(data))
 }
 
+function isDevPro() {
+  try { return localStorage.getItem('pointai_dev_pro') === 'true' } catch { return false }
+}
+
 // Busca o plano do Supabase e atualiza o cache local
 export async function fetchPlano() {
   if (typeof window === 'undefined') return 'gratis'
+  if (isDevPro()) return 'pro'
 
   // Usa cache se ainda válido
   try {
@@ -55,7 +60,7 @@ export function invalidarCachePlano() {
 export function getPlanInfo() {
   const data  = ler()
   const hoje  = new Date().toDateString()
-  const plano = data.plano || 'gratis'
+  const plano = isDevPro() ? 'pro' : (data.plano || 'gratis')
   const mensagensHoje = data.ultimoReset === hoje ? (data.mensagensHoje || 0) : 0
   const limite = plano === 'pro' ? Infinity : 20
   return { plano, mensagensHoje, limite }
@@ -71,7 +76,7 @@ export function incrementarMensagem() {
 }
 
 export function isPro() {
-  return ler().plano === 'pro'
+  return isDevPro() || ler().plano === 'pro'
 }
 
 export function resetarContadorDiario() {
