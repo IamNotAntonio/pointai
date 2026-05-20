@@ -6,7 +6,7 @@ import UpgradeModal from '../components/UpgradeModal'
 import TutorialOverlay from '../components/TutorialOverlay'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
-import { getPlanInfo, incrementarMensagem } from '../lib/plano'
+import { getPlanInfo, incrementarMensagem, fetchPlano } from '../lib/plano'
 import Link from 'next/link'
 import { FileText, Copy, Globe, BookOpen, Calendar, RotateCcw } from 'lucide-react'
 
@@ -105,6 +105,22 @@ function IcMic() {
     </svg>
   )
 }
+function IcHeadphone() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+      <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/>
+      <path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+    </svg>
+  )
+}
+function IcStop() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+    </svg>
+  )
+}
 function IcX() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -164,18 +180,24 @@ export default function Dashboard() {
   const [shareContent,  setShareContent]  = useState(null)
   const [gravando,      setGravando]      = useState(false)
   const [vozDisp,       setVozDisp]       = useState(false)
+  const [vozAtiva,      setVozAtiva]      = useState(false)
+  const [falando,       setFalando]       = useState(false)
+  const [ehPro,         setEhPro]         = useState(false)
   const [showTutorial,  setShowTutorial]  = useState(false)
   const [resumoMateria,  setResumoMateria]  = useState({ mediaNotas: null, proximoEvento: null })
   const [novoChatConfirm, setNovoChatConfirm] = useState(null)
 
-  const fimChat       = useRef(null)
-  const textareaRef   = useRef(null)
-  const fileInputRef  = useRef(null)
+  const fimChat        = useRef(null)
+  const textareaRef    = useRef(null)
+  const fileInputRef   = useRef(null)
   const recognitionRef = useRef(null)
-  const resumoRef     = useRef(resumo)
+  const resumoRef      = useRef(resumo)
+  const audioRef       = useRef(null)
+  const vozAtivaRef    = useRef(false)
 
-  // Keep resumo ref in sync for use inside async stream function
+  // Keep refs in sync for use inside async functions
   useEffect(() => { resumoRef.current = resumo }, [resumo])
+  useEffect(() => { vozAtivaRef.current = vozAtiva }, [vozAtiva])
 
   const chatKey = db.getChatKey(materiaAtiva, topicoAtivo)
 
@@ -193,6 +215,7 @@ export default function Dashboard() {
     setTopicos(db.getTopicos())
     setPlanInfo(getPlanInfo())
     setVozDisp(typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window))
+    fetchPlano().then(plano => setEhPro(plano === 'pro'))
 
     // Mostrar tutorial na primeira visita
     try {
@@ -251,6 +274,47 @@ export default function Dashboard() {
     return Object.keys(historico).length ? historico : null
   }
 
+  /* ── TTS ────────────────────────────────────────────────────── */
+  function limparParaTTS(text) {
+    return stripMarkdown(text)
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .replace(/•\s*/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  }
+
+  function pararAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+      audioRef.current = null
+    }
+    setFalando(false)
+  }
+
+  async function lerTexto(texto) {
+    pararAudio()
+    try {
+      const resp = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: limparParaTTS(texto) }),
+      })
+      if (!resp.ok) return
+      const blob = await resp.blob()
+      const url  = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      setFalando(true)
+      audio.onended = () => { setFalando(false); URL.revokeObjectURL(url); audioRef.current = null }
+      audio.onerror = () => { setFalando(false); URL.revokeObjectURL(url); audioRef.current = null }
+      audio.play()
+    } catch { setFalando(false) }
+  }
+
   /* ── Streaming core ─────────────────────────────────────────── */
   async function _stream(histMensagens, pdfRequested, imagemEnviada) {
     const body = {
@@ -298,6 +362,9 @@ export default function Dashboard() {
     const finais = [...histMensagens, finalMsg]
     setMensagens(finais)
     db.saveChat(chatKey, finais)
+
+    // Auto-read aloud if TTS is active
+    if (vozAtivaRef.current) lerTexto(fullText)
 
     incrementarMensagem()
     setPlanInfo(getPlanInfo())
@@ -506,6 +573,29 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
+      <style>{`
+        @keyframes speakPulse {
+          0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.5), 0 2px 8px rgba(34,197,94,.3); }
+          50%      { box-shadow: 0 0 0 7px rgba(34,197,94,.0), 0 2px 16px rgba(34,197,94,.5); }
+        }
+        @keyframes speakRing {
+          0%,100% { box-shadow: 0 0 0 2px rgba(34,197,94,.4); }
+          50%      { box-shadow: 0 0 0 5px rgba(34,197,94,.0); }
+        }
+        .avatar-speaking {
+          animation: speakPulse 1.1s ease-in-out infinite !important;
+        }
+        .tts-btn-speaking {
+          color: #f87171 !important;
+          background: rgba(239,68,68,.12) !important;
+          animation: speakRing 1.1s ease-in-out infinite;
+        }
+        .tts-btn-active {
+          color: #22c55e !important;
+          background: rgba(34,197,94,.1) !important;
+        }
+      `}</style>
+
       <Sidebar
         perfil={perfil}
         materias={materias}
@@ -579,7 +669,9 @@ export default function Dashboard() {
                 )}
 
                 <div className={`chat-bubble-wrap msg-group ${isUser ? 'user' : ''}`} {...(!isUser && i === 0 ? { 'data-tour': 'msg-bubble-first' } : {})}>
-                  {!isUser && <div className="chat-avatar">P</div>}
+                  {!isUser && (
+                    <div className={`chat-avatar${falando && i === mensagens.length - 1 ? ' avatar-speaking' : ''}`}>P</div>
+                  )}
 
                   <div>
                     {/* Bubble */}
@@ -714,6 +806,7 @@ export default function Dashboard() {
           {carregando && (
             <div className="chat-bubble-wrap">
               <div className="chat-avatar">P</div>
+
               <div className="chat-bubble assistant" style={{ padding:'4px 6px' }}>
                 <div className="typing-dots">
                   <div className="typing-dot" />
@@ -767,6 +860,39 @@ export default function Dashboard() {
                 aria-label={gravando ? 'Parar gravação' : 'Ditado por voz'}
               >
                 <IcMic />
+              </button>
+            )}
+
+            {/* TTS toggle / stop — Pro only */}
+            {ehPro ? (
+              <button
+                className={`chat-mic-btn ${falando ? 'tts-btn-speaking' : vozAtiva ? 'tts-btn-active' : ''}`}
+                onClick={() => { falando ? pararAudio() : setVozAtiva(v => !v) }}
+                title={falando ? 'Parar áudio' : vozAtiva ? 'Desativar leitura em voz alta' : 'Ativar leitura em voz alta'}
+                aria-label={falando ? 'Parar áudio' : 'Leitura em voz alta'}
+              >
+                {falando ? <IcStop /> : <IcHeadphone />}
+              </button>
+            ) : (
+              <button
+                className="chat-mic-btn"
+                onClick={() => setShowUpgrade(true)}
+                title="Funcionalidade exclusiva do plano Pro"
+                aria-label="Leitura em voz alta — exclusivo Pro"
+                style={{ position: 'relative' }}
+              >
+                <IcHeadphone />
+                <span style={{
+                  position: 'absolute', top: 1, right: 1,
+                  width: 9, height: 9, borderRadius: '50%',
+                  background: '#f59e0b',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="5" height="5" viewBox="0 0 24 24" fill="white">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                </span>
               </button>
             )}
 

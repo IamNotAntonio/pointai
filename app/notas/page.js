@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import Sidebar from '../components/Sidebar'
 import PortalImportModal from '../components/PortalImportModal'
 import * as db from '../lib/db'
-import { Download, Target, CheckCircle, Camera, ClipboardList, FileSpreadsheet } from 'lucide-react'
+import { Download, Target, CheckCircle, Camera, ClipboardList, FileSpreadsheet, RefreshCw, X } from 'lucide-react'
 
 const VAZIO = { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
 
@@ -18,11 +18,16 @@ function matchMateria(lista, nome) {
 }
 
 export default function Notas() {
-  const [perfil,       setPerfil]       = useState(null)
-  const [materias,     setMaterias]     = useState([])
-  const [dados,        setDados]        = useState({})
-  const [materiaAtiva, setMateriaAtiva] = useState(null)
-  const [portalModal,  setPortalModal]  = useState(false)
+  const [perfil,        setPerfil]        = useState(null)
+  const [materias,      setMaterias]      = useState([])
+  const [dados,         setDados]         = useState({})
+  const [materiaAtiva,  setMateriaAtiva]  = useState(null)
+  const [portalModal,   setPortalModal]   = useState(false)
+  const [canvasConfig,  setCanvasConfig]  = useState(null)
+  const [moodleConfig,  setMoodleConfig]  = useState(null)
+  const [syncingCanvas, setSyncingCanvas] = useState(false)
+  const [syncingMoodle, setSyncingMoodle] = useState(false)
+  const [toast,         setToast]         = useState(null)
 
   const [modal, setModal] = useState({
     aberto: false, aba: 'foto',
@@ -32,6 +37,11 @@ export default function Notas() {
 
   const importFileRef   = useRef(null)
   const planilhaFileRef = useRef(null)
+
+  function mostrarToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3500)
+  }
 
   useEffect(() => {
     async function carregar() {
@@ -51,7 +61,91 @@ export default function Notas() {
       }
     }
     carregar()
+
+    // Detect OAuth callback
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const canvasStatus = params.get('canvas')
+      const canvasDomain = params.get('canvas_domain')
+      if (canvasStatus === 'connected' && canvasDomain) {
+        const cfg = { via: 'oauth', dominio: canvasDomain }
+        localStorage.setItem('pointai_canvas', JSON.stringify(cfg))
+        setCanvasConfig(cfg)
+        mostrarToast('Canvas conectado com sucesso!')
+        window.history.replaceState({}, '', window.location.pathname)
+      } else if (canvasStatus === 'error') {
+        mostrarToast('Erro ao conectar com o Canvas. Tente novamente.')
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    }
+
+    // Read saved integration configs
+    try {
+      const cv = JSON.parse(localStorage.getItem('pointai_canvas') || 'null')
+      if (cv?.dominio) setCanvasConfig(cv)
+    } catch {}
+    try {
+      const md = JSON.parse(localStorage.getItem('pointai_moodle') || 'null')
+      if (md?.dominio) setMoodleConfig(md)
+    } catch {}
   }, [])
+
+  async function quickSyncCanvas() {
+    if (!canvasConfig) return
+    setSyncingCanvas(true)
+    try {
+      let resp
+      if (canvasConfig.via === 'oauth') {
+        resp = await fetch('/api/canvas/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'notas' }),
+        })
+      } else {
+        resp = await fetch('/api/canvas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: canvasConfig.token, dominio: canvasConfig.dominio, tipo: 'notas' }),
+        })
+      }
+      const result = await resp.json()
+      if (result.erro) mostrarToast(result.erro)
+      else {
+        aplicarPreviewNotas(result.dados.materias)
+        mostrarToast('Notas importadas do Canvas!')
+      }
+    } catch { mostrarToast('Erro ao conectar com o Canvas.') }
+    setSyncingCanvas(false)
+  }
+
+  async function quickSyncMoodle() {
+    if (!moodleConfig) return
+    setSyncingMoodle(true)
+    try {
+      const resp   = await fetch('/api/moodle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: moodleConfig.token, dominio: moodleConfig.dominio, tipo: 'notas' }),
+      })
+      const result = await resp.json()
+      if (result.erro) mostrarToast(result.erro)
+      else {
+        aplicarPreviewNotas(result.dados.materias)
+        mostrarToast('Notas importadas do Moodle!')
+      }
+    } catch { mostrarToast('Erro ao conectar com o Moodle.') }
+    setSyncingMoodle(false)
+  }
+
+  function desconectarCanvas() {
+    localStorage.removeItem('pointai_canvas')
+    setCanvasConfig(null)
+  }
+
+  function desconectarMoodle() {
+    localStorage.removeItem('pointai_moodle')
+    setMoodleConfig(null)
+  }
 
   function salvar(novo) {
     setDados(novo)
@@ -245,6 +339,46 @@ export default function Notas() {
           </div>
         </div>
 
+        {/* Connection banners */}
+        {(canvasConfig || moodleConfig) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 0 16px' }}>
+            {canvasConfig && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 10, padding: '9px 14px' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', letterSpacing: '.04em', textTransform: 'uppercase' }}>Canvas</span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'monospace', flex: 1 }}>{canvasConfig.dominio}</span>
+                <button
+                  onClick={quickSyncCanvas}
+                  disabled={syncingCanvas}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: '#22c55e', background: 'none', border: 'none', cursor: syncingCanvas ? 'default' : 'pointer', opacity: syncingCanvas ? .6 : 1, padding: '2px 6px' }}
+                >
+                  <RefreshCw size={12} strokeWidth={2.5} style={{ animation: syncingCanvas ? 'spin 1s linear infinite' : 'none' }} />
+                  {syncingCanvas ? 'Sincronizando...' : 'Sincronizar'}
+                </button>
+                <button onClick={desconectarCanvas} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', padding: 2 }}>
+                  <X size={13} strokeWidth={2} />
+                </button>
+              </div>
+            )}
+            {moodleConfig && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(59,130,246,.06)', border: '1px solid rgba(59,130,246,.2)', borderRadius: 10, padding: '9px 14px' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', letterSpacing: '.04em', textTransform: 'uppercase' }}>Moodle</span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'monospace', flex: 1 }}>{moodleConfig.dominio}</span>
+                <button
+                  onClick={quickSyncMoodle}
+                  disabled={syncingMoodle}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: '#3b82f6', background: 'none', border: 'none', cursor: syncingMoodle ? 'default' : 'pointer', opacity: syncingMoodle ? .6 : 1, padding: '2px 6px' }}
+                >
+                  <RefreshCw size={12} strokeWidth={2.5} style={{ animation: syncingMoodle ? 'spin 1s linear infinite' : 'none' }} />
+                  {syncingMoodle ? 'Sincronizando...' : 'Sincronizar'}
+                </button>
+                <button onClick={desconectarMoodle} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', padding: 2 }}>
+                  <X size={13} strokeWidth={2} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="page-scroll">
           <div className="grid-3" style={{ marginBottom: 20 }}>
             <div className="stat-card">
@@ -327,6 +461,22 @@ export default function Notas() {
         onSaveNotas={(previewMaterias) => { aplicarPreviewNotas(previewMaterias) }}
         onSaveEventos={() => {}}
       />
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          background: '#141414', color: '#fff', borderRadius: 10,
+          padding: '11px 20px', fontSize: 13, fontWeight: 600,
+          boxShadow: '0 8px 24px rgba(0,0,0,.4)',
+          border: '1px solid rgba(34,197,94,.4)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          zIndex: 99999, whiteSpace: 'nowrap',
+        }}>
+          <span style={{ color: '#22c55e', fontSize: 16 }}>✓</span>
+          {toast}
+        </div>
+      )}
 
       {/* ── AI Import Modal (foto / texto / planilha) ── */}
       {modal.aberto && (
