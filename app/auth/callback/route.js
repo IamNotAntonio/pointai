@@ -41,7 +41,7 @@ export async function GET(request) {
     .maybeSingle()
 
   if (!perfil?.nome) {
-    return NextResponse.redirect(new URL('/onboarding', origin))
+    return NextResponse.redirect(new URL('/onboarding?from=callback', origin))
   }
 
   return NextResponse.redirect(new URL('/dashboard', origin))

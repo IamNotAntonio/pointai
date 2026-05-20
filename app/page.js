@@ -480,6 +480,7 @@ function useScrollReveal(selector = '.reveal') {
 export default function Home() {
   const [scrolled, setScrolled] = useState(false)
   const [activeTab, setActiveTab] = useState('chat')
+  const [supportOpen, setSupportOpen] = useState(false)
   useScrollReveal('.reveal')
 
   useEffect(() => {
@@ -546,7 +547,7 @@ export default function Home() {
         .wrap{max-width:1200px;margin:0 auto}
         .sec-eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#22c55e;margin-bottom:12px}
         .sec-title{font-size:clamp(30px,4vw,50px);font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1.14;margin-bottom:16px}
-        .sec-sub{font-size:16px;color:#71717a;line-height:1.72;max-width:460px}
+        .sec-sub{font-size:16px;color:#c4c4c4;line-height:1.72;max-width:460px}
 
         /* ── Features ── */
         .features-header{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:end;margin-bottom:64px}
@@ -560,7 +561,7 @@ export default function Home() {
         .feat-icon-wrap{width:56px;height:56px;border-radius:16px;background:rgba(26,122,74,.08);border:1px solid rgba(26,122,74,.16);display:flex;align-items:center;justify-content:center;margin-bottom:20px;color:#22c55e;position:relative;z-index:1;transition:background .3s,border-color .3s}
         .feat-card:hover .feat-icon-wrap{background:rgba(26,122,74,.14);border-color:rgba(34,197,94,.28)}
         .feat-title{font-size:15px;font-weight:700;color:#e4e4e7;margin-bottom:10px;position:relative;z-index:1}
-        .feat-desc{font-size:13.5px;color:#a1a1aa;line-height:1.7;position:relative;z-index:1}
+        .feat-desc{font-size:13.5px;color:#b0b0b0;line-height:1.7;position:relative;z-index:1}
 
         /* ── How it works ── */
         .how-bg{background:#070707;border-top:1px solid #111;border-bottom:1px solid #111}
@@ -570,7 +571,7 @@ export default function Home() {
         .step:last-child{border:none}
         .step-num{width:44px;height:44px;border-radius:50%;flex-shrink:0;background:rgba(26,122,74,.08);border:1px solid rgba(26,122,74,.2);color:#22c55e;font-size:15px;font-weight:900;display:flex;align-items:center;justify-content:center}
         .step-title{font-size:16px;font-weight:700;color:#e4e4e7;margin-bottom:6px}
-        .step-desc{font-size:14px;color:#a1a1aa;line-height:1.65}
+        .step-desc{font-size:14px;color:#c4c4c4;line-height:1.65}
 
         /* ── Preview tabs ── */
         .preview-bg{background:#0c0c0c}
@@ -595,7 +596,7 @@ export default function Home() {
         .tcard{background:#0c0c0c;border:1px solid #181818;border-radius:20px;padding:28px;display:flex;flex-direction:column;transition:border-color .25s,transform .25s,box-shadow .25s}
         .tcard:hover{border-color:rgba(26,122,74,.3);transform:translateY(-4px);box-shadow:0 24px 60px rgba(0,0,0,.4),0 0 0 1px rgba(26,122,74,.1)}
         .tcard-stars{display:flex;gap:3px;margin-bottom:16px}
-        .tcard-quote{font-size:14px;color:#a1a1aa;line-height:1.76;font-style:italic;flex:1;margin-bottom:24px}
+        .tcard-quote{font-size:14px;color:#c4c4c4;line-height:1.76;font-style:italic;flex:1;margin-bottom:24px}
         .tcard-author{display:flex;align-items:center;gap:12px}
         .tcard-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;background:rgba(26,122,74,.1);border:1px solid rgba(26,122,74,.2);color:#22c55e;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
         .tcard-name{font-size:14px;font-weight:700;color:#e4e4e7}
@@ -605,7 +606,7 @@ export default function Home() {
         .fcta{padding:130px 24px;text-align:center;background:linear-gradient(180deg,rgba(26,122,74,.06) 0%,rgba(12,12,12,0) 40%),radial-gradient(ellipse 70% 60% at 50% 0%,rgba(26,122,74,.14) 0%,transparent 70%);border-top:1px solid #111;position:relative;overflow:hidden}
         .fcta-glow{position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(ellipse,rgba(26,122,74,.1) 0%,transparent 70%);pointer-events:none}
         .fcta-title{font-size:clamp(34px,5.5vw,66px);font-weight:900;color:#fff;letter-spacing:-2.5px;line-height:1.08;margin-bottom:20px}
-        .fcta-sub{font-size:18px;color:#a1a1aa;margin-bottom:40px}
+        .fcta-sub{font-size:18px;color:#c4c4c4;margin-bottom:40px}
         .fcta-note{font-size:13px;color:#71717a;margin-top:20px;display:flex;align-items:center;justify-content:center;gap:16px}
         .fcta-note-item{display:flex;align-items:center;gap:6px}
 
@@ -654,13 +655,35 @@ export default function Home() {
         }
       `}</style>
 
+      {/* ─── Support Modal ──────────────────────────────────────────── */}
+      {supportOpen && (
+        <div onClick={() => setSupportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.72)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 24, padding: '40px 36px', maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 40px 100px rgba(0,0,0,.8)' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(26,122,74,.1)', border: '1px solid rgba(34,197,94,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <h3 style={{ fontSize: 21, fontWeight: 800, color: '#f4f4f5', marginBottom: 12, letterSpacing: '-0.5px' }}>Suporte em breve</h3>
+            <p style={{ fontSize: 14, color: '#a1a1aa', lineHeight: 1.75, marginBottom: 28 }}>
+              Estamos preparando nosso canal de suporte dedicado. Enquanto isso, conte com o{' '}
+              <strong style={{ color: '#e4e4e7' }}>Assistente Point</strong> dentro do app — ele responde dúvidas sobre o uso da plataforma.
+            </p>
+            <button onClick={() => setSupportOpen(false)} style={{ background: '#1a7a4a', color: '#fff', border: 'none', borderRadius: 10, padding: '11px 28px', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ─── Navbar ─────────────────────────────────────────────────── */}
       <nav className={`nav ${scrolled ? 'solid' : ''}`}>
         <span className="nav-logo">Point.AI</span>
         <div className="nav-links">
           <a href="#funcionalidades" className="nav-link">Funcionalidades</a>
           <a href="#como-funciona" className="nav-link">Como funciona</a>
-          <Link href="/onboarding" className="nav-link">Entrar</Link>
+          <button onClick={() => setSupportOpen(true)} className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>Suporte</button>
+          <Link href="/login" className="nav-link">Entrar</Link>
           <Link href="/onboarding" className="nav-cta">Começar grátis</Link>
         </div>
       </nav>
@@ -683,7 +706,7 @@ export default function Home() {
               não com esforço.
             </h1>
 
-            <p style={{ fontSize: 15, color: '#a1a1aa', margin: '14px 0 0', animation: 'fadeUp .7s .28s both', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 15, color: '#c4c4c4', margin: '14px 0 0', animation: 'fadeUp .7s .28s both', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
               Para <CourseTypewriter /> e muito mais.
             </p>
 
@@ -743,10 +766,12 @@ export default function Home() {
           </div>
 
           <div className="reveal d2" style={{ marginTop: 28, textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: '#a1a1aa', marginBottom: 10 }}>
-              e mais de 50 outros cursos reconhecidos automaticamente
+            <p style={{ fontSize: 14, color: '#f4f4f5', marginBottom: 10 }}>
+              e mais de{' '}
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>50</span>
+              {' '}outros cursos reconhecidos automaticamente
             </p>
-            <p style={{ fontSize: 13, color: '#a1a1aa' }}>
+            <p style={{ fontSize: 13, color: '#c4c4c4' }}>
               Se o seu curso não aparecer, basta digitar — o Point.AI aprende qualquer área.
             </p>
           </div>
@@ -998,10 +1023,12 @@ export default function Home() {
       {/* ─── Footer ─────────────────────────────────────────────────── */}
       <footer className="footer">
         <span className="nav-logo">Point.AI</span>
-        <p className="footer-copy">&copy; 2026 Point.AI — Construído para universitários brasileiros</p>
+        <p className="footer-copy">&copy; 2026 Point.AI &mdash; Feito para universitários brasileiros</p>
         <div className="footer-links">
-          <a href="#" className="footer-a">Privacidade</a>
-          <a href="#" className="footer-a">Termos</a>
+          <Link href="/privacidade" className="footer-a">Política de Privacidade</Link>
+          <Link href="/termos" className="footer-a">Termos de Uso</Link>
+          <button onClick={() => setSupportOpen(true)} className="footer-a" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Suporte</button>
+          <a href="mailto:contato@pointai.com.br" className="footer-a">Contato</a>
         </div>
       </footer>
     </>

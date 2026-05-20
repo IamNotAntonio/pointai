@@ -82,6 +82,18 @@ export default function Onboarding() {
   const err = getError(etapa, st)
   const ok  = err === null
 
+  // When returning from Google OAuth (first-time user), recover localStorage profile and save to DB
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('from') !== 'callback') return
+    try {
+      const stored = localStorage.getItem('pointai_perfil')
+      if (!stored) return
+      const p = JSON.parse(stored)
+      if (p?.nome) savePerfil(p).then(() => router.push('/dashboard'))
+    } catch {}
+  }, [])
+
   useEffect(() => {
     if (etapa !== 4) return
     setLoadingSubj(true)
@@ -185,8 +197,8 @@ export default function Onboarding() {
                   </div>
                 ))}
               </div>
-              <button className="ob-final-btn" onClick={() => router.push('/dashboard')}>
-                Começar a usar o Point.AI →
+              <button className="ob-final-btn" onClick={() => router.push('/login?novo=1')}>
+                Entrar e salvar meus dados →
               </button>
             </div>
           </main>
