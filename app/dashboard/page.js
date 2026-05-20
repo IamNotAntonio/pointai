@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import UpgradeModal from '../components/UpgradeModal'
@@ -8,19 +8,10 @@ import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
 import { getPlanInfo, incrementarMensagem, fetchPlano } from '../lib/plano'
 import Link from 'next/link'
-import { FileText, Copy, Globe, BookOpen, Calendar, RotateCcw } from 'lucide-react'
+import { FileText, Copy, Globe, BookOpen, Calendar, RotateCcw, HelpCircle } from 'lucide-react'
 
 /* ── Constants ──────────────────────────────────────────────────── */
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
-const IMG_REGEX = /\b(desenh[ae]|ilustr[ae]|me\s+mostr[ae]|mostr[ae]|diagrama|esquema|mapa\s+mental|gráfico\s+de|representação\s+visual|visualiz[ae])\b/i
-
-const IMG_EXAMPLES = [
-  'Ciclo de Krebs',
-  'Rede neural',
-  'Sistema cardiovascular',
-  'Mapa mental de Direito Constitucional',
-]
-
 const QUICK_CHIPS = [
   'Me explica o conteúdo desta matéria',
   'Cria um simulado com 5 questões',
@@ -169,25 +160,6 @@ function IcExpand() {
     </svg>
   )
 }
-function IcImage() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-      <circle cx="8.5" cy="8.5" r="1.5"/>
-      <polyline points="21 15 16 10 5 21"/>
-    </svg>
-  )
-}
-function IcDownload() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="7 10 12 15 17 10"/>
-      <line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-  )
-}
-
 /* ── Component ──────────────────────────────────────────────────── */
 export default function Dashboard() {
   const [perfil,        setPerfil]        = useState(null)
@@ -212,9 +184,10 @@ export default function Dashboard() {
   const [showTutorial,  setShowTutorial]  = useState(false)
   const [resumoMateria,  setResumoMateria]  = useState({ mediaNotas: null, proximoEvento: null })
   const [novoChatConfirm,  setNovoChatConfirm]  = useState(null)
-  const [showImagePrompt,  setShowImagePrompt]  = useState(false)
-  const [promptImagem,     setPromptImagem]     = useState('')
-  const [gerandoImagem,    setGerandoImagem]    = useState(false)
+  const [modoQuiz,         setModoQuiz]         = useState(false)
+  const [quizHistorico,    setQuizHistorico]    = useState([])
+  const [perguntaAtual,    setPerguntaAtual]    = useState('')
+  const [gerandoResumo,    setGerandoResumo]    = useState(false)
 
   const fimChat        = useRef(null)
   const textareaRef    = useRef(null)
@@ -223,12 +196,10 @@ export default function Dashboard() {
   const resumoRef      = useRef(resumo)
   const audioRef       = useRef(null)
   const vozAtivaRef    = useRef(false)
-  const ehProRef       = useRef(false)
 
   // Keep refs in sync for use inside async functions
   useEffect(() => { resumoRef.current = resumo }, [resumo])
   useEffect(() => { vozAtivaRef.current = vozAtiva }, [vozAtiva])
-  useEffect(() => { ehProRef.current = ehPro }, [ehPro])
 
   const chatKey = db.getChatKey(materiaAtiva, topicoAtivo)
 
@@ -346,98 +317,151 @@ export default function Dashboard() {
     } catch { setFalando(false) }
   }
 
-  /* ── Image generation ──────────────────────────────────────── */
-  function extractImageSubject(text) {
-    return text
-      .replace(/\b(desenh[ae]|ilustr[ae]|me\s+mostr[ae]|mostr[ae]|faz[ae]?\s+um[a]?|cri[ae]\s+um[a]?|gera?\s+um[a]?)\b/gi, '')
-      .replace(/\b(diagrama\s+d[eo]?|esquema\s+d[eo]?|mapa\s+mental\s+d[eo]?|gráfico\s+d[eo]?|representação\s+visual\s+d[eo]?)\b/gi, '')
-      .replace(/\b(por\s+favor|para\s+mim|obrigad[ao]|se\s+possível|pra\s+mim)\b/gi, '')
-      .replace(/[.,!?]/g, '')
-      .replace(/^(o|a|os|as|um|uma)\s+/i, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .split(' ').slice(0, 10).join(' ')
-  }
-
-  async function gerarImagemParaMensagem(subject, targetTimestamp, ck) {
-    try {
-      const resp = await fetch('/api/imagem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: subject, materia: materiaAtiva }),
-      })
-      const data = await resp.json()
-      setMensagens(msgs => {
-        const idx = msgs.findIndex(m => m.timestamp === targetTimestamp)
-        if (idx < 0) return msgs
-        const nova = [...msgs]
-        nova[idx] = {
-          ...nova[idx],
-          imagemStatus: data.url ? 'pronta' : 'erro',
-          imagemUrl: data.url || null,
-          imagemErroConteudo: !data.url && data.erro === 'conteudo',
-        }
-        db.saveChat(ck, nova)
-        return nova
-      })
-    } catch {
-      setMensagens(msgs => {
-        const idx = msgs.findIndex(m => m.timestamp === targetTimestamp)
-        if (idx < 0) return msgs
-        const nova = [...msgs]
-        nova[idx] = { ...nova[idx], imagemStatus: 'erro', imagemErroConteudo: false }
-        return nova
-      })
-    }
-  }
-
-  async function gerarImagemManual() {
-    const prompt = promptImagem.trim()
-    if (!prompt || gerandoImagem) return
-    setShowImagePrompt(false)
-    setPromptImagem('')
-    setGerandoImagem(true)
-
-    const tsIA   = new Date().toISOString()
-    const tsUser = new Date(Date.now() - 1).toISOString()
-    const msgUser = { role: 'user', content: `🖼️ ${prompt}`, timestamp: tsUser }
-    const msgIA   = { role: 'assistant', content: '', imagemStatus: 'gerando', imagemLegenda: prompt, timestamp: tsIA }
-
-    const novas = [...mensagens, msgUser, msgIA]
-    setMensagens(novas)
-    db.saveChat(chatKey, novas)
+  /* ── Resumo do chat ─────────────────────────────────────────── */
+  async function gerarResumoChat() {
+    if (gerandoResumo) return
+    setGerandoResumo(true)
+    const tsIA = new Date().toISOString()
+    const msgResumo = { role: 'assistant', content: '', tipo: 'resumo', carregando: true, timestamp: tsIA }
+    setMensagens(prev => [...prev, msgResumo])
 
     try {
-      const resp = await fetch('/api/imagem', {
+      const resp = await fetch('/api/resumo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, materia: materiaAtiva }),
+        body: JSON.stringify({ mensagens, perfil, materia: materiaAtiva }),
       })
       const data = await resp.json()
-      setMensagens(msgs => {
-        const idx = msgs.findIndex(m => m.timestamp === tsIA)
-        if (idx < 0) return msgs
-        const nova = [...msgs]
-        nova[idx] = {
-          ...nova[idx],
-          imagemStatus: data.url ? 'pronta' : 'erro',
-          imagemUrl: data.url || null,
-          imagemErroConteudo: !data.url && data.erro === 'conteudo',
-        }
+      setMensagens(prev => {
+        const idx = prev.findIndex(m => m.timestamp === tsIA)
+        if (idx < 0) return prev
+        const nova = [...prev]
+        nova[idx] = { ...nova[idx], content: data.resumo || '', carregando: false }
         db.saveChat(chatKey, nova)
         return nova
       })
     } catch {
-      setMensagens(msgs => {
-        const idx = msgs.findIndex(m => m.timestamp === tsIA)
-        if (idx < 0) return msgs
-        const nova = [...msgs]
-        nova[idx] = { ...nova[idx], imagemStatus: 'erro', imagemErroConteudo: false }
-        return nova
-      })
+      setMensagens(prev => prev.filter(m => m.timestamp !== tsIA))
     } finally {
-      setGerandoImagem(false)
+      setGerandoResumo(false)
     }
+  }
+
+  /* ── Quiz mode ──────────────────────────────────────────────── */
+  async function iniciarQuiz() {
+    if (carregando || modoQuiz) return
+    const ctx = mensagens.filter(m => !m.tipo && m.content)
+    if (ctx.length < 3) return
+
+    setCarregando(true)
+    try {
+      const resp = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'iniciar', mensagens: ctx, materia: materiaAtiva }),
+      })
+      const data = await resp.json()
+      if (data.pergunta) {
+        const tsIA = new Date().toISOString()
+        const msgQuiz = {
+          role: 'assistant', content: data.pergunta,
+          tipo: 'quiz', subTipo: 'pergunta',
+          numero: 1, total: 5, timestamp: tsIA,
+        }
+        const novas = [...mensagens, msgQuiz]
+        setMensagens(novas)
+        db.saveChat(chatKey, novas)
+        setModoQuiz(true)
+        setPerguntaAtual(data.pergunta)
+        setQuizHistorico([{ pergunta: data.pergunta }])
+        if (vozAtivaRef.current) lerTexto(data.pergunta)
+      }
+    } catch {}
+    setCarregando(false)
+  }
+
+  function encerrarQuiz() {
+    setModoQuiz(false)
+    setPerguntaAtual('')
+    setQuizHistorico([])
+  }
+
+  async function enviarRespostaQuiz(resposta) {
+    if (carregando) return
+    setCarregando(true)
+
+    const tsUser = new Date().toISOString()
+    const msgUser = { role: 'user', content: resposta, timestamp: tsUser }
+    const novas1 = [...mensagens, msgUser]
+    setMensagens(novas1)
+
+    const historicoComResposta = quizHistorico.map((q, i) =>
+      i === quizHistorico.length - 1 ? { ...q, resposta_usuario: resposta } : q
+    )
+
+    try {
+      const resp = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acao: 'responder',
+          mensagens: mensagens.filter(m => !m.tipo),
+          materia: materiaAtiva,
+          historicoQuiz: historicoComResposta,
+          respostaUsuario: resposta,
+        }),
+      })
+      const data = await resp.json()
+
+      if (data.feedback !== undefined) {
+        const tsFeedback = new Date().toISOString()
+        const msgFeedback = {
+          role: 'assistant', content: data.feedback,
+          tipo: 'quiz', subTipo: 'feedback',
+          correta: data.correta, numero: data.numero, timestamp: tsFeedback,
+        }
+        let novas2 = [...novas1, msgFeedback]
+
+        if (data.encerrado) {
+          const tsResult = new Date(Date.now() + 1).toISOString()
+          novas2 = [...novas2, {
+            role: 'assistant', content: '',
+            tipo: 'quiz', subTipo: 'resultado',
+            acertos: data.resultado?.acertos ?? 0,
+            total: data.resultado?.total ?? 5,
+            timestamp: tsResult,
+          }]
+          setModoQuiz(false)
+          setQuizHistorico([])
+          setPerguntaAtual('')
+        } else if (data.proxPergunta) {
+          const tsPergunta = new Date(Date.now() + 2).toISOString()
+          novas2 = [...novas2, {
+            role: 'assistant', content: data.proxPergunta,
+            tipo: 'quiz', subTipo: 'pergunta',
+            numero: data.numero + 1, total: 5, timestamp: tsPergunta,
+          }]
+          setPerguntaAtual(data.proxPergunta)
+          setQuizHistorico(prev => [
+            ...prev.map((q, i) =>
+              i === prev.length - 1 ? { ...q, resposta_usuario: resposta, correta: data.correta } : q
+            ),
+            { pergunta: data.proxPergunta },
+          ])
+        }
+
+        setMensagens(novas2)
+        db.saveChat(chatKey, novas2)
+
+        if (vozAtivaRef.current) {
+          const textoTTS = data.encerrado
+            ? data.feedback
+            : `${data.feedback}. Próxima pergunta: ${data.proxPergunta || ''}`
+          lerTexto(textoTTS)
+        }
+      }
+    } catch {}
+    setCarregando(false)
   }
 
   /* ── Streaming core ─────────────────────────────────────────── */
@@ -485,26 +509,9 @@ export default function Dashboard() {
       timestamp: new Date().toISOString(),
     }
 
-    // Auto-detect visual request from the last user message
-    const lastUser = histMensagens.filter(m => m.role === 'user').pop()
-    const userText = lastUser?.content || ''
-    let autoImgSubject = null
-    if (ehProRef.current && IMG_REGEX.test(userText)) {
-      autoImgSubject = extractImageSubject(userText)
-      if (autoImgSubject) {
-        finalMsg.imagemStatus  = 'gerando'
-        finalMsg.imagemLegenda = autoImgSubject
-      }
-    }
-
     const finais = [...histMensagens, finalMsg]
     setMensagens(finais)
     db.saveChat(chatKey, finais)
-
-    // Kick off background image generation (after state update scheduled)
-    if (autoImgSubject) {
-      gerarImagemParaMensagem(autoImgSubject, finalMsg.timestamp, chatKey)
-    }
 
     // Auto-read aloud if TTS is active
     if (vozAtivaRef.current) lerTexto(fullText)
@@ -526,7 +533,16 @@ export default function Dashboard() {
 
   /* ── Send message ───────────────────────────────────────────── */
   async function enviar(textoParam) {
-    const textoFinal  = typeof textoParam === 'string' ? textoParam : input
+    const textoFinal = typeof textoParam === 'string' ? textoParam : input
+
+    if (modoQuiz) {
+      if (!textoFinal.trim() || carregando) return
+      setInput('')
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      await enviarRespostaQuiz(textoFinal.trim())
+      return
+    }
+
     const temConteudo = textoFinal.trim() || imagem
     if (!temConteudo || carregando) return
 
@@ -708,7 +724,7 @@ export default function Dashboard() {
     </div>
   )
 
-  const podeEnviar  = !carregando && (input.trim() || imagem)
+  const podeEnviar  = !carregando && (input.trim() || (!modoQuiz && imagem))
   const isGeralChat = materiaAtiva === '__geral__'
   const tituloChat  = isGeralChat
     ? 'Chat Geral'
@@ -737,67 +753,46 @@ export default function Dashboard() {
           color: #22c55e !important;
           background: rgba(34,197,94,.1) !important;
         }
-        @keyframes imgShimmer {
-          0%   { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
+        .resumo-badge {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 11px; font-weight: 700; color: var(--brand);
+          text-transform: uppercase; letter-spacing: .06em;
+          background: rgba(26,122,74,.12); border-radius: 20px; padding: 3px 10px;
+          margin-bottom: 10px;
         }
-        @keyframes imgFadeIn {
-          from { opacity: 0; transform: scale(.97) translateY(6px); }
-          to   { opacity: 1; transform: none; }
+        .resumo-pdf-btn {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 12px; font-weight: 600; color: var(--brand);
+          background: var(--brand-light); border: 1px solid var(--brand-mid);
+          border-radius: 20px; padding: 5px 13px; cursor: pointer; font-family: inherit;
+          margin-top: 12px; transition: background .12s;
         }
-        .img-skeleton {
-          position: relative; overflow: hidden;
-          height: 200px; border-radius: var(--radius);
-          background: var(--surface-3);
-          display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+        .resumo-pdf-btn:hover { background: var(--brand-mid); }
+        .quiz-badge {
+          display: inline-flex; align-items: center; gap: 5px;
+          font-size: 11px; font-weight: 700;
+          text-transform: uppercase; letter-spacing: .06em;
+          border-radius: 20px; padding: 3px 10px; margin-bottom: 8px;
         }
-        .img-skeleton::after {
-          content: ''; position: absolute; inset: 0;
-          background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.07) 50%, transparent 100%);
-          animation: imgShimmer 1.5s infinite;
+        .quiz-badge.pergunta { color: #1d4ed8; background: rgba(29,78,216,.1); }
+        .quiz-badge.feedback-ok { color: #15803d; background: rgba(21,128,61,.1); }
+        .quiz-badge.feedback-err { color: #dc2626; background: rgba(220,38,38,.1); }
+        .quiz-resultado {
+          text-align: center; padding: 8px 0 4px;
         }
-        .img-result { display: flex; flex-direction: column; }
-        .img-result.has-text { margin-top: 14px; }
-        .img-result-img { width: 100%; display: block; border-radius: var(--radius); animation: imgFadeIn .45s ease; }
-        .img-result-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
-        .img-result-caption { font-size: 12px; color: var(--text-4); font-style: italic; }
-        .img-download-btn {
-          display: inline-flex; align-items: center; gap: 4px;
-          font-size: 12px; font-weight: 600; color: var(--brand); text-decoration: none;
-          padding: 4px 9px; border-radius: 20px; background: var(--brand-light);
-          transition: background .12s; border: 1px solid var(--brand-mid);
-        }
-        .img-download-btn:hover { background: var(--brand-mid); }
-        .img-erro-block { margin-top: 10px; padding: 10px 13px; border-radius: var(--radius-sm); background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.18); }
-        .img-erro-title { font-size: 13px; color: #ef4444; font-weight: 500; margin-bottom: 5px; }
-        .img-erro-dica  { font-size: 12.5px; color: var(--text-3); }
-        .img-erro-sugestao { background: none; border: none; padding: 0; cursor: pointer; color: var(--brand); font-weight: 600; font-size: inherit; font-family: inherit; text-decoration: underline; text-underline-offset: 2px; }
-        .img-erro-sugestao:hover { color: var(--brand-hover); }
-        .img-prompt-bar {
-          padding: 10px 14px 10px; border-top: 1px solid var(--border);
-          background: var(--surface); border-radius: var(--radius) var(--radius) 0 0;
-        }
-        .img-prompt-row { display: flex; gap: 8px; align-items: center; }
-        .img-prompt-input {
-          flex: 1; background: var(--surface-2); border: 1px solid var(--border);
-          border-radius: var(--radius); padding: 9px 13px; font-size: 13.5px;
-          color: var(--text-1); font-family: inherit; outline: none;
-        }
-        .img-prompt-input:focus { border-color: var(--brand); }
-        .img-prompt-input::placeholder { color: var(--text-4); }
-        .img-examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-        .img-example-chip {
-          font-size: 12px; padding: 4px 10px; border-radius: 20px;
-          border: 1px solid var(--border); background: var(--surface-2);
-          color: var(--text-3); cursor: pointer; font-family: inherit;
-          transition: background .12s, color .12s, border-color .12s;
-        }
-        .img-example-chip:hover { background: var(--brand-light); color: var(--brand); border-color: var(--brand-mid); }
-        .img-gen-spinner {
-          position: absolute; bottom: 3px; right: 3px; width: 7px; height: 7px;
-          border-radius: 50%; background: var(--brand);
-          animation: speakPulse .9s ease-in-out infinite;
-        }
+        .quiz-score { font-size: 34px; font-weight: 800; color: var(--brand); line-height: 1; }
+        .quiz-score-label { font-size: 13px; color: var(--text-3); margin-top: 6px; }
+        .svg-block { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 10px 0; }
+        .svg-block-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+        .svg-block-label { font-size: 11.5px; font-weight: 600; color: var(--text-4); text-transform: uppercase; letter-spacing: .05em; }
+        .svg-block-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-light); border: 1px solid var(--brand-mid); border-radius: 20px; padding: 3px 9px; cursor: pointer; font-family: inherit; transition: background .12s; }
+        .svg-block-btn:hover { background: var(--brand-mid); }
+        .svg-block-canvas { padding: 16px; background: #fff; display: flex; justify-content: center; overflow: auto; }
+        .svg-block-canvas svg { max-width: 100%; height: auto; }
+        .svg-fullscreen-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .svg-fullscreen-inner { position: relative; background: #fff; border-radius: var(--radius-lg); padding: 24px; max-width: 95vw; max-height: 95vh; overflow: auto; }
+        .svg-fullscreen-close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-3); line-height: 1; }
+        .svg-fullscreen-close:hover { color: var(--text-1); }
       `}</style>
 
       <Sidebar
@@ -857,6 +852,44 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Action bar */}
+        {(mensagens.length > 2 || modoQuiz) && (
+          <div className="chat-action-bar">
+            {modoQuiz ? (
+              <>
+                <span className="chat-action-bar-status">
+                  Quiz em andamento
+                </span>
+                <span className="quiz-header-score">
+                  {quizHistorico.filter(q => q.correta).length} acertos
+                </span>
+                <button className="quiz-encerrar-btn" onClick={encerrarQuiz}>
+                  Encerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="chat-action-btn"
+                  onClick={gerarResumoChat}
+                  disabled={gerandoResumo || carregando}
+                >
+                  <FileText size={13} strokeWidth={1.8} />
+                  {gerandoResumo ? 'Gerando…' : 'Resumir conversa'}
+                </button>
+                <button
+                  className="chat-action-btn"
+                  onClick={iniciarQuiz}
+                  disabled={carregando}
+                >
+                  <HelpCircle size={13} strokeWidth={1.8} />
+                  Iniciar quiz
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Messages */}
         <div className="chat-area" data-tour="chat-area">
           {mensagens.map((msg, i) => {
@@ -879,67 +912,71 @@ export default function Dashboard() {
 
                   <div>
                     {/* Bubble */}
-                    <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
-                      {isUser ? (
-                        <>
-                          {msg.image && <img src={msg.image} alt="Imagem enviada" className="chat-bubble-img" />}
-                          {msg.content && <span>{msg.content}</span>}
-                        </>
-                      ) : (
-                        <>
-                          {msg.content && <RichMessage content={msg.content} />}
-
-                          {/* Generated image — skeleton while loading */}
-                          {msg.imagemStatus === 'gerando' && (
-                            <div className={`img-skeleton${msg.content ? ' has-text' : ''}`} style={{ marginTop: msg.content ? 14 : 0 }}>
-                              <svg style={{ width: 28, height: 28, color: 'var(--text-4)', opacity: .5 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                              <p style={{ fontSize: 12.5, color: 'var(--text-4)' }}>Gerando imagem…</p>
+                    {msg.tipo === 'resumo' ? (
+                      <div className="chat-bubble assistant" style={{ borderLeft: '3px solid var(--brand)' }}>
+                        <div className="resumo-badge">
+                          <FileText size={10} strokeWidth={2} /> Resumo da Conversa
+                        </div>
+                        {msg.carregando ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-4)', fontSize: 13 }}>
+                            <div className="typing-dots" style={{ display: 'inline-flex' }}>
+                              <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
                             </div>
-                          )}
-
-                          {/* Image ready */}
-                          {msg.imagemStatus === 'pronta' && msg.imagemUrl && (
-                            <div className={`img-result${msg.content ? ' has-text' : ''}`}>
-                              <img src={msg.imagemUrl} alt={msg.imagemLegenda || 'Imagem gerada'} className="img-result-img" />
-                              <div className="img-result-footer">
-                                {msg.imagemLegenda && (
-                                  <p className="img-result-caption">{msg.imagemLegenda}</p>
-                                )}
-                                <a
-                                  href={msg.imagemUrl}
-                                  download="pointai-imagem.png"
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="img-download-btn"
-                                >
-                                  <IcDownload /> Baixar
-                                </a>
-                              </div>
+                            Gerando resumo…
+                          </div>
+                        ) : (
+                          <>
+                            <RichMessage content={msg.content} />
+                            <button
+                              className="resumo-pdf-btn"
+                              onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: tituloChat })}
+                            >
+                              <FileText size={12} strokeWidth={1.8} /> Baixar em PDF
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : msg.tipo === 'quiz' ? (
+                      <div className="chat-bubble assistant">
+                        {msg.subTipo === 'pergunta' && (
+                          <>
+                            <div className="quiz-badge pergunta">
+                              <HelpCircle size={10} strokeWidth={2} /> Questão {msg.numero} de {msg.total}
                             </div>
-                          )}
-
-                          {/* Error state */}
-                          {msg.imagemStatus === 'erro' && (
-                            <div className="img-erro-block">
-                              <p className="img-erro-title">
-                                {msg.imagemErroConteudo
-                                  ? 'Não foi possível gerar esta imagem por restrições de conteúdo.'
-                                  : 'Não foi possível gerar a imagem.'}
-                              </p>
-                              <p className="img-erro-dica">
-                                Tente pedir:{' '}
-                                <button
-                                  className="img-erro-sugestao"
-                                  onClick={() => enviar('Desenha um diagrama do sistema nervoso central')}
-                                >
-                                  &ldquo;Desenha um diagrama do sistema nervoso central&rdquo;
-                                </button>
-                              </p>
+                            <RichMessage content={msg.content} />
+                          </>
+                        )}
+                        {msg.subTipo === 'feedback' && (
+                          <>
+                            <div className={`quiz-badge ${msg.correta ? 'feedback-ok' : 'feedback-err'}`}>
+                              {msg.correta ? '✓ Correto' : '✗ Incorreto'}
                             </div>
-                          )}
-                        </>
-                      )}
-                    </div>
+                            <RichMessage content={msg.content} />
+                          </>
+                        )}
+                        {msg.subTipo === 'resultado' && (
+                          <div className="quiz-resultado">
+                            <div className="quiz-score">{msg.acertos}/{msg.total}</div>
+                            <p className="quiz-score-label">
+                              {msg.acertos === msg.total ? 'Perfeito! Excelente desempenho.' :
+                               msg.acertos >= msg.total * 0.7 ? 'Muito bem! Continue revisando.' :
+                               'Revise o conteúdo e tente novamente.'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
+                        {isUser ? (
+                          <>
+                            {msg.image && <img src={msg.image} alt="Imagem enviada" className="chat-bubble-img" />}
+                            {msg.content && <span>{msg.content}</span>}
+                          </>
+                        ) : (
+                          msg.content && <RichMessage content={msg.content} />
+                        )}
+                      </div>
+                    )}
 
                     {/* Timestamp */}
                     {msg.timestamp && (
@@ -959,7 +996,7 @@ export default function Dashboard() {
                     )}
 
                     {/* Hover actions — user messages */}
-                    {isUser && !carregando && (
+                    {isUser && !carregando && !modoQuiz && !msg.tipo && (
                       <div className="msg-actions user-side">
                         <button
                           className="msg-action-btn"
@@ -972,7 +1009,7 @@ export default function Dashboard() {
                     )}
 
                     {/* Hover actions — AI messages */}
-                    {!isUser && !msg.streaming && msg.content && (
+                    {!isUser && !msg.streaming && msg.content && !msg.tipo && (
                       <div className="msg-actions" {...(i === 0 ? { 'data-tour': 'msg-first' } : {})}>
                         <button
                           className="msg-action-btn"
@@ -1077,47 +1114,6 @@ export default function Dashboard() {
 
         {/* Input bar */}
         <div className="chat-input-bar">
-          {/* Image prompt popover */}
-          {showImagePrompt && (
-            <div className="img-prompt-bar">
-              <div className="img-prompt-row">
-                <input
-                  className="img-prompt-input"
-                  placeholder="Descreva o que quer visualizar… ex: ciclo de Krebs"
-                  value={promptImagem}
-                  onChange={e => setPromptImagem(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { e.preventDefault(); gerarImagemManual() }
-                    if (e.key === 'Escape') setShowImagePrompt(false)
-                  }}
-                  autoFocus
-                />
-                <button
-                  className="btn btn-primary"
-                  style={{ flexShrink: 0, padding: '9px 16px', fontSize: 13 }}
-                  onClick={gerarImagemManual}
-                  disabled={!promptImagem.trim()}
-                >
-                  Gerar
-                </button>
-                <button
-                  onClick={() => setShowImagePrompt(false)}
-                  style={{ flexShrink: 0, padding: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)' }}
-                  aria-label="Fechar"
-                >
-                  <IcX />
-                </button>
-              </div>
-              <div className="img-examples">
-                {IMG_EXAMPLES.map(ex => (
-                  <button key={ex} className="img-example-chip" onClick={() => setPromptImagem(ex)}>
-                    {ex}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {imagem && (
             <div className="chat-img-preview">
               <img src={imagem.dataUrl} alt="Preview" />
@@ -1192,48 +1188,13 @@ export default function Dashboard() {
               </button>
             )}
 
-            {/* Image generation button — Pro only */}
-            {ehPro ? (
-              <button
-                className={`chat-attach-btn${showImagePrompt ? ' active' : ''}`}
-                onClick={() => setShowImagePrompt(v => !v)}
-                title="Gerar imagem com IA"
-                aria-label="Gerar imagem"
-                style={{ position: 'relative' }}
-              >
-                <IcImage />
-                {gerandoImagem && <span className="img-gen-spinner" />}
-              </button>
-            ) : (
-              <button
-                className="chat-attach-btn"
-                onClick={() => setShowUpgrade(true)}
-                title="Gerar imagem — exclusivo Pro"
-                aria-label="Gerar imagem — exclusivo Pro"
-                style={{ position: 'relative' }}
-              >
-                <IcImage />
-                <span style={{
-                  position: 'absolute', top: 1, right: 1,
-                  width: 9, height: 9, borderRadius: '50%',
-                  background: '#f59e0b',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <svg width="5" height="5" viewBox="0 0 24 24" fill="white">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-                  </svg>
-                </span>
-              </button>
-            )}
-
             <textarea
               ref={textareaRef}
               className="chat-textarea"
               value={input}
               onChange={handleInput}
               onKeyDown={handleKeyDown}
-              placeholder={isGeralChat ? 'Pergunte qualquer coisa…' : `Pergunte sobre ${topicoAtivo || materiaAtiva}…`}
+              placeholder={modoQuiz ? 'Digite sua resposta…' : isGeralChat ? 'Pergunte qualquer coisa…' : `Pergunte sobre ${topicoAtivo || materiaAtiva}…`}
               rows={1}
             />
 

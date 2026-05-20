@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -70,10 +70,78 @@ function ChartBlock({ raw }) {
   }
 }
 
+function SvgBlock({ content }) {
+  const [fullscreen, setFullscreen] = useState(false)
+  const containerRef = useRef(null)
+
+  function download() {
+    const blob = new Blob([content], { type: 'image/svg+xml' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = 'diagrama-pointai.svg'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Sanitise: allow only the SVG element itself (no scripts, no foreignObject)
+  const safe = content
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\bon\w+\s*=/gi, 'data-removed=')
+
+  const svgEl = (
+    <div
+      ref={containerRef}
+      dangerouslySetInnerHTML={{ __html: safe }}
+      style={{ lineHeight: 0 }}
+    />
+  )
+
+  return (
+    <>
+      <div className="svg-block">
+        <div className="svg-block-toolbar">
+          <span className="svg-block-label">Diagrama SVG</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="svg-block-btn" onClick={download} title="Baixar .svg">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Baixar
+            </button>
+            <button className="svg-block-btn" onClick={() => setFullscreen(true)} title="Tela cheia">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+              </svg>
+              Expandir
+            </button>
+          </div>
+        </div>
+        <div className="svg-block-canvas">{svgEl}</div>
+      </div>
+
+      {fullscreen && (
+        <div className="svg-fullscreen-overlay" onClick={() => setFullscreen(false)}>
+          <div className="svg-fullscreen-inner" onClick={e => e.stopPropagation()}>
+            <button className="svg-fullscreen-close" onClick={() => setFullscreen(false)}>×</button>
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div dangerouslySetInnerHTML={{ __html: safe }} style={{ maxWidth: '90vw', maxHeight: '85vh' }} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 function CodeBlock({ language, content }) {
   const [copied, setCopied] = useState(false)
 
   if (language === 'chart') return <ChartBlock raw={content} />
+  if (language === 'svg')   return <SvgBlock content={content} />
 
   function copiar() {
     navigator.clipboard.writeText(content).then(() => {

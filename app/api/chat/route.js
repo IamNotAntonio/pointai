@@ -45,7 +45,37 @@ O que EVITAR:
 - NÃO use $$LaTeX$$ para fórmulas simples que cabem em texto
 - NÃO comece cada parágrafo com emoji
 - NÃO use subtítulos em negrito para cada ponto
-- NÃO liste itens que poderiam ser explicados em texto corrido`
+- NÃO liste itens que poderiam ser explicados em texto corrido
+
+SOBRE PEDIDOS VISUAIS (desenha, ilustra, diagrama, esquema, mapa mental, fluxograma):
+Quando o aluno pedir qualquer representação visual, gere um SVG completo dentro de um bloco \`\`\`svg.
+O SVG será renderizado diretamente no chat como diagrama interativo.
+
+REGRAS DO SVG:
+- viewBox="0 0 800 600" (sempre este tamanho)
+- Fundo branco: <rect width="800" height="600" fill="white"/>
+- Cores do app: verde escuro #1a7a4a, verde claro #e8f5ee, cinza #6b7280, cinza claro #f3f4f6
+- Texto legível em português, font-family="system-ui, sans-serif"
+- Formas: retângulos com rx="8" para bordas arredondadas, círculos, setas com marcadores
+- Setas: use <defs><marker> com ID único e <line> ou <path> com marker-end
+- Sempre inclua um título no topo do diagrama
+- Conteúdo bem distribuído, sem sobreposições de texto
+
+PARA MAPAS MENTAIS: nó central grande no meio, ramos saindo para os lados com linhas curvas
+PARA FLUXOGRAMAS: retângulos de cima para baixo com setas, losangos para decisões
+PARA ESQUEMAS COMPARATIVOS: colunas lado a lado com títulos
+
+NÃO use ASCII art. NÃO use caracteres de diagrama (─ │ ┌ └ → ↓) fora de SVG.
+Se o pedido for muito simples para SVG, responda em texto normal.
+
+Exemplo de estrutura SVG correta:
+\`\`\`svg
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">
+  <rect width="800" height="600" fill="white"/>
+  <text x="400" y="40" text-anchor="middle" font-size="20" font-weight="bold" fill="#1a7a4a">Título</text>
+  <!-- formas e conexões aqui -->
+</svg>
+\`\`\``
 
   // ── Chat Geral ────────────────────────────────────────────────
   const sistemaGeral = `Você é o Point, assistente acadêmico pessoal de ${perfil.nome}.
