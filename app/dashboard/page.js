@@ -7,7 +7,8 @@ import TutorialOverlay from '../components/TutorialOverlay'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
 import { getPlanInfo, incrementarMensagem } from '../lib/plano'
-import { FileText, Copy, Globe } from 'lucide-react'
+import Link from 'next/link'
+import { FileText, Copy, Globe, BookOpen, Calendar, RotateCcw } from 'lucide-react'
 
 /* ── Constants ──────────────────────────────────────────────────── */
 const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
@@ -56,6 +57,21 @@ function dataDia(iso) {
 function mesmosDia(a, b) {
   if (!a || !b) return false
   return new Date(a).toDateString() === new Date(b).toDateString()
+}
+
+function formatarData(dataStr) {
+  try {
+    const [y, m, d] = dataStr.split('-')
+    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
+      .toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
+  } catch { return dataStr }
+}
+
+function corMedia(nota) {
+  const n = parseFloat(nota)
+  if (n >= 8.5) return '#4ade80'
+  if (n >= 7.0) return '#fbbf24'
+  return '#f87171'
 }
 
 function stripMarkdown(text) {
@@ -149,6 +165,8 @@ export default function Dashboard() {
   const [gravando,      setGravando]      = useState(false)
   const [vozDisp,       setVozDisp]       = useState(false)
   const [showTutorial,  setShowTutorial]  = useState(false)
+  const [resumoMateria,  setResumoMateria]  = useState({ mediaNotas: null, proximoEvento: null })
+  const [novoChatConfirm, setNovoChatConfirm] = useState(null)
 
   const fimChat       = useRef(null)
   const textareaRef   = useRef(null)
@@ -196,12 +214,12 @@ export default function Dashboard() {
   useEffect(() => {
     if (!chatKey || !perfil) return
     async function carregarChat() {
+      const isGeral = materiaAtiva === '__geral__'
       const [historico, r] = await Promise.all([db.getChat(chatKey), db.getResumo(chatKey)])
       setResumo(r)
       if (historico?.length) {
         setMensagens(historico)
       } else {
-        const isGeral  = materiaAtiva === '__geral__'
         const contexto = topicoAtivo ? `${materiaAtiva} → ${topicoAtivo}` : materiaAtiva
         const msg = isGeral
           ? `Olá, **${perfil.nome}**! 👋 Aqui é o Chat Geral — pode me perguntar qualquer coisa sobre seus estudos, sem focar em uma matéria específica. Dúvidas, técnicas de estudo, planejamento... estou aqui!`
@@ -261,24 +279,16 @@ export default function Dashboard() {
     const reader  = resp.body.getReader()
     const decoder = new TextDecoder()
 
-    // Switch from typing dots to streaming bubble
-    setCarregando(false)
-    setMensagens(prev => [...prev, { role: 'assistant', content: '', streaming: true }])
-
+    // Accumulate silently — typing indicator stays visible throughout
     let fullText = ''
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
       fullText += decoder.decode(value, { stream: true })
-      setMensagens(prev => {
-        const last = prev[prev.length - 1]
-        if (!last?.streaming) return prev
-        return [...prev.slice(0, -1), { ...last, content: fullText }]
-      })
-      fimChat.current?.scrollIntoView({ behavior: 'smooth' })
     }
 
-    // Replace streaming placeholder with final message
+    // Message arrives complete — triggers fade+slide via CSS animation
+    setCarregando(false)
     const finalMsg = {
       role: 'assistant',
       content: fullText,
@@ -336,7 +346,7 @@ export default function Dashboard() {
       await _stream(novasMensagens, pdfRequested, imagemParaEnviar)
     } catch {
       setCarregando(false)
-      setMensagens(prev => prev.filter(m => !m.streaming))
+      // no streaming messages to clean up
     }
   }
 
@@ -350,7 +360,7 @@ export default function Dashboard() {
       await _stream(hist, PDF_REGEX.test(mensagens[msgIndex].content), null)
     } catch {
       setCarregando(false)
-      setMensagens(prev => prev.filter(m => !m.streaming))
+      // no streaming messages to clean up
     }
   }
 
@@ -431,6 +441,57 @@ export default function Dashboard() {
   }
   function handleTopicosUpdate(novosTopicos) { setTopicos(novosTopicos) }
 
+  function carregarResumoMateria(materia) {
+    if (!materia || materia === '__geral__') {
+      setResumoMateria({ mediaNotas: null, proximoEvento: null })
+      return
+    }
+    const norm = s => s?.toLowerCase().trim() || ''
+    // Notas
+    let mediaNotas = null
+    try {
+      const notas = JSON.parse(localStorage.getItem('pointai_notas') || '[]')
+      const mat = notas.find(n =>
+        norm(n.nome) === norm(materia) ||
+        norm(materia).includes(norm(n.nome)) ||
+        norm(n.nome).includes(norm(materia))
+      )
+      if (mat) {
+        const vals = (mat.notas || []).filter(n => n !== '' && !isNaN(parseFloat(n))).map(parseFloat)
+        if (vals.length > 0) mediaNotas = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
+      }
+    } catch {}
+    // Próximo evento
+    let proximoEvento = null
+    try {
+      const hoje = new Date().toISOString().split('T')[0]
+      const eventos = JSON.parse(localStorage.getItem('pointai_eventos') || '[]')
+      proximoEvento = eventos
+        .filter(e => e.data >= hoje && (
+          norm(e.materia) === norm(materia) ||
+          norm(materia).includes(norm(e.materia)) ||
+          norm(e.materia).includes(norm(materia))
+        ))
+        .sort((a, b) => a.data.localeCompare(b.data))[0] || null
+    } catch {}
+    setResumoMateria({ mediaNotas, proximoEvento })
+  }
+
+  useEffect(() => { carregarResumoMateria(materiaAtiva) }, [materiaAtiva])
+
+  function novoChat(materia) {
+    if (!materia || !perfil) return
+    try { localStorage.removeItem(`chat_${materia}`) } catch {}
+    if (materia === materiaAtiva && !topicoAtivo) {
+      const isGeral = materia === '__geral__'
+      const msg = isGeral
+        ? `Olá, **${perfil.nome}**! 👋 Aqui é o Chat Geral — pode me perguntar qualquer coisa sobre seus estudos, sem focar em uma matéria específica. Dúvidas, técnicas de estudo, planejamento... estou aqui!`
+        : `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${materia}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
+      setMensagens([{ role: 'assistant', content: msg, timestamp: new Date().toISOString() }])
+      setResumo(null)
+    }
+  }
+
   if (!perfil) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}>
       <p style={{ color:'var(--text-4)' }}>Carregando...</p>
@@ -455,21 +516,50 @@ export default function Dashboard() {
         onTopicoChange={trocarTopico}
         onTopicosUpdate={handleTopicosUpdate}
         onPerfilUpdate={handlePerfilUpdate}
+        onNovoChat={m => setNovoChatConfirm(m)}
       />
 
       <div className="page-area">
         {/* Header */}
         <div className="chat-header">
-          <div className="chat-header-avatar" style={isGeralChat ? { background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)' } : {}}>
-            {isGeralChat ? <Globe size={14} strokeWidth={2} /> : 'P'}
+          <div
+            className="chat-header-avatar"
+            style={isGeralChat
+              ? { background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', boxShadow: '0 2px 10px rgba(59,130,246,.32), 0 0 0 1px rgba(96,165,250,.2)' }
+              : {}
+            }
+          >
+            {isGeralChat ? <Globe size={16} strokeWidth={2} /> : 'P'}
           </div>
           <div>
             <p className="chat-header-title">{tituloChat}</p>
-            <p className="chat-header-sub">Assistente Point · {isGeralChat ? 'Chat livre' : 'Especialista acadêmico'}</p>
+            <p className="chat-header-sub">Point.AI · {isGeralChat ? 'Chat livre' : 'Especialista acadêmico'}</p>
           </div>
-          <div className="chat-online-wrap">
-            <div className="online-dot" />
-            <span className="chat-online-label">Online</span>
+          <div className="chat-header-right">
+            {isGeralChat && (
+              <button
+                className="chat-header-action"
+                onClick={() => setNovoChatConfirm('__geral__')}
+                title="Novo Chat Geral"
+              >
+                <RotateCcw size={14} strokeWidth={1.8} />
+              </button>
+            )}
+            {!isGeralChat && (
+              <>
+                <Link href="/notas" className="chat-header-action" title="Notas desta matéria">
+                  <BookOpen size={15} strokeWidth={1.8} />
+                </Link>
+                <Link href="/calendario" className="chat-header-action" title="Calendário">
+                  <Calendar size={15} strokeWidth={1.8} />
+                </Link>
+              </>
+            )}
+            <div className="chat-header-sep" />
+            <div className="chat-online-wrap">
+              <div className="online-dot" />
+              <span className="chat-online-label">Online</span>
+            </div>
           </div>
         </div>
 
@@ -498,12 +588,6 @@ export default function Dashboard() {
                         <>
                           {msg.image && <img src={msg.image} alt="Imagem enviada" className="chat-bubble-img" />}
                           {msg.content && <span>{msg.content}</span>}
-                        </>
-                      ) : msg.streaming ? (
-                        // Plain text during streaming — avoid re-parsing incomplete markdown
-                        <>
-                          <span style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{msg.content}</span>
-                          <span className="stream-cursor" aria-hidden="true" />
                         </>
                       ) : (
                         <RichMessage content={msg.content} />
@@ -574,13 +658,54 @@ export default function Dashboard() {
             )
           })}
 
-          {/* Quick chips */}
+          {/* Welcome panel — cards + chips, shown only with welcome message */}
           {mensagens.length === 1 && !carregando && (
-            <div className="chat-chips-wrap">
-              <div className="chat-chips">
-                {(isGeralChat ? QUICK_CHIPS_GERAL : QUICK_CHIPS).map(c => (
-                  <button key={c} className="chat-chip" onClick={() => enviar(c)}>{c}</button>
-                ))}
+            <div className="chat-welcome-panel">
+              {!isGeralChat && (
+                <div className="chat-welcome-cards">
+                  {/* Card: Média */}
+                  <div className="chat-summary-card">
+                    <div className="chat-summary-card-icon">
+                      <BookOpen size={15} strokeWidth={2} />
+                    </div>
+                    <div className="chat-summary-card-body">
+                      <p className="chat-summary-card-label">Média atual</p>
+                      {resumoMateria.mediaNotas != null ? (
+                        <p className="chat-summary-card-value" style={{ color: corMedia(resumoMateria.mediaNotas) }}>
+                          {resumoMateria.mediaNotas}
+                        </p>
+                      ) : (
+                        <Link href="/notas" className="chat-summary-card-empty">Adicionar notas →</Link>
+                      )}
+                    </div>
+                  </div>
+                  {/* Card: Próximo evento */}
+                  <div className="chat-summary-card">
+                    <div className="chat-summary-card-icon calendar">
+                      <Calendar size={15} strokeWidth={2} />
+                    </div>
+                    <div className="chat-summary-card-body">
+                      <p className="chat-summary-card-label">Próximo evento</p>
+                      {resumoMateria.proximoEvento ? (
+                        <>
+                          <p className="chat-summary-card-value sm" title={resumoMateria.proximoEvento.titulo}>
+                            {resumoMateria.proximoEvento.titulo}
+                          </p>
+                          <p className="chat-summary-card-sub">{formatarData(resumoMateria.proximoEvento.data)}</p>
+                        </>
+                      ) : (
+                        <Link href="/calendario" className="chat-summary-card-empty">Ver calendário →</Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="chat-chips-wrap" style={{ padding: '0 0 4px' }}>
+                <div className="chat-chips">
+                  {(isGeralChat ? QUICK_CHIPS_GERAL : QUICK_CHIPS).map(c => (
+                    <button key={c} className="chat-chip" onClick={() => enviar(c)}>{c}</button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -688,6 +813,32 @@ export default function Dashboard() {
           mensagensHoje={planInfo.mensagensHoje}
           limite={planInfo.limite}
         />
+      )}
+
+      {/* Novo chat confirmation modal */}
+      {novoChatConfirm && (
+        <div className="sb-overlay" onClick={() => setNovoChatConfirm(null)}>
+          <div className="sb-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="sb-modal-header">
+              <p className="sb-modal-title">Iniciar novo chat?</p>
+              <button className="sb-modal-close" onClick={() => setNovoChatConfirm(null)}>×</button>
+            </div>
+            <p style={{ fontSize: 13.5, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 20 }}>
+              {novoChatConfirm === '__geral__'
+                ? 'O histórico visual do Chat Geral será apagado. As matérias são mantidas para memória da IA.'
+                : `Iniciar novo chat em "${novoChatConfirm}"? O histórico atual será apagado.`}
+            </p>
+            <div className="sb-modal-footer">
+              <button className="btn btn-ghost" onClick={() => setNovoChatConfirm(null)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => { novoChat(novoChatConfirm); setNovoChatConfirm(null) }}
+              >
+                Iniciar novo chat
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Share modal */}

@@ -58,6 +58,17 @@ const BAR = {
 }
 
 /* ── Helpers ── */
+function tempoAtras(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'agora'
+  if (min < 60) return `há ${min} min`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `há ${h}h`
+  return `há ${Math.floor(h / 24)}d`
+}
+
 function parseSections(text) {
   if (!text) return []
   const raw = text.split(/\n(?=## )/)
@@ -93,6 +104,7 @@ export default function Analise() {
   const [resultado, setResultado]   = useState(null)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro]             = useState(null)
+  const [analises, setAnalises]     = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -106,6 +118,10 @@ export default function Analise() {
       }
     }
     carregarPerfil()
+    try {
+      const saved = JSON.parse(localStorage.getItem('pointai_analises') || '[]')
+      setAnalises(saved)
+    } catch {}
   }, [])
 
   function handlePerfilUpdate(novoPerf) {
@@ -144,6 +160,19 @@ export default function Analise() {
       })
       const dados = await resp.json()
       setResultado(dados.analise)
+      if (dados.analise) {
+        const novaAnalise = {
+          tipo: abaAtiva,
+          materia,
+          preview: dados.analise.replace(/#{1,6}\s/g, '').replace(/\*+/g, '').slice(0, 140),
+          timestamp: new Date().toISOString(),
+        }
+        setAnalises(prev => {
+          const nova = [novaAnalise, ...prev].slice(0, 10)
+          try { localStorage.setItem('pointai_analises', JSON.stringify(nova)) } catch {}
+          return nova
+        })
+      }
     } catch {
       setErro('Erro ao analisar. Tente novamente.')
     } finally {
@@ -208,8 +237,8 @@ export default function Analise() {
 
           <p className="text-sm text-gray-500 dark:text-zinc-400 mb-5">{abaConfig.desc}</p>
 
-          {/* Layout: 2-col when result exists, 1-col otherwise */}
-          <div className={hasResult || carregando ? 'grid grid-cols-2 gap-5 items-start' : 'max-w-[560px]'}>
+          {/* Layout: always 2-col */}
+          <div className="grid grid-cols-2 gap-5 items-start">
 
             {/* Left: input form */}
             <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-5">
@@ -356,7 +385,147 @@ export default function Analise() {
               </div>
             )}
 
+            {/* Right: "Como funciona" — shown when idle (no result, not loading) */}
+            {!hasResult && !carregando && (
+              <div className="flex flex-col gap-3">
+                {/* Como funciona */}
+                <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+                  <div className="h-0.5 bg-green-500" />
+                  <div className="p-5">
+                    <p className="text-sm font-bold text-gray-900 dark:text-zinc-100 mb-4">Como funciona</p>
+                    <div className="flex flex-col gap-3">
+                      {[
+                        {
+                          n: '1',
+                          label: 'Escolha o tipo',
+                          desc: 'Prova, tarefa, trabalho ou anotação',
+                          icon: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                            </svg>
+                          ),
+                        },
+                        {
+                          n: '2',
+                          label: 'Envie o material',
+                          desc: 'Foto ou texto colado diretamente',
+                          icon: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                          ),
+                        },
+                        {
+                          n: '3',
+                          label: 'IA analisa',
+                          desc: 'Leitura profunda do conteúdo acadêmico',
+                          icon: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                          ),
+                        },
+                        {
+                          n: '4',
+                          label: 'Receba feedback',
+                          desc: 'Diagnóstico estruturado e plano de ação',
+                          icon: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                            </svg>
+                          ),
+                        },
+                      ].map(({ n, label, desc, icon }) => (
+                        <div key={n} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                          <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 9, background: 'rgba(26,122,74,.1)', border: '1px solid rgba(26,122,74,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80' }}>
+                            {icon}
+                          </div>
+                          <div>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 1 }}>{label}</p>
+                            <p style={{ fontSize: 12, color: 'var(--text-3)' }}>{desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* O que a IA identifica */}
+                <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-5">
+                  <p className="text-sm font-bold text-gray-900 dark:text-zinc-100 mb-3">O que a IA identifica</p>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { color: '#4ade80', label: 'Pontos fortes e acertos' },
+                      { color: '#f87171', label: 'Erros e conceitos falhos' },
+                      { color: '#fbbf24', label: 'Nota estimada com justificativa' },
+                      { color: '#60a5fa', label: 'Plano de melhoria personalizado' },
+                    ].map(({ color, label }) => (
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
+
+          {/* ── Análises recentes ── */}
+          {analises.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-4)', marginBottom: 10 }}>
+                Análises recentes
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {analises.slice(0, 3).map((a, i) => {
+                  const AbaIcon = ABAS.find(ab => ab.key === a.tipo)?.Icon || FileText
+                  return (
+                    <div key={i} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      <div style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, background: 'rgba(26,122,74,.08)', border: '1px solid rgba(26,122,74,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80' }}>
+                        <AbaIcon size={14} strokeWidth={1.8} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{a.tipo}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-4)' }}>·</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{a.materia}</span>
+                          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-4)', flexShrink: 0 }}>{tempoAtras(a.timestamp)}</span>
+                        </div>
+                        <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.4, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                          {a.preview}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Dicas de uso ── */}
+          <div style={{ marginTop: 32, marginBottom: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text-4)', marginBottom: 12 }}>
+              Dicas de uso
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+              {[
+                { Icon: FileText,      title: 'Foto de prova',    desc: 'Tire uma foto da sua prova corrigida para um diagnóstico completo com nota estimada e pontos a revisar.' },
+                { Icon: ClipboardList, title: 'Cole uma tarefa',   desc: 'Copie o enunciado e sua resposta para receber feedback detalhado sobre erros conceituais.' },
+                { Icon: BookOpen,      title: 'Analise anotações', desc: 'Verifique se suas anotações de aula estão corretas e completas antes da próxima prova.' },
+              ].map(({ Icon, title, desc }) => (
+                <div key={title} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(26,122,74,.08)', border: '1px solid rgba(26,122,74,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4ade80', marginBottom: 10 }}>
+                    <Icon size={16} strokeWidth={1.8} />
+                  </div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 5 }}>{title}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.55 }}>{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

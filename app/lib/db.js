@@ -288,6 +288,36 @@ export async function updatePlano(plano, planoExpira = null) {
   }
 }
 
+// ── Resumo do aluno (cross-material memory) ────────────────────
+export function getResumoAluno() {
+  if (typeof window === 'undefined') return null
+  try {
+    const perfil = JSON.parse(localStorage.getItem('pointai_perfil') || '{}')
+    const materias = (perfil.materias || '').split(',').map(m => m.trim()).filter(Boolean)
+    if (!materias.length) return null
+
+    const ultimosTemas = []
+    for (const m of materias) {
+      try {
+        const raw = localStorage.getItem(`chat_${m}`)
+        if (!raw) continue
+        const msgs = JSON.parse(raw)
+        if (!Array.isArray(msgs) || msgs.length < 2) continue
+        msgs.filter(msg => msg.role === 'user').slice(-4).forEach(msg => {
+          if (msg.content?.length > 5)
+            ultimosTemas.push({ materia: m, tema: msg.content.slice(0, 120) })
+        })
+      } catch {}
+    }
+
+    return {
+      materias,
+      ultimosTemas: ultimosTemas.slice(-15),
+      temDados: ultimosTemas.length > 0,
+    }
+  } catch { return null }
+}
+
 // ── Resumo (long memory) ────────────────────────────────────────
 export async function saveResumo(chatKey, resumo) {
   localStorage.setItem(`resumo_${chatKey}`, resumo)

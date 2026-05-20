@@ -7,7 +7,7 @@ import Notificacoes from './Notificacoes'
 import {
   MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
   ChevronDown, ChevronLeft, ChevronRight, Edit, Star, Sun, Moon, LogOut,
-  Folder, Plus, Sparkles, MessageCircle, Globe, HelpCircle,
+  Folder, Plus, Sparkles, MessageCircle, Globe, HelpCircle, RotateCcw,
 } from 'lucide-react'
 
 /* ── Constants ───────────────────────────────────────────────── */
@@ -41,6 +41,7 @@ export default function Sidebar({
   onTopicoChange,
   onTopicosUpdate,
   onPerfilUpdate,
+  onNovoChat,
 }) {
   const pathname    = usePathname()
   const router      = useRouter()
@@ -206,7 +207,12 @@ export default function Sidebar({
         {/* ── Logo ── */}
         <div className="sidebar-header">
           <div style={{ display:'flex', alignItems:'center', justifyContent: collapsed ? 'center' : 'space-between', marginBottom: collapsed ? 0 : 14 }}>
-            {!collapsed && <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }}>Point.AI</Link>}
+            {!collapsed && (
+              <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }}>
+                <span className="sidebar-logo-mark">P</span>
+                Point.AI
+              </Link>
+            )}
             <div style={{ display:'flex', alignItems:'center', gap: collapsed ? 0 : 6 }}>
               {!collapsed && <Notificacoes />}
               <button
@@ -320,14 +326,25 @@ export default function Sidebar({
             <p className="sidebar-section-label">Conversas</p>
 
             {/* Chat Geral */}
-            <button
-              onClick={() => onMateriaChange?.('__geral__')}
-              className={`chat-geral-btn ${materiaAtiva === '__geral__' ? 'active' : ''}`}
-              title="Chat Geral"
-            >
-              <Globe size={14} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-              <span className="chat-geral-text">Chat Geral</span>
-            </button>
+            <div className="sidebar-materia-row">
+              <button
+                onClick={() => onMateriaChange?.('__geral__')}
+                className={`chat-geral-btn ${materiaAtiva === '__geral__' ? 'active' : ''}`}
+                title="Chat Geral"
+              >
+                <Globe size={14} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                <span className="chat-geral-text">Chat Geral</span>
+              </button>
+              {!collapsed && (
+                <button
+                  className="sb-novo-chat-btn"
+                  onClick={e => { e.stopPropagation(); onNovoChat?.('__geral__') }}
+                  title="Novo Chat Geral"
+                >
+                  <RotateCcw size={11} strokeWidth={2.2} />
+                </button>
+              )}
+            </div>
 
             {materias.length > 0 && (
               <>
