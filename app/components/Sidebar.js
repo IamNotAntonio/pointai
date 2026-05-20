@@ -8,6 +8,7 @@ import {
   MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
   ChevronDown, ChevronLeft, ChevronRight, Edit, Star, Sun, Moon, LogOut,
   Folder, Plus, Sparkles, MessageCircle, Globe, HelpCircle, RotateCcw,
+  ClipboardList, Brain,
 } from 'lucide-react'
 
 /* ── Constants ───────────────────────────────────────────────── */
@@ -23,8 +24,10 @@ const NAV_ITEMS = [
   { href: '/calendario',Icon: Calendar,      label: 'Calendário' },
   { href: '/evolucao',  Icon: TrendingUp,    label: 'Minha Evolução' },
   { href: '/trabalhos', Icon: FileText,      label: 'Correção de Trabalhos' },
-  { href: '/analise',   Icon: Search,        label: 'Análise de Materiais', pro: true },
-  { href: '/relatorio', Icon: BarChart2,     label: 'Relatório Semanal',    pro: true },
+  { href: '/analise',   Icon: Search,        label: 'Análise de Materiais',   pro: true },
+  { href: '/relatorio', Icon: BarChart2,     label: 'Relatório Semanal',      pro: true },
+  { href: '/simulado',  Icon: ClipboardList, label: 'Simulado Inteligente',   pro: true },
+  { href: '/plano',     Icon: Brain,         label: 'Plano de Estudos',       pro: true },
 ]
 
 const IC = { size: 13, strokeWidth: 1.8 }

@@ -9,6 +9,8 @@ const PROTECTED = [
   '/trabalhos',
   '/analise',
   '/relatorio',
+  '/simulado',
+  '/plano',
   '/onboarding',
 ]
 
