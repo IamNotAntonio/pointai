@@ -22,7 +22,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ## Architecture
 
-Point.AI is a Next.js 16 app (App Router, JavaScript — no TypeScript) targeting Brazilian university students. It is a personal academic assistant powered by the Anthropic SDK (`claude-sonnet-4-5`).
+Point is a Next.js 16 app (App Router, JavaScript — no TypeScript) targeting Brazilian university students. It is a personal academic assistant powered by the Anthropic SDK (`claude-sonnet-4-5`). The AI feature surfaced inside the product is branded "Point AI"; "Point" alone refers to the platform.
 
 **State persistence**: All user data lives in `localStorage` — no database or auth. The profile is stored under `pointai_perfil`, per-subject chat histories under `chat_<materia>`, grades/absences under `pointai_notas`, and calendar events under `pointai_eventos`. This means all data is browser-local and lost if the user clears storage.
 

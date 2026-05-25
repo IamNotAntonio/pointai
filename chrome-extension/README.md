@@ -1,6 +1,6 @@
-# Point.AI — Extensão Chrome
+# Point — Extensão Chrome
 
-Importa suas notas e frequência diretamente do portal da faculdade para o Point.AI.
+Importa suas notas e frequência diretamente do portal da faculdade para o Point.
 
 ## Como instalar (Modo Desenvolvedor)
 
@@ -17,7 +17,7 @@ Importa suas notas e frequência diretamente do portal da faculdade para o Point
    - Selecione a pasta `chrome-extension` extraída do ZIP
 
 5. **Pronto!**
-   - O ícone Point.AI aparecerá na barra de extensões do Chrome
+   - O ícone Point aparecerá na barra de extensões do Chrome
    - Acesse o portal da sua faculdade — o botão de importação aparece automaticamente
 
 ## Portais suportados
@@ -34,8 +34,8 @@ A extensão detecta automaticamente portais acadêmicos comuns:
 ## Como usar
 
 1. Acesse o portal da sua faculdade e vá até a tela de notas/histórico
-2. Clique no botão **"Importar para Point.AI"** (canto inferior direito)
-3. O Point.AI abre em nova aba com os dados capturados
+2. Clique no botão **"Importar para Point"** (canto inferior direito)
+3. O Point abre em nova aba com os dados capturados
 4. Confirme a importação na página de Notas e Faltas
 
 ## Permissões utilizadas
@@ -45,7 +45,7 @@ A extensão detecta automaticamente portais acadêmicos comuns:
 | `activeTab` | Ler o conteúdo da página atual do portal |
 | `storage` | Guardar dados temporários entre a extração e a importação |
 | `clipboardWrite` | Copiar dados extraídos para área de transferência |
-| `tabs` | Abrir o Point.AI após extração |
+| `tabs` | Abrir o Point após extração |
 
 ## Desenvolvimento
 

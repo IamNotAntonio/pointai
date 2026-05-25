@@ -34,7 +34,7 @@ const EXT_STEPS = [
   { n: 2, Icon: Globe,       cor: '#3b82f6', title: 'Abra as extensões do Chrome', desc: 'Na barra de endereços do Chrome, acesse:', code: 'chrome://extensions' },
   { n: 3, Icon: ToggleRight, cor: '#f59e0b', title: 'Ative o Modo Desenvolvedor',  desc: 'No canto superior direito, ative a chave "Modo do desenvolvedor".', visual: 'toggle' },
   { n: 4, Icon: FolderOpen,  cor: '#8b5cf6', title: 'Carregue a extensão',         desc: 'Clique em "Carregar sem compactação", extraia o ZIP e selecione a pasta extraída.', visual: 'folder' },
-  { n: 5, Icon: CheckCircle, cor: '#22c55e', title: 'Pronto! Extensão instalada',  desc: 'O botão Point.AI aparecerá automaticamente no portal da sua faculdade.' },
+  { n: 5, Icon: CheckCircle, cor: '#22c55e', title: 'Pronto! Extensão instalada',  desc: 'O botão Point aparecerá automaticamente no portal da sua faculdade.' },
 ]
 
 /* ── Option card ────────────────────────────────────────────────── */
@@ -351,7 +351,7 @@ function CanvasView({ tipo, materias, onSaveNotas, onSaveEventos }) {
               autoComplete="off"
             />
             <p style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 6, lineHeight: 1.5 }}>
-              Você será redirecionado ao Canvas para autorizar o acesso. Nenhuma senha é compartilhada com o Point.AI.
+              Você será redirecionado ao Canvas para autorizar o acesso. Nenhuma senha é compartilhada com o Point.
             </p>
           </div>
           {erro && <p className="modal-err" style={{ marginBottom: 12 }}>{erro}</p>}

@@ -93,7 +93,7 @@ export default function UpgradeModal({ onClose, mensagensHoje = 20, limite = 20 
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
             <Sparkles size={28} strokeWidth={1.5} style={{ color: '#22c55e' }} />
           </div>
-          <h2 className="upgrade-title">Point.AI Pro</h2>
+          <h2 className="upgrade-title">Point Pro</h2>
           <p className="upgrade-subtitle">
             Você usou {mensagensHoje} de {limite} mensagens hoje.<br />
             Assine o Pro para estudar sem limites.

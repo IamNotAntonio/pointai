@@ -214,7 +214,7 @@ export default function Onboarding() {
         <div className="ob-grid" /><div className="ob-orb" />
 
         <header className="ob-hdr">
-          <span className="ob-logo">Point.AI</span>
+          <span className="ob-logo">Point</span>
           <div className="ob-prog-area">
             <div className="ob-prog-track">
               <div className="ob-prog-fill" style={{ width: `${progresso}%` }} />
@@ -400,7 +400,7 @@ export default function Onboarding() {
             {etapa === 5 && (<>
               <div className="ob-step-em"><Zap size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
               <h2 className="ob-title">Qual é o seu principal objetivo?</h2>
-              <p className="ob-sub">Isso personaliza como o Point.AI vai te ajudar.</p>
+              <p className="ob-sub">Isso personaliza como o Point AI vai te ajudar.</p>
               <div className="ob-obj-list">
                 {OBJETIVOS.map(o => (
                   <button

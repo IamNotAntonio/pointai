@@ -17,7 +17,7 @@ export default function AssinarErro() {
       <div style={styles.page}>
         <div style={styles.orb} />
         <header style={styles.header}>
-          <span style={styles.logo}>Point.AI</span>
+          <span style={styles.logo}>Point</span>
         </header>
         <main style={styles.main}>
           <div style={styles.card}>

@@ -65,7 +65,7 @@ export default function Trabalhos() {
 
       <div className="page-area">
         {/* Breadcrumb */}
-        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point.AI</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Trabalhos</span></nav>
+        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Trabalhos</span></nav>
 
         <div className="page-header">
           <h1 className="page-title">Correção de Trabalhos</h1>
@@ -134,7 +134,7 @@ export default function Trabalhos() {
                       fontWeight: 700, fontSize: 13, flexShrink: 0,
                     }}>P</div>
                     <div>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Feedback do Point.AI</p>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Feedback do Point AI</p>
                       <p style={{ fontSize: 11, color: 'var(--text-4)' }}>
                         {TIPOS.find(t => t.value === tipo)?.label} · {materia}
                       </p>

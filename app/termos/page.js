@@ -59,7 +59,7 @@ export default function Termos() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Voltar para o Point.AI
+          Voltar para o Point
         </Link>
         <span style={{ color: '#1e1e1e', fontSize: 18 }}>|</span>
         <span style={{ fontSize: 13.5, color: '#3f3f46', fontWeight: 500 }}>Termos de Uso</span>
@@ -83,7 +83,7 @@ export default function Termos() {
             <p style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 10 }}>Legal</p>
             <h1 style={{ fontSize: 36, fontWeight: 900, color: '#f4f4f5', letterSpacing: '-1.5px', lineHeight: 1.1, marginBottom: 14 }}>Termos de Uso</h1>
             <p style={{ fontSize: 14.5, color: '#71717a', lineHeight: 1.7 }}>
-              Ao utilizar o Point.AI, você concorda com estes Termos de Uso. Leia com atenção antes de criar sua conta.
+              Ao utilizar o Point, você concorda com estes Termos de Uso. Leia com atenção antes de criar sua conta.
             </p>
             <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <span className="legal-tag">Última atualização: Maio 2026</span>
@@ -95,13 +95,13 @@ export default function Termos() {
           <section id="aceitacao">
             <h2 className="legal-h2">1. Aceitação dos Termos</h2>
             <p className="legal-p">
-              Ao criar uma conta, acessar ou utilizar o <strong style={{ color: '#e4e4e7' }}>Point.AI</strong>, você declara ter lido, compreendido e concordado com estes Termos de Uso e com nossa <Link href="/privacidade" style={{ color: '#22c55e', textDecoration: 'none' }}>Política de Privacidade</Link>.
+              Ao criar uma conta, acessar ou utilizar o <strong style={{ color: '#e4e4e7' }}>Point</strong>, você declara ter lido, compreendido e concordado com estes Termos de Uso e com nossa <Link href="/privacidade" style={{ color: '#22c55e', textDecoration: 'none' }}>Política de Privacidade</Link>.
             </p>
             <p className="legal-p">
               Se você não concordar com qualquer disposição destes termos, não utilize o serviço. O uso continuado após alterações nos termos constitui aceitação das mesmas.
             </p>
             <p className="legal-p">
-              Para utilizar o Point.AI, você deve ter pelo menos <strong style={{ color: '#e4e4e7' }}>13 anos de idade</strong>. Usuários menores de 18 anos devem ter autorização dos pais ou responsáveis legais.
+              Para utilizar o Point, você deve ter pelo menos <strong style={{ color: '#e4e4e7' }}>13 anos de idade</strong>. Usuários menores de 18 anos devem ter autorização dos pais ou responsáveis legais.
             </p>
           </section>
 
@@ -109,7 +109,7 @@ export default function Termos() {
           <section id="servico">
             <h2 className="legal-h2">2. Descrição do Serviço</h2>
             <p className="legal-p">
-              O Point.AI é uma plataforma de assistência acadêmica que utiliza inteligência artificial para ajudar estudantes universitários brasileiros a melhorar seu desempenho acadêmico.
+              O Point é uma plataforma de assistência acadêmica que utiliza inteligência artificial para ajudar estudantes universitários brasileiros a melhorar seu desempenho acadêmico.
             </p>
             <h3 className="legal-h3">Funcionalidades incluídas</h3>
             <ul className="legal-ul">
@@ -122,7 +122,7 @@ export default function Termos() {
             </ul>
             <div className="legal-box">
               <p className="legal-p" style={{ marginBottom: 0 }}>
-                <strong style={{ color: '#86efac' }}>Natureza do serviço:</strong> O Point.AI é uma ferramenta de apoio educacional. As respostas geradas pela IA têm caráter informativo e de suporte ao estudo. Não substituem orientação de professores, tutores especializados ou profissionais da área de saúde, jurídica ou financeira.
+                <strong style={{ color: '#86efac' }}>Natureza do serviço:</strong> O Point é uma ferramenta de apoio educacional. As respostas geradas pela IA têm caráter informativo e de suporte ao estudo. Não substituem orientação de professores, tutores especializados ou profissionais da área de saúde, jurídica ou financeira.
               </p>
             </div>
           </section>
@@ -130,7 +130,7 @@ export default function Termos() {
           {/* 3 */}
           <section id="cadastro">
             <h2 className="legal-h2">3. Cadastro e Conta</h2>
-            <p className="legal-p">O cadastro no Point.AI é feito exclusivamente via Google OAuth. Ao se cadastrar, você:</p>
+            <p className="legal-p">O cadastro no Point é feito exclusivamente via Google OAuth. Ao se cadastrar, você:</p>
             <ul className="legal-ul">
               <li className="legal-li">Garante que as informações fornecidas são verídicas e atualizadas</li>
               <li className="legal-li">É responsável por manter a confidencialidade da sua conta Google</li>
@@ -145,7 +145,7 @@ export default function Termos() {
           {/* 4 */}
           <section id="uso-aceitavel">
             <h2 className="legal-h2">4. Uso Aceitável</h2>
-            <p className="legal-p">Ao utilizar o Point.AI, você concorda em não:</p>
+            <p className="legal-p">Ao utilizar o Point, você concorda em não:</p>
             <ul className="legal-ul">
               <li className="legal-li">Utilizar o serviço para cometer plágio ou fraude acadêmica</li>
               <li className="legal-li">Tentar acessar dados de outros usuários</li>
@@ -157,7 +157,7 @@ export default function Termos() {
             </ul>
             <h3 className="legal-h3">Uso para fins acadêmicos</h3>
             <p className="legal-p">
-              O Point.AI foi desenvolvido para auxiliar no aprendizado. Incentivamos o uso ético: utilize o assistente para entender conceitos, revisar conteúdo e se preparar para avaliações — não para substituir o aprendizado genuíno.
+              O Point foi desenvolvido para auxiliar no aprendizado. Incentivamos o uso ético: utilize o assistente para entender conceitos, revisar conteúdo e se preparar para avaliações — não para substituir o aprendizado genuíno.
             </p>
           </section>
 
@@ -165,7 +165,7 @@ export default function Termos() {
           <section id="pagamentos">
             <h2 className="legal-h2">5. Planos e Pagamentos</h2>
             <h3 className="legal-h3">Plano gratuito</h3>
-            <p className="legal-p">O Point.AI oferece um plano gratuito com funcionalidades básicas, sem necessidade de cartão de crédito.</p>
+            <p className="legal-p">O Point oferece um plano gratuito com funcionalidades básicas, sem necessidade de cartão de crédito.</p>
             <h3 className="legal-h3">Planos pagos</h3>
             <p className="legal-p">Planos com recursos avançados (como Relatório Semanal Pro) são cobrados mensalmente ou anualmente via Mercado Pago.</p>
             <ul className="legal-ul">
@@ -182,7 +182,7 @@ export default function Termos() {
           <section id="propriedade">
             <h2 className="legal-h2">6. Propriedade Intelectual</h2>
             <p className="legal-p">
-              Todo o conteúdo da plataforma Point.AI — incluindo código, design, logotipo, textos e funcionalidades — é de propriedade exclusiva do Point.AI e protegido pela legislação de propriedade intelectual brasileira (Lei nº 9.610/98).
+              Todo o conteúdo da plataforma Point — incluindo código, design, logotipo, textos e funcionalidades — é de propriedade exclusiva do Point e protegido pela legislação de propriedade intelectual brasileira (Lei nº 9.610/98).
             </p>
             <h3 className="legal-h3">Seus dados e conteúdo</h3>
             <p className="legal-p">
@@ -190,7 +190,7 @@ export default function Termos() {
             </p>
             <div className="legal-box">
               <p className="legal-p" style={{ marginBottom: 0 }}>
-                <strong style={{ color: '#86efac' }}>Conteúdo gerado pela IA:</strong> As respostas geradas pelo assistente são fornecidas como suporte educacional. Verifique sempre informações importantes com fontes primárias. O Point.AI não garante a precisão absoluta de todo conteúdo gerado.
+                <strong style={{ color: '#86efac' }}>Conteúdo gerado pela IA:</strong> As respostas geradas pelo assistente são fornecidas como suporte educacional. Verifique sempre informações importantes com fontes primárias. O Point não garante a precisão absoluta de todo conteúdo gerado.
               </p>
             </div>
           </section>
@@ -198,7 +198,7 @@ export default function Termos() {
           {/* 7 */}
           <section id="responsabilidade">
             <h2 className="legal-h2">7. Limitação de Responsabilidade</h2>
-            <p className="legal-p">O Point.AI é fornecido "como está" (as-is), sem garantias expressas ou implícitas de:</p>
+            <p className="legal-p">O Point é fornecido "como está" (as-is), sem garantias expressas ou implícitas de:</p>
             <ul className="legal-ul">
               <li className="legal-li">Disponibilidade ininterrupta do serviço (buscamos 99% de uptime, mas não garantimos)</li>
               <li className="legal-li">Precisão absoluta das respostas da IA em todos os contextos</li>
@@ -216,7 +216,7 @@ export default function Termos() {
             <p className="legal-p">
               Você pode solicitar a exclusão da sua conta a qualquer momento pelo app ou enviando e-mail para <a href="mailto:privacidade@pointai.com.br" style={{ color: '#22c55e', textDecoration: 'none' }}>privacidade@pointai.com.br</a>. Seus dados serão tratados conforme nossa <Link href="/privacidade" style={{ color: '#22c55e', textDecoration: 'none' }}>Política de Privacidade</Link>.
             </p>
-            <h3 className="legal-h3">Cancelamento pelo Point.AI</h3>
+            <h3 className="legal-h3">Cancelamento pelo Point</h3>
             <p className="legal-p">Podemos suspender ou encerrar sua conta caso haja:</p>
             <ul className="legal-ul">
               <li className="legal-li">Violação destes Termos de Uso</li>
@@ -258,7 +258,7 @@ export default function Termos() {
           <div style={{ marginTop: 60, paddingTop: 32, borderTop: '1px solid #141414', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <Link href="/" style={{ color: '#71717a', fontSize: 13.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              Voltar para o Point.AI
+              Voltar para o Point
             </Link>
             <Link href="/privacidade" style={{ color: '#71717a', fontSize: 13.5, textDecoration: 'none' }}>Ver Política de Privacidade</Link>
           </div>

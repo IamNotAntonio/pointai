@@ -310,7 +310,7 @@ export default function Notas() {
 
       <div className="page-area">
         <nav className="page-breadcrumb">
-          <span className="page-breadcrumb-item">Point.AI</span>
+          <span className="page-breadcrumb-item">Point</span>
           <span className="page-breadcrumb-sep">›</span>
           <span className="page-breadcrumb-current">Notas e Faltas</span>
         </nav>

@@ -400,7 +400,7 @@ function AnimatedChat() {
               <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c }} />
             ))}
           </div>
-          <span style={{ flex: 1, textAlign: 'center', fontSize: 12, color: '#71717a', fontWeight: 500 }}>Point.AI</span>
+          <span style={{ flex: 1, textAlign: 'center', fontSize: 12, color: '#71717a', fontWeight: 500 }}>Point</span>
           <span style={{ background: 'rgba(26,122,74,.12)', border: '1px solid rgba(26,122,74,.22)', color: '#22c55e', fontSize: 10.5, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>{conv.course}</span>
         </div>
 
@@ -681,7 +681,7 @@ export default function Home() {
       <nav className={`nav ${scrolled ? 'solid' : ''}`}>
         <span className="nav-logo">
           <Image src="/logo-mark.png" alt="" width={40} height={40} priority />
-          Point.AI
+          Point
         </span>
         <div className="nav-links">
           <a href="#funcionalidades" className="nav-link">Funcionalidades</a>
@@ -759,7 +759,7 @@ export default function Home() {
               Para qualquer curso,<br />em qualquer faculdade.
             </h2>
             <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto 0', maxWidth: 500 }}>
-              O Point.AI aprende o vocabulário, as cobranças e o estilo de cada área do conhecimento.
+              O Point aprende o vocabulário, as cobranças e o estilo de cada área do conhecimento.
             </p>
           </div>
 
@@ -776,7 +776,7 @@ export default function Home() {
               {' '}outros cursos reconhecidos automaticamente
             </p>
             <p style={{ fontSize: 13, color: '#c4c4c4' }}>
-              Se o seu curso não aparecer, basta digitar — o Point.AI aprende qualquer área.
+              Se o seu curso não aparecer, basta digitar — o Point aprende qualquer área.
             </p>
           </div>
         </div>
@@ -828,7 +828,7 @@ export default function Home() {
                 {
                   n: '2',
                   title: 'A IA aprende com você',
-                  desc: 'O Point.AI personaliza tudo para o seu perfil acadêmico — respostas, exercícios e alertas feitos para você.',
+                  desc: 'O Point personaliza tudo para o seu perfil acadêmico — respostas, exercícios e alertas feitos para você.',
                 },
                 {
                   n: '3',
@@ -860,7 +860,7 @@ export default function Home() {
           <div className="preview-header reveal">
             <p className="sec-eyebrow" style={{ textAlign: 'center' }}>Preview real</p>
             <h2 className="sec-title" style={{ textAlign: 'center' }}>Veja o produto em ação.</h2>
-            <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto', maxWidth: 440 }}>Não é um protótipo. É o Point.AI real, funcionando agora mesmo para milhares de estudantes.</p>
+            <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto', maxWidth: 440 }}>Não é um protótipo. É o Point real, funcionando agora mesmo para milhares de estudantes.</p>
           </div>
 
           <div style={{ marginTop: 40 }} className="reveal d1">
@@ -884,9 +884,9 @@ export default function Home() {
                   ))}
                 </div>
                 <span style={{ flex: 1, textAlign: 'center', fontSize: 12.5, color: '#71717a', fontWeight: 500 }}>
-                  {activeTab === 'chat' && 'Point.AI — Chat · Cálculo I'}
-                  {activeTab === 'notas' && 'Point.AI — Notas e Frequência'}
-                  {activeTab === 'calendario' && 'Point.AI — Calendário Acadêmico'}
+                  {activeTab === 'chat' && 'Point — Chat · Cálculo I'}
+                  {activeTab === 'notas' && 'Point — Notas e Frequência'}
+                  {activeTab === 'calendario' && 'Point — Calendário Acadêmico'}
                 </span>
                 <span style={{ background: 'rgba(26,122,74,.1)', border: '1px solid rgba(26,122,74,.2)', color: '#22c55e', fontSize: 10.5, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>
                   Ao vivo
@@ -1028,9 +1028,9 @@ export default function Home() {
       <footer className="footer">
         <span className="nav-logo">
           <Image src="/logo-mark.png" alt="" width={24} height={24} />
-          Point.AI
+          Point
         </span>
-        <p className="footer-copy">&copy; 2026 Point.AI &mdash; Feito para universitários brasileiros</p>
+        <p className="footer-copy">&copy; 2026 Point &mdash; Feito para universitários brasileiros</p>
         <div className="footer-links">
           <Link href="/privacidade" className="footer-a">Política de Privacidade</Link>
           <Link href="/termos" className="footer-a">Termos de Uso</Link>

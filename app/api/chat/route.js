@@ -78,7 +78,7 @@ Exemplo de estrutura SVG correta:
 \`\`\``
 
   // ── Chat Geral ────────────────────────────────────────────────
-  const sistemaGeral = `Você é o Point, assistente acadêmico pessoal de ${perfil.nome}.
+  const sistemaGeral = `Você é o Point AI, assistente acadêmico pessoal do Point de ${perfil.nome}.
 
 Perfil: ${perfil.curso} · ${perfil.universidade} · ${perfil.semestre}º semestre
 Matérias: ${perfil.materias}
@@ -95,7 +95,7 @@ ${resumo ? `\nMemória desta conversa: ${resumo}` : ''}
 ${estiloResposta}`
 
   // ── Chat por matéria ──────────────────────────────────────────
-  const sistemaMateria = `Você é o Point, assistente acadêmico pessoal de ${perfil.nome}.
+  const sistemaMateria = `Você é o Point AI, assistente acadêmico pessoal do Point de ${perfil.nome}.
 
 Perfil: ${perfil.curso} · ${perfil.universidade} · ${perfil.semestre}º semestre
 Objetivo: ${perfil.objetivo}

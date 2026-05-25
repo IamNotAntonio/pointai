@@ -144,7 +144,7 @@ export default function Evolucao() {
 
       <div className="page-area">
         {/* Breadcrumb */}
-        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point.AI</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Evolução</span></nav>
+        <nav className="page-breadcrumb"><span className="page-breadcrumb-item">Point</span><span className="page-breadcrumb-sep">›</span><span className="page-breadcrumb-current">Evolução</span></nav>
 
         <div className="page-header">
           <h1 className="page-title">Minha Evolução</h1>

@@ -822,7 +822,7 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="chat-header-title">{tituloChat}</p>
-            <p className="chat-header-sub">Point.AI · {isGeralChat ? 'Chat livre' : 'Especialista acadêmico'}</p>
+            <p className="chat-header-sub">Point AI · {isGeralChat ? 'Chat livre' : 'Especialista acadêmico'}</p>
           </div>
           <div className="chat-header-right">
             {isGeralChat && (

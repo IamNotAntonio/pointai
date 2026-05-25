@@ -87,7 +87,7 @@ export default function Login() {
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <Link href="/" style={{ textDecoration: 'none' }}>
-              <p style={{ fontSize: 26, fontWeight: 900, color: '#22c55e', letterSpacing: '-0.5px' }}>Point.AI</p>
+              <p style={{ fontSize: 26, fontWeight: 900, color: '#22c55e', letterSpacing: '-0.5px' }}>Point</p>
             </Link>
             <div style={{ width: 32, height: 2, background: 'linear-gradient(90deg,#1a7a4a,#22c55e)', borderRadius: 99, margin: '8px auto 0' }} />
           </div>

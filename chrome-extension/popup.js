@@ -1,4 +1,4 @@
-// Point.AI — Popup Script
+// Point — Popup Script
 
 const statusDot    = document.getElementById('statusDot')
 const statusLabel  = document.getElementById('statusLabel')
@@ -6,7 +6,7 @@ const pendingBanner = document.getElementById('pendingBanner')
 const btnOpenApp   = document.getElementById('btnOpenApp')
 const btnClear     = document.getElementById('btnClearPending')
 
-// Open Point.AI notas page
+// Open Point notas page
 btnOpenApp.addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://pointai-two.vercel.app/notas' })
   window.close()
@@ -47,7 +47,7 @@ async function checkStatus() {
 
     if (isPointAI) {
       statusDot.className = 'status-dot active'
-      statusLabel.innerHTML = '<strong>Point.AI aberto!</strong> Você pode importar dados do portal da faculdade.'
+      statusLabel.innerHTML = '<strong>Point aberto!</strong> Você pode importar dados do portal da faculdade.'
     } else if (isAcademic) {
       statusDot.className = 'status-dot active'
       statusLabel.innerHTML = '<strong>Portal acadêmico detectado!</strong> Clique no botão verde na página para importar.'

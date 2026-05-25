@@ -214,7 +214,7 @@ export default function Simulado() {
       <div className="page-area">
         {/* Breadcrumb */}
         <nav className="page-breadcrumb">
-          <span className="page-breadcrumb-item">Point.AI</span>
+          <span className="page-breadcrumb-item">Point</span>
           <span className="page-breadcrumb-sep">›</span>
           <span className="page-breadcrumb-current">Simulado Inteligente</span>
         </nav>

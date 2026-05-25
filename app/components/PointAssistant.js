@@ -180,7 +180,7 @@ export default function PointAssistant() {
               <div className="pa-avatar" />
               <div>
                 <p className="pa-title">Assistente Point</p>
-                <p className="pa-subtitle">Coach do Point.AI · Sempre aqui</p>
+                <p className="pa-subtitle">Coach do Point · Sempre aqui</p>
               </div>
             </div>
             <button className="pa-close" onClick={() => setAberto(false)} aria-label="Fechar">

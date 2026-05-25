@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Point.AI — Importar Notas",
+  "name": "Point — Importar Notas",
   "version": "1.0.0",
-  "description": "Importa suas notas e frequência diretamente do portal da faculdade para o Point.AI.",
+  "description": "Importa suas notas e frequência diretamente do portal da faculdade para o Point.",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Point.AI"
+    "default_title": "Point"
   },
   "content_scripts": [
     {

@@ -1,9 +1,9 @@
-// Point.AI — Background Service Worker
+// Point — Background Service Worker
 // Handles communication between content script and popup
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SAVE_IMPORT_DATA') {
-    // Store extracted grade data for Point.AI to consume
+    // Store extracted grade data for Point to consume
     chrome.storage.local.set({
       pointai_pending_import: {
         dados: message.dados,
@@ -11,7 +11,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         timestamp: Date.now(),
       }
     }, () => {
-      // Open Point.AI notas page in a new tab
+      // Open Point notas page in a new tab
       chrome.tabs.create({ url: 'https://pointai-two.vercel.app/notas' })
       // Notify content script
       chrome.tabs.sendMessage(sender.tab.id, { type: 'IMPORT_QUEUED' })

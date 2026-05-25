@@ -59,7 +59,7 @@ export default function Privacidade() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
-          Voltar para o Point.AI
+          Voltar para o Point
         </Link>
         <span style={{ color: '#1e1e1e', fontSize: 18 }}>|</span>
         <span style={{ fontSize: 13.5, color: '#3f3f46', fontWeight: 500 }}>Política de Privacidade</span>
@@ -83,7 +83,7 @@ export default function Privacidade() {
             <p style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 10 }}>Privacidade</p>
             <h1 style={{ fontSize: 36, fontWeight: 900, color: '#f4f4f5', letterSpacing: '-1.5px', lineHeight: 1.1, marginBottom: 14 }}>Política de Privacidade</h1>
             <p style={{ fontSize: 14.5, color: '#71717a', lineHeight: 1.7 }}>
-              Esta política descreve como o Point.AI coleta, usa e protege suas informações pessoais, em conformidade com a Lei Geral de Proteção de Dados — <strong style={{ color: '#a1a1aa' }}>LGPD (Lei nº 13.709/2018)</strong>.
+              Esta política descreve como o Point coleta, usa e protege suas informações pessoais, em conformidade com a Lei Geral de Proteção de Dados — <strong style={{ color: '#a1a1aa' }}>LGPD (Lei nº 13.709/2018)</strong>.
             </p>
             <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <span className="legal-tag">Última atualização: Maio 2026</span>
@@ -95,7 +95,7 @@ export default function Privacidade() {
           <section id="quem-somos">
             <h2 className="legal-h2">1. Quem Somos</h2>
             <p className="legal-p">
-              O <strong style={{ color: '#e4e4e7' }}>Point.AI</strong> é uma plataforma de assistência acadêmica com inteligência artificial, desenvolvida para universitários brasileiros. Nosso objetivo é personalizar o aprendizado com base no perfil de cada estudante.
+              O <strong style={{ color: '#e4e4e7' }}>Point</strong> é uma plataforma de assistência acadêmica com inteligência artificial, desenvolvida para universitários brasileiros. Nosso objetivo é personalizar o aprendizado com base no perfil de cada estudante.
             </p>
             <div className="legal-box">
               <h3 className="legal-h3" style={{ marginTop: 0 }}>Como nos contatar</h3>
@@ -238,7 +238,7 @@ export default function Privacidade() {
           <div style={{ marginTop: 60, paddingTop: 32, borderTop: '1px solid #141414', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <Link href="/" style={{ color: '#71717a', fontSize: 13.5, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, transition: 'color .15s' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-              Voltar para o Point.AI
+              Voltar para o Point
             </Link>
             <Link href="/termos" style={{ color: '#71717a', fontSize: 13.5, textDecoration: 'none' }}>Ver Termos de Uso</Link>
           </div>

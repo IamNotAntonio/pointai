@@ -211,16 +211,16 @@ export default function Sidebar({
         {/* ── Logo ── */}
         <div className="sidebar-header">
           <div style={{ display:'flex', alignItems:'center', justifyContent: collapsed ? 'center' : 'space-between', marginBottom: collapsed ? 0 : 14 }}>
-            <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }} aria-label="Point.AI">
+            <Link href="/dashboard" className="sidebar-logo" style={{ marginBottom:0 }} aria-label="Point">
               <Image
                 src="/logo-mark.png"
-                alt="Point.AI"
+                alt="Point"
                 width={collapsed ? 24 : 28}
                 height={collapsed ? 24 : 28}
                 className="sidebar-logo-mark"
                 priority
               />
-              {!collapsed && <span>Point.AI</span>}
+              {!collapsed && <span>Point</span>}
             </Link>
             <div style={{ display:'flex', alignItems:'center', gap: collapsed ? 0 : 6 }}>
               {!collapsed && <Notificacoes />}

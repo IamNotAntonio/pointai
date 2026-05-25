@@ -44,7 +44,7 @@ FORMATO DO RELATÓRIO:
 ## 🎯 Plano para a Próxima Semana
 [5 ações concretas, priorizadas, com tempo estimado cada]
 
-## 💬 Mensagem do Point
+## 💬 Mensagem do Point AI
 [Mensagem pessoal, motivadora, baseada no objetivo de ${perfil.nome}]
 
 Fale diretamente com ${perfil.nome}. Seja específico com os dados. Seja honesto mas encorajador.`

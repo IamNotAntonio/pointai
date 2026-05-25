@@ -106,7 +106,7 @@ function SucessoConteudo() {
       </div>
 
       <button style={styles.btnPrimary} onClick={() => router.push('/dashboard')}>
-        Começar a usar o Point.AI →
+        Começar a usar o Point →
       </button>
     </div>
   )
@@ -119,7 +119,7 @@ export default function AssinarSucesso() {
       <div style={styles.page}>
         <div style={styles.orb} />
         <header style={styles.header}>
-          <span style={styles.logo}>Point.AI</span>
+          <span style={styles.logo}>Point</span>
         </header>
         <main style={styles.main}>
           <Suspense fallback={<div style={styles.center}><div style={styles.spinner} /></div>}>

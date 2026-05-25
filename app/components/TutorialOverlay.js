@@ -32,7 +32,7 @@ const STEPS = [
   {
     selector:  '[data-tour="pa-fab"]',
     title:     'Assistente Point',
-    desc:      'O coach do app te guia por todas as funcionalidades. Clique para abrir e tirar dúvidas sobre o Point.AI.',
+    desc:      'O coach do app te guia por todas as funcionalidades. Clique para abrir e tirar dúvidas sobre o Point.',
     prefer:    'left',
   },
   {

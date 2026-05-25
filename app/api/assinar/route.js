@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 const PLANOS = {
   mensal: {
-    reason: 'Point.AI Pro — Plano Mensal',
+    reason: 'Point Pro — Plano Mensal',
     auto_recurring: {
       frequency: 1,
       frequency_type: 'months',
@@ -11,7 +11,7 @@ const PLANOS = {
     },
   },
   semestral: {
-    reason: 'Point.AI Pro — Plano Semestral',
+    reason: 'Point Pro — Plano Semestral',
     auto_recurring: {
       frequency: 6,
       frequency_type: 'months',

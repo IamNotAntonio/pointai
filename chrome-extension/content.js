@@ -1,4 +1,4 @@
-// Point.AI — Content Script
+// Point — Content Script
 // Detecta portais acadêmicos (incluindo Canvas LMS) e oferece importação de notas/eventos
 
 ;(function () {
@@ -368,11 +368,11 @@
 
   // ── Label contextual do botão ─────────────────────────────────────
   function labelBotao() {
-    if (!isCanvas()) return 'Importar para Point.AI'
+    if (!isCanvas()) return 'Importar para Point'
     const t = canvasPageType()
-    if (t === 'grades')   return 'Importar notas → Point.AI'
-    if (t === 'calendar') return 'Importar eventos → Point.AI'
-    return 'Importar → Point.AI'
+    if (t === 'grades')   return 'Importar notas → Point'
+    if (t === 'calendar') return 'Importar eventos → Point'
+    return 'Importar → Point'
   }
 
   // ── UI: Botão flutuante ──────────────────────────────────────────
@@ -402,7 +402,7 @@
 
     const btn = document.createElement('button')
     btn.id = 'pointai-fab'
-    btn.setAttribute('title', 'Importar para Point.AI')
+    btn.setAttribute('title', 'Importar para Point')
     btn.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
            stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -449,10 +449,10 @@
 
             if (resp?.ok) {
               mostrarToast(
-                '✓ Dados capturados! O Point.AI foi aberto numa nova aba — clique em "Importar do portal" para confirmar.'
+                '✓ Dados capturados! O Point foi aberto numa nova aba — clique em "Importar do portal" para confirmar.'
               )
             } else {
-              mostrarToast('Erro ao capturar dados. Tente pela opção "Outros portais → Colar texto" no Point.AI.')
+              mostrarToast('Erro ao capturar dados. Tente pela opção "Outros portais → Colar texto" no Point.')
             }
           }
         )
@@ -460,7 +460,7 @@
         btn.disabled = false
         btn.style.opacity = '1'
         label.textContent = labelBotao()
-        mostrarToast('Erro ao ler a página. Tente pela opção "Outros portais → Colar texto" no Point.AI.')
+        mostrarToast('Erro ao ler a página. Tente pela opção "Outros portais → Colar texto" no Point.')
       }
     })
 
@@ -491,7 +491,7 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'IMPORT_QUEUED') {
-      mostrarToast('✓ Dados capturados! Abrindo Point.AI...')
+      mostrarToast('✓ Dados capturados! Abrindo Point...')
     }
   })
 

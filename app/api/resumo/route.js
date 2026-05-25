@@ -12,7 +12,7 @@ export async function POST(req) {
   const contexto = mensagens
     .filter(m => m.content && !m.tipo)
     .slice(-40)
-    .map(m => `${m.role === 'user' ? 'Aluno' : 'Point.AI'}: ${m.content.slice(0, 300)}`)
+    .map(m => `${m.role === 'user' ? 'Aluno' : 'Point AI'}: ${m.content.slice(0, 300)}`)
     .join('\n\n')
 
   if (!contexto.trim()) {
