@@ -2,28 +2,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { savePerfil, getUserId } from '../lib/db'
+import { cursoReconhecido, filtrarCursos } from '../lib/cursos'
+import { buscarUniversidade, filtrarUniversidades } from '../lib/universidades'
 import { User, GraduationCap, Building2, Calendar, BookOpen, Zap, Target, TrendingUp, ClipboardList, Pencil, CheckCircle } from 'lucide-react'
-
-const CURSOS = [
-  'Administração','Agronomia','Arquitetura e Urbanismo','Biomedicina',
-  'Ciência da Computação','Ciências Contábeis','Ciências Econômicas',
-  'Comunicação Social','Direito','Educação Física','Enfermagem',
-  'Engenharia Civil','Engenharia de Computação','Engenharia de Produção',
-  'Engenharia Elétrica','Engenharia Mecânica','Engenharia Química',
-  'Farmácia','Filosofia','Fisioterapia','Fonoaudiologia',
-  'Jornalismo','Letras','Matemática','Medicina','Medicina Veterinária',
-  'Nutrição','Odontologia','Pedagogia','Psicologia',
-  'Publicidade e Propaganda','Química','Relações Internacionais',
-  'Serviço Social','Sistemas de Informação',
-]
-
-const UNIVERSIDADES = [
-  'USP','UNICAMP','UNESP','UFMG','UFRJ','UFPR','UFSC','UFBA',
-  'UFC','UFPE','UFPA','UFAM','UFRGS','UnB','UFRN','UFES','UFU',
-  'PUC-SP','PUC-RJ','PUC-MG','PUC-RS','FGV','INSPER','IBMEC',
-  'Mackenzie','UFF','UFSCAR','UNIFESP','FEI','ITA','IME',
-  'FATEC','Anhanguera','Estácio','UNIP','Cruzeiro do Sul',
-]
 
 const SEMESTRES = ['1º','2º','3º','4º','5º','6º','7º','8º','9º','10º']
 
@@ -108,12 +89,10 @@ export default function Onboarding() {
       .catch(() => setLoadingSubj(false))
   }, [etapa])
 
-  const cursoOptions = cursoFoco && curso.length >= 1
-    ? CURSOS.filter(c => c.toLowerCase().includes(curso.toLowerCase())).slice(0, 6)
-    : []
-  const uniOptions = uniFoco && universidade.length >= 1
-    ? UNIVERSIDADES.filter(u => u.toLowerCase().includes(universidade.toLowerCase())).slice(0, 6)
-    : []
+  const cursoOptions = cursoFoco && curso.length >= 1 ? filtrarCursos(curso, 8) : []
+  const uniOptions   = uniFoco   && universidade.length >= 1 ? filtrarUniversidades(universidade, 8) : []
+  const cursoOk      = cursoReconhecido(curso)
+  const uniMatch     = buscarUniversidade(universidade)
 
   function next() {
     if (saving) return
@@ -254,13 +233,13 @@ export default function Onboarding() {
             {etapa === 1 && (<>
               <div className="ob-step-em"><GraduationCap size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
               <h2 className="ob-title">Qual curso você faz, {nome1}?</h2>
-              <p className="ob-sub">Digite ou escolha da lista abaixo.</p>
+              <p className="ob-sub">Digite ou escolha da lista abaixo. Aceitamos qualquer curso.</p>
               <div style={{ position: 'relative' }}>
-                <div className={`ob-field${touched && err ? ' ob-field--err' : curso.trim().length >= 3 ? ' ob-field--ok' : ''}`}>
+                <div className={`ob-field${touched && err ? ' ob-field--err' : cursoOk ? ' ob-field--ok' : ''}`}>
                   <input
                     autoFocus
                     className="ob-inp"
-                    placeholder="Ex: Medicina, Engenharia Civil…"
+                    placeholder="Ex: Medicina, Engenharia Civil, Ciência de Dados…"
                     value={curso}
                     onChange={e => { setCurso(e.target.value); setCursoFoco(true) }}
                     onFocus={() => setCursoFoco(true)}
@@ -268,7 +247,7 @@ export default function Onboarding() {
                     onKeyDown={e => e.key === 'Enter' && next()}
                     autoComplete="off"
                   />
-                  {curso.trim().length >= 3 && <span className="ob-check">✓</span>}
+                  {cursoOk && <span className="ob-check" title="Curso reconhecido">✓</span>}
                 </div>
                 {cursoFoco && cursoOptions.length > 0 && (
                   <div className="ob-dropdown">
@@ -287,13 +266,13 @@ export default function Onboarding() {
             {etapa === 2 && (<>
               <div className="ob-step-em"><Building2 size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
               <h2 className="ob-title">Em qual universidade você estuda?</h2>
-              <p className="ob-sub">Digite o nome ou a sigla.</p>
+              <p className="ob-sub">Digite o nome ou a sigla. Aceitamos qualquer instituição.</p>
               <div style={{ position: 'relative' }}>
-                <div className={`ob-field${touched && err ? ' ob-field--err' : universidade.trim().length >= 2 ? ' ob-field--ok' : ''}`}>
+                <div className={`ob-field${touched && err ? ' ob-field--err' : uniMatch ? ' ob-field--ok' : ''}`}>
                   <input
                     autoFocus
                     className="ob-inp"
-                    placeholder="Ex: USP, UFMG, PUC-SP…"
+                    placeholder="Ex: USP, ESPM, FCMSCSP, PUC-SP…"
                     value={universidade}
                     onChange={e => { setUniversidade(e.target.value); setUniFoco(true) }}
                     onFocus={() => setUniFoco(true)}
@@ -301,13 +280,18 @@ export default function Onboarding() {
                     onKeyDown={e => e.key === 'Enter' && next()}
                     autoComplete="off"
                   />
-                  {universidade.trim().length >= 2 && <span className="ob-check">✓</span>}
+                  {uniMatch && <span className="ob-check" title={uniMatch.nome}>✓</span>}
                 </div>
                 {uniFoco && uniOptions.length > 0 && (
                   <div className="ob-dropdown">
                     {uniOptions.map(u => (
-                      <button key={u} className="ob-dd-item" onMouseDown={() => { setUniversidade(u); setUniFoco(false) }}>
-                        {u}
+                      <button
+                        key={u.sigla + '|' + u.nome}
+                        className="ob-dd-item"
+                        onMouseDown={() => { setUniversidade(u.sigla); setUniFoco(false) }}
+                      >
+                        <span className="ob-dd-sigla">{u.sigla}</span>
+                        <span className="ob-dd-nome"> — {u.nome}</span>
                       </button>
                     ))}
                   </div>
@@ -335,7 +319,6 @@ export default function Onboarding() {
                   )
                 })}
               </div>
-              {semestre && <p className="ob-sem-lbl">{semestre} ✓</p>}
               {touched && err && <p className="ob-err">{err}</p>}
             </>)}
 
@@ -358,7 +341,7 @@ export default function Onboarding() {
                       </button>
                     ))}
                   </div>
-                  <button className="ob-accept-all" onClick={acceptAll}>Aceitar todas →</button>
+                  <button className="ob-accept-all" onClick={acceptAll}>+ Aceitar todas</button>
                 </div>
               )}
 
@@ -435,7 +418,7 @@ export default function Onboarding() {
               <button
                 className={`ob-next${ok ? '' : ' ob-next--dim'}`}
                 onClick={next}
-                disabled={saving}
+                disabled={saving || (etapa === 0 && nome.trim().length < 1)}
               >
                 {etapa === 5 ? (saving ? 'Salvando…' : 'Concluir ✓') : 'Continuar →'}
               </button>
@@ -532,11 +515,14 @@ const CSS = `
     display: block; width: 100%; text-align: left; padding: 10px 14px;
     font-size: 13.5px; color: #d4d4d8; background: transparent; border: none;
     cursor: pointer; font-family: inherit; transition: background .1s;
+    line-height: 1.35;
   }
   .ob-dd-item:hover { background: #1e1e1e; color: #f4f4f5; }
+  .ob-dd-sigla { font-weight: 700; color: #f4f4f5; }
+  .ob-dd-nome  { color: #71717a; font-size: 12.5px; }
 
   /* Semester grid */
-  .ob-sem-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 12px; }
+  .ob-sem-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 4px; }
   .ob-sem-btn {
     padding: 10px 0; border-radius: 10px; font-size: 13px; font-weight: 600;
     background: #161616; border: 1px solid #262626; color: #a1a1aa;
@@ -544,7 +530,6 @@ const CSS = `
   }
   .ob-sem-btn:hover { background: #1e1e1e; color: #d4d4d8; border-color: #333; }
   .ob-sem-btn--sel { background: rgba(26,122,74,.2); border-color: rgba(26,122,74,.55); color: #86efac; transform: scale(1.06); }
-  .ob-sem-lbl { font-size: 12.5px; color: #4ade80; font-weight: 500; margin-bottom: 8px; }
 
   /* Suggestions */
   .ob-sugg-loading { font-size: 12.5px; color: #52525b; font-style: italic; margin-bottom: 12px; }
@@ -557,9 +542,14 @@ const CSS = `
   }
   .ob-chip-sg:hover { background: rgba(26,122,74,.22); border-color: rgba(26,122,74,.5); }
   .ob-accept-all {
-    font-size: 12.5px; color: #22c55e; font-weight: 600;
-    background: transparent; border: none; cursor: pointer; font-family: inherit;
-    text-decoration: underline; text-underline-offset: 2px; padding: 0;
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12.5px; color: #4ade80; font-weight: 600;
+    background: rgba(26,122,74,.10); border: 1px solid rgba(34,197,94,.35);
+    cursor: pointer; font-family: inherit; padding: 6px 14px; border-radius: 99px;
+    transition: background .15s, border-color .15s, color .15s;
+  }
+  .ob-accept-all:hover {
+    background: rgba(26,122,74,.22); border-color: rgba(34,197,94,.55); color: #bbf7d0;
   }
 
   /* Added chips */
@@ -586,12 +576,22 @@ const CSS = `
   .ob-inp-mat:focus { border-color: rgba(26,122,74,.55); box-shadow: 0 0 0 3px rgba(26,122,74,.08); }
   .ob-inp-mat::placeholder { color: #3f3f46; }
   .ob-mat-add {
-    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
-    background: #1a7a4a; color: #fff; border: none; cursor: pointer; font-size: 20px;
-    display: flex; align-items: center; justify-content: center; transition: background .12s;
+    width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+    background: #1a7a4a; color: #fff; border: none; cursor: pointer;
+    font-size: 22px; font-weight: 600; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 14px rgba(26,122,74,.30);
+    transition: background .12s, transform .12s, box-shadow .12s;
   }
-  .ob-mat-add:hover:not(:disabled) { background: #15693e; }
-  .ob-mat-add:disabled { opacity: .35; cursor: not-allowed; }
+  .ob-mat-add:hover:not(:disabled) {
+    background: #15693e; transform: translateY(-1px);
+    box-shadow: 0 0 20px rgba(26,122,74,.45);
+  }
+  .ob-mat-add:active:not(:disabled) { transform: scale(.95); }
+  .ob-mat-add:disabled {
+    background: #1f1f1f; color: #52525b; cursor: not-allowed;
+    box-shadow: none;
+  }
 
   /* Objetivo */
   .ob-obj-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
@@ -620,10 +620,11 @@ const CSS = `
   /* Navigation */
   .ob-nav { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 26px; }
   .ob-back {
-    font-size: 13px; color: #52525b; background: transparent; border: none;
-    cursor: pointer; font-family: inherit; padding: 0; transition: color .12s;
+    font-size: 13px; color: #71717a; background: transparent; border: none;
+    cursor: pointer; font-family: inherit; padding: 8px 14px; border-radius: 9px;
+    transition: color .12s, background .12s;
   }
-  .ob-back:hover { color: #a1a1aa; }
+  .ob-back:hover { color: #d4d4d8; background: #161616; }
   .ob-next {
     padding: 11px 26px; border-radius: 11px; font-size: 14px; font-weight: 600;
     background: #1a7a4a; color: #fff; border: none; cursor: pointer; font-family: inherit;

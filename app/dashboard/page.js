@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import RichMessage from '../components/RichMessage'
 import UpgradeModal from '../components/UpgradeModal'
-import TutorialOverlay from '../components/TutorialOverlay'
 import { gerarPDFChat } from '../lib/pdfExport'
 import * as db from '../lib/db'
 import { getPlanInfo, incrementarMensagem, fetchPlano } from '../lib/plano'
@@ -181,7 +180,6 @@ export default function Dashboard() {
   const [vozAtiva,      setVozAtiva]      = useState(false)
   const [falando,       setFalando]       = useState(false)
   const [ehPro,         setEhPro]         = useState(false)
-  const [showTutorial,  setShowTutorial]  = useState(false)
   const [resumoMateria,  setResumoMateria]  = useState({ mediaNotas: null, proximoEvento: null })
   const [novoChatConfirm,  setNovoChatConfirm]  = useState(null)
   const [modoQuiz,         setModoQuiz]         = useState(false)
@@ -218,13 +216,6 @@ export default function Dashboard() {
     setPlanInfo(getPlanInfo())
     setVozDisp(typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window))
     fetchPlano().then(plano => setEhPro(plano === 'pro'))
-
-    // Mostrar tutorial na primeira visita
-    try {
-      if (!localStorage.getItem('pointai_tutorial_done')) {
-        setTimeout(() => setShowTutorial(true), 1200)
-      }
-    } catch {}
   }, [])
 
   useEffect(() => {
@@ -1218,11 +1209,6 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
-
-      {/* Tutorial interativo */}
-      {showTutorial && (
-        <TutorialOverlay onDone={() => setShowTutorial(false)} />
-      )}
 
       {/* Upgrade modal */}
       {showUpgrade && (

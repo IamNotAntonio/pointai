@@ -8,7 +8,7 @@ import Notificacoes from './Notificacoes'
 import {
   MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
   ChevronDown, ChevronLeft, ChevronRight, Edit, Star, Sun, Moon, LogOut,
-  Folder, Plus, Sparkles, MessageCircle, Globe, HelpCircle, RotateCcw,
+  Folder, Plus, Sparkles, MessageCircle, Globe, RotateCcw,
   ClipboardList, Brain,
 } from 'lucide-react'
 
@@ -301,19 +301,6 @@ export default function Sidebar({
                       <span className={`sb-dd-toggle ${tema === 'light' ? 'active' : ''}`}>
                         <span className="sb-dd-toggle-thumb" />
                       </span>
-                    </button>
-
-                    <button
-                      className="sb-dd-item"
-                      onClick={() => {
-                        try { localStorage.removeItem('pointai_tutorial_done') } catch {}
-                        setDropdownOpen(false)
-                        router.push('/dashboard')
-                        setTimeout(() => window.location.reload(), 100)
-                      }}
-                    >
-                      <span className="sb-dd-icon"><HelpCircle {...IC} /></span>
-                      Refazer tutorial
                     </button>
 
                     <div className="sb-dd-divider" />
