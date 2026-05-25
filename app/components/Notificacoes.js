@@ -92,7 +92,7 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
       titulo: `Revisar ${materia}`,
       mensagem: `${dias} dia${dias !== 1 ? 's' : ''} sem acessar`,
       urgencia: 'baixa',
-      link: '/dashboard',
+      link: `/dashboard/chat?materia=${encodeURIComponent(materia)}`,
       materia,
     })
   })

@@ -1,15 +1,14 @@
 'use client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect, useRef } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import * as db from '../lib/db'
 import Notificacoes from './Notificacoes'
 import {
-  MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
+  Home, MessageSquare, BookOpen, Calendar, TrendingUp, FileText, Search, BarChart2,
   ChevronDown, ChevronLeft, ChevronRight, Edit, Star, Sun, Moon, LogOut,
-  Folder, Plus, Sparkles, MessageCircle, Globe, RotateCcw,
-  ClipboardList, Brain,
+  Plus, Sparkles, Globe, ClipboardList, Brain,
 } from 'lucide-react'
 
 /* ── Constants ───────────────────────────────────────────────── */
@@ -19,37 +18,32 @@ const PLANS = [
   { id: 'semester', name: 'Semestral', price: 'R$59,90', period: '/sem', desc: 'Equivale a R$10/mês. Economia de 33%.',        current: false, featured: false },
 ]
 
-const NAV_ITEMS = [
-  { href: '/dashboard', Icon: MessageSquare, label: 'Chat' },
-  { href: '/notas',     Icon: BookOpen,      label: 'Notas e Faltas' },
-  { href: '/calendario',Icon: Calendar,      label: 'Calendário' },
-  { href: '/evolucao',  Icon: TrendingUp,    label: 'Minha Evolução' },
-  { href: '/trabalhos', Icon: FileText,      label: 'Correção de Trabalhos' },
-  { href: '/analise',   Icon: Search,        label: 'Análise de Materiais',   pro: true },
-  { href: '/relatorio', Icon: BarChart2,     label: 'Relatório Semanal',      pro: true },
-  { href: '/simulado',  Icon: ClipboardList, label: 'Simulado Inteligente',   pro: true },
-  { href: '/plano',     Icon: Brain,         label: 'Plano de Estudos',       pro: true },
-]
-
-const IC = { size: 13, strokeWidth: 1.8 }
+const IC     = { size: 13, strokeWidth: 1.8 }
 const IC_NAV = { size: 14, strokeWidth: 1.8 }
 
 /* ── Component ───────────────────────────────────────────────── */
-export default function Sidebar({
-  perfil,
-  materias = [],
-  materiaAtiva,
-  onMateriaChange,
-  topicos = {},
-  topicoAtivo,
-  onTopicoChange,
-  onTopicosUpdate,
-  onPerfilUpdate,
-  onNovoChat,
-}) {
-  const pathname    = usePathname()
-  const router      = useRouter()
-  const isDashboard = pathname === '/dashboard'
+export default function Sidebar(props) {
+  // useSearchParams below requires a Suspense boundary for SSG.
+  return (
+    <Suspense fallback={null}>
+      <SidebarInner {...props} />
+    </Suspense>
+  )
+}
+
+function SidebarInner({ perfil, onPerfilUpdate }) {
+  const pathname     = usePathname()
+  const searchParams = useSearchParams()
+  const router       = useRouter()
+
+  const isHome        = pathname === '/dashboard'
+  const isChat        = pathname === '/dashboard/chat'
+  const materiaParam  = searchParams.get('materia')
+  const isGeralActive = isChat && !materiaParam
+
+  const materias = perfil?.materias
+    ? perfil.materias.split(',').map(m => m.trim()).filter(Boolean)
+    : []
 
   const [tema,           setTema]           = useState('dark')
   const [plano,          setPlano]          = useState('gratis')
@@ -58,10 +52,8 @@ export default function Sidebar({
   const [editOpen,       setEditOpen]       = useState(false)
   const [planosOpen,     setPlanosOpen]     = useState(false)
   const [addMateriaOpen, setAddMateriaOpen] = useState(false)
-  const [addTopicoOpen,  setAddTopicoOpen]  = useState(false)
   const [formPerfil,     setFormPerfil]     = useState({})
   const [novaMateria,    setNovaMateria]    = useState('')
-  const [novoTopico,     setNovoTopico]     = useState('')
   const [salvando,       setSalvando]       = useState(false)
   const [assinandoPlano, setAssinandoPlano] = useState(null)
   const [erroPlano,      setErroPlano]      = useState(null)
@@ -153,16 +145,6 @@ export default function Sidebar({
     setAddMateriaOpen(false)
   }
 
-  function confirmarNovoTopico() {
-    const nome = novoTopico.trim()
-    if (!nome || !materiaAtiva) return
-    const novosTopicos = db.addTopico(materiaAtiva, nome)
-    onTopicosUpdate?.(novosTopicos)
-    onTopicoChange?.(nome)
-    setNovoTopico('')
-    setAddTopicoOpen(false)
-  }
-
   async function assinarPlano(planoId) {
     if (assinandoPlano) return
     setAssinandoPlano(planoId)
@@ -192,18 +174,24 @@ export default function Sidebar({
     }
   }
 
-  function deletarTopico(e, topico) {
-    e.stopPropagation()
-    const novosTopicos = db.removeTopico(materiaAtiva, topico)
-    onTopicosUpdate?.(novosTopicos)
-    if (topicoAtivo === topico) onTopicoChange?.(null)
-  }
+  /* ── Nav items (single source of truth) ─────────────────── */
+  const NAV_ITEMS = [
+    { href: '/dashboard',      Icon: Home,         label: 'Home',                   active: isHome },
+    { href: '/dashboard/chat', Icon: Globe,        label: 'Chat Geral',             active: isGeralActive },
+    { href: '/notas',          Icon: BookOpen,     label: 'Notas e Faltas',         active: pathname === '/notas' },
+    { href: '/calendario',     Icon: Calendar,     label: 'Calendário',             active: pathname === '/calendario' },
+    { href: '/evolucao',       Icon: TrendingUp,   label: 'Minha Evolução',         active: pathname === '/evolucao' },
+    { href: '/trabalhos',      Icon: FileText,     label: 'Correção de Trabalhos',  active: pathname === '/trabalhos' },
+    { href: '/analise',        Icon: Search,       label: 'Análise de Materiais',   active: pathname === '/analise',   pro: true },
+    { href: '/relatorio',      Icon: BarChart2,    label: 'Relatório Semanal',      active: pathname === '/relatorio', pro: true },
+    { href: '/simulado',       Icon: ClipboardList,label: 'Simulado Inteligente',   active: pathname === '/simulado',  pro: true },
+    { href: '/plano',          Icon: Brain,        label: 'Plano de Estudos',       active: pathname === '/plano',     pro: true },
+  ]
 
-  const inicialNome    = perfil?.nome?.charAt(0)?.toUpperCase() || '?'
-  const avatarEl       = userMeta?.avatar
+  const inicialNome = perfil?.nome?.charAt(0)?.toUpperCase() || '?'
+  const avatarEl    = userMeta?.avatar
     ? <img src={userMeta.avatar} alt={perfil?.nome} className="sidebar-avatar" style={{ padding:0, objectFit:'cover', borderRadius:'50%' }} referrerPolicy="no-referrer" />
     : <div className="sidebar-avatar">{inicialNome}</div>
-  const topicosMateria = topicos[materiaAtiva] || []
 
   return (
     <>
@@ -257,7 +245,6 @@ export default function Sidebar({
 
               {dropdownOpen && (
                 <div className="sb-dropdown">
-                  {/* Header */}
                   <div className="sb-dd-header">
                     {userMeta?.avatar
                       ? <img src={userMeta.avatar} alt={perfil.nome} className="sb-dd-avatar" style={{ padding:0, objectFit:'cover', borderRadius:'50%' }} referrerPolicy="no-referrer" />
@@ -270,20 +257,13 @@ export default function Sidebar({
                     </div>
                   </div>
 
-                  {/* Body */}
                   <div className="sb-dd-body">
-                    <button
-                      className="sb-dd-item"
-                      onClick={() => { setDropdownOpen(false); setEditOpen(true) }}
-                    >
+                    <button className="sb-dd-item" onClick={() => { setDropdownOpen(false); setEditOpen(true) }}>
                       <span className="sb-dd-icon"><Edit {...IC} /></span>
                       Editar perfil
                     </button>
 
-                    <button
-                      className="sb-dd-item"
-                      onClick={() => { setDropdownOpen(false); setPlanosOpen(true) }}
-                    >
+                    <button className="sb-dd-item" onClick={() => { setDropdownOpen(false); setPlanosOpen(true) }}>
                       <span className="sb-dd-icon"><Star {...IC} /></span>
                       {plano === 'pro'
                         ? <><Sparkles size={12} strokeWidth={1.8} style={{ display:'inline', marginRight:4 }} />Plano Pro · Ativo</>
@@ -292,7 +272,6 @@ export default function Sidebar({
 
                     <div className="sb-dd-divider" />
 
-                    {/* Theme toggle row */}
                     <button className="sb-dd-item" onClick={toggleTema}>
                       <span className="sb-dd-icon">
                         {tema === 'dark' ? <Sun {...IC} /> : <Moon {...IC} />}
@@ -316,112 +295,16 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* ── Chat Geral + Matérias + tópicos (dashboard only) ── */}
-        {isDashboard && (
-          <div className="sidebar-section" data-tour="materias">
-            <p className="sidebar-section-label">Conversas</p>
-
-            {/* Chat Geral */}
-            <div className="sidebar-materia-row">
-              <button
-                onClick={() => onMateriaChange?.('__geral__')}
-                className={`chat-geral-btn ${materiaAtiva === '__geral__' ? 'active' : ''}`}
-                title="Chat Geral"
-              >
-                <Globe size={14} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-                <span className="chat-geral-text">Chat Geral</span>
-              </button>
-              {!collapsed && (
-                <button
-                  className="sb-novo-chat-btn"
-                  onClick={e => { e.stopPropagation(); onNovoChat?.('__geral__') }}
-                  title="Novo Chat Geral"
-                >
-                  <RotateCcw size={11} strokeWidth={2.2} />
-                </button>
-              )}
-            </div>
-
-            {materias.length > 0 && (
-              <>
-                <p className="sidebar-section-label" style={{ marginTop:6 }}>Matérias</p>
-                <nav className="sidebar-nav">
-                  {materias.map((m, i) => (
-                <div key={i}>
-                  <button
-                    onClick={() => onMateriaChange?.(m)}
-                    className={`sidebar-materia-btn ${materiaAtiva === m ? 'active' : ''}`}
-                    title={m}
-                  >
-                    <span className="sidebar-materia-dot" />
-                    <span className="sidebar-materia-text">{m}</span>
-                    {(topicos[m]?.length > 0) && (
-                      <span className="sidebar-topico-count">{topicos[m].length}</span>
-                    )}
-                  </button>
-
-                  {/* Expandable topics */}
-                  {materiaAtiva === m && (
-                    <div className="sb-topico-list">
-                      {/* Geral */}
-                      <div className="sb-topico-row">
-                        <button
-                          className={`sb-topico-btn ${!topicoAtivo ? 'active' : ''}`}
-                          onClick={() => onTopicoChange?.(null)}
-                        >
-                          <MessageCircle size={12} strokeWidth={1.8} />
-                          <span className="sb-topico-label">Geral</span>
-                        </button>
-                      </div>
-
-                      {/* User topics */}
-                      {topicosMateria.map((t, j) => (
-                        <div key={j} className="sb-topico-row">
-                          <button
-                            className={`sb-topico-btn ${topicoAtivo === t ? 'active' : ''}`}
-                            onClick={() => onTopicoChange?.(t)}
-                          >
-                            <Folder size={12} strokeWidth={1.8} />
-                            <span className="sb-topico-label">{t}</span>
-                          </button>
-                          <button
-                            className="sb-topico-del"
-                            onClick={(e) => deletarTopico(e, t)}
-                            title="Remover tópico"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-
-                      {/* Add topic */}
-                      <button className="sb-topico-add" onClick={() => setAddTopicoOpen(true)}>
-                        <Plus size={11} strokeWidth={2.5} /> Novo tópico
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-                  <button className="sb-add-materia" onClick={() => setAddMateriaOpen(true)}>
-                    <Plus size={11} strokeWidth={2.5} /> Nova matéria
-                  </button>
-                </nav>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* ── Nav principal ── */}
+        {/* ── Menu principal ── */}
         <div className="sidebar-section sidebar-nav-main">
           <p className="sidebar-section-label">Menu</p>
           <nav className="sidebar-nav">
-            {NAV_ITEMS.map(({ href, Icon, label, pro }) => (
+            {NAV_ITEMS.map(({ href, Icon, label, pro, active }) => (
               <Link
-                key={href}
+                key={href + label}
                 href={href}
                 title={label}
-                className={`sidebar-nav-link ${pathname === href ? 'active' : ''}`}
+                className={`sidebar-nav-link ${active ? 'active' : ''}`}
               >
                 <span className="sidebar-nav-icon">
                   <Icon {...IC_NAV} />
@@ -432,6 +315,32 @@ export default function Sidebar({
             ))}
           </nav>
         </div>
+
+        {/* ── Minhas Matérias ── */}
+        {materias.length > 0 && (
+          <div className="sidebar-section" data-tour="materias">
+            <p className="sidebar-section-label">Minhas Matérias</p>
+            <nav className="sidebar-nav">
+              {materias.map(m => {
+                const ativo = isChat && materiaParam === m
+                return (
+                  <Link
+                    key={m}
+                    href={`/dashboard/chat?materia=${encodeURIComponent(m)}`}
+                    className={`sidebar-materia-btn ${ativo ? 'active' : ''}`}
+                    title={m}
+                  >
+                    <span className="sidebar-materia-dot" />
+                    <span className="sidebar-materia-text">{m}</span>
+                  </Link>
+                )
+              })}
+              <button className="sb-add-materia" onClick={() => setAddMateriaOpen(true)}>
+                <Plus size={11} strokeWidth={2.5} /> Nova matéria
+              </button>
+            </nav>
+          </div>
+        )}
       </aside>
 
       {/* ── Edit Profile Modal ── */}
@@ -567,36 +476,6 @@ export default function Sidebar({
             <div className="sb-modal-footer">
               <button className="btn btn-ghost" onClick={() => { setAddMateriaOpen(false); setNovaMateria('') }}>Cancelar</button>
               <button className="btn btn-primary" onClick={confirmarNovaMateria} disabled={!novaMateria.trim()}>Adicionar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Novo Tópico Modal ── */}
-      {addTopicoOpen && (
-        <div className="sb-overlay" onClick={e => e.target === e.currentTarget && setAddTopicoOpen(false)}>
-          <div className="sb-modal" style={{ maxWidth:380 }}>
-            <div className="sb-modal-header">
-              <p className="sb-modal-title">Novo tópico</p>
-              <button className="sb-modal-close" onClick={() => setAddTopicoOpen(false)}>×</button>
-            </div>
-            <p style={{ fontSize:12.5, color:'#71717a', marginBottom:16 }}>
-              Em <strong style={{ color:'#a1a1aa' }}>{materiaAtiva}</strong>
-            </p>
-            <div className="sb-form-group">
-              <label className="sb-label">Nome do tópico</label>
-              <input
-                className="sb-input"
-                placeholder="Ex: Listas, Funções, Herança…"
-                value={novoTopico}
-                onChange={e => setNovoTopico(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && confirmarNovoTopico()}
-                autoFocus
-              />
-            </div>
-            <div className="sb-modal-footer">
-              <button className="btn btn-ghost" onClick={() => { setAddTopicoOpen(false); setNovoTopico('') }}>Cancelar</button>
-              <button className="btn btn-primary" onClick={confirmarNovoTopico} disabled={!novoTopico.trim()}>Criar</button>
             </div>
           </div>
         </div>

@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation'
 import RichMessage from './RichMessage'
 
 const FIRST_MSG = {
-  '/dashboard':  'Quer dicas de como perguntar para a IA de forma mais eficiente? 💡',
-  '/notas':      'Já cadastrou suas notas? Posso te explicar como funciona o controle de faltas!',
+  '/dashboard':       'Bem-vindo de volta! Posso te orientar pelos atalhos da home — me chama se quiser.',
+  '/dashboard/chat':  'Quer dicas de como perguntar para a IA de forma mais eficiente? 💡',
+  '/notas':           'Já cadastrou suas notas? Posso te explicar como funciona o controle de faltas!',
   '/calendario': 'Tem alguma prova chegando? Posso te ajudar a pensar num plano de revisão! 📅',
   '/evolucao':   'Como está indo o semestre? Veja seu progresso e me conta se precisar de ajuda!',
   '/analise':    'Sabia que você pode mandar foto da sua prova e eu analiso cada erro? 🔬',
@@ -38,7 +39,7 @@ export default function PointAssistant() {
   const fimRef   = useRef(null)
   const inputRef = useRef(null)
 
-  const isDashboard = pathname === '/dashboard'
+  const isDashboard = pathname === '/dashboard/chat'
 
   useEffect(() => { setMounted(true) }, [])
 

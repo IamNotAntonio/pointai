@@ -1,1276 +1,696 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
-import Sidebar from '../components/Sidebar'
-import RichMessage from '../components/RichMessage'
-import UpgradeModal from '../components/UpgradeModal'
-import { gerarPDFChat } from '../lib/pdfExport'
-import * as db from '../lib/db'
-import { getPlanInfo, incrementarMensagem, fetchPlano } from '../lib/plano'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { FileText, Copy, Globe, BookOpen, Calendar, RotateCcw, HelpCircle } from 'lucide-react'
+import Sidebar from '../components/Sidebar'
+import * as db from '../lib/db'
+import {
+  MessageSquare, Calendar, TrendingUp, AlertTriangle,
+  FileText, ClipboardList, Brain, ArrowRight,
+} from 'lucide-react'
 
-/* ── Constants ──────────────────────────────────────────────────── */
-const PDF_REGEX = /\b(pdf|baixar|exportar|download|quero\s+baixar|gera.*pdf|exporta.*pdf|salvar\s+isso|salvar\s+resposta)\b/i
-const QUICK_CHIPS = [
-  'Me explica o conteúdo desta matéria',
-  'Cria um simulado com 5 questões',
-  'Quais são os tópicos mais cobrados?',
-  'Resumo dos principais conceitos',
-]
-
-const QUICK_CHIPS_GERAL = [
-  'O que estudei recentemente?',
-  'Me ajuda a organizar meus estudos',
-  'Cria um plano de estudos para a semana',
-  'Explica um conceito que estou com dúvida',
-]
-
-/* ── Helpers ────────────────────────────────────────────────────── */
-function tempoRelativo(iso) {
-  if (!iso) return ''
-  try {
-    const diff = Date.now() - new Date(iso).getTime()
-    const min  = Math.floor(diff / 60000)
-    if (min < 1)  return 'agora'
-    if (min < 60) return `há ${min} min`
-    const h = Math.floor(min / 60)
-    if (h < 24)   return `há ${h}h`
-    return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-  } catch { return '' }
+/* ── Helpers ─────────────────────────────────────────────────── */
+function saudacao(date = new Date()) {
+  const h = date.getHours()
+  if (h >= 5  && h <= 11) return 'Bom dia'
+  if (h >= 12 && h <= 17) return 'Boa tarde'
+  return 'Boa noite'
 }
 
-function dataDia(iso) {
-  if (!iso) return null
-  try {
-    const d    = new Date(iso)
-    const hoje = new Date()
-    if (d.toDateString() === hoje.toDateString()) return 'Hoje'
-    const ontem = new Date(hoje)
-    ontem.setDate(ontem.getDate() - 1)
-    if (d.toDateString() === ontem.toDateString()) return 'Ontem'
-    return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
-  } catch { return null }
+function dataLonga(date = new Date()) {
+  const fmt = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+  const raw = fmt.format(date)
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
-function mesmosDia(a, b) {
-  if (!a || !b) return false
-  return new Date(a).toDateString() === new Date(b).toDateString()
+function tempoRelativo(ts) {
+  if (!ts) return ''
+  const diff = (ts - Date.now()) / 1000
+  const abs  = Math.abs(diff)
+  const rtf  = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' })
+  if (abs < 60)        return rtf.format(Math.round(diff), 'second')
+  if (abs < 3600)      return rtf.format(Math.round(diff / 60), 'minute')
+  if (abs < 86400)     return rtf.format(Math.round(diff / 3600), 'hour')
+  if (abs < 86400 * 7) return rtf.format(Math.round(diff / 86400), 'day')
+  return rtf.format(Math.round(diff / 86400 / 7), 'week')
 }
 
-function formatarData(dataStr) {
-  try {
-    const [y, m, d] = dataStr.split('-')
-    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-      .toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })
-  } catch { return dataStr }
+function diasAte(dataIso) {
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const alvo = new Date(dataIso + 'T12:00:00')
+  return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24))
 }
 
-function corMedia(nota) {
-  const n = parseFloat(nota)
-  if (n >= 8.5) return '#4ade80'
-  if (n >= 7.0) return '#fbbf24'
-  return '#f87171'
+function rotuloRelativo(dias) {
+  if (dias === 0) return 'hoje'
+  if (dias === 1) return 'amanhã'
+  return `em ${dias} dias`
 }
 
-function stripMarkdown(text) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/```[\w]*\n?/g, '')
-    .replace(/`(.*?)`/g, '$1')
-    .replace(/\|[^\n]*\|/g, match => match.replace(/\|/g, ' ').trim())
-    .replace(/^\s*[-*]\s/gm, '• ')
-    .trim()
+function corUrgencia(dias) {
+  if (dias <= 3) return { fg: '#fca5a5', bg: 'rgba(239,68,68,.10)', border: 'rgba(239,68,68,.30)' }
+  if (dias <= 7) return { fg: '#fcd34d', bg: 'rgba(245,158,11,.10)', border: 'rgba(245,158,11,.32)' }
+  return { fg: '#a1a1aa', bg: 'rgba(255,255,255,.02)', border: 'rgba(255,255,255,.08)' }
 }
 
-/* ── Icons ──────────────────────────────────────────────────────── */
-function IcCamera() {
+function Sparkline({ valores, cor }) {
+  if (!valores || valores.length < 2) return null
+  const W = 200, H = 36, PAD = 2
+  const min = Math.min(...valores)
+  const max = Math.max(...valores)
+  const span = max - min || 1
+  const step = (W - PAD * 2) / (valores.length - 1)
+  const pts = valores.map((v, i) => {
+    const x = PAD + i * step
+    const y = H - PAD - ((v - min) / span) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-      <circle cx="12" cy="13" r="4"/>
+    <svg viewBox={`0 0 ${W} ${H}`} className="home-spark">
+      <polyline points={pts} fill="none" stroke={cor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
-function IcMic() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
-    </svg>
-  )
-}
-function IcHeadphone() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
-      <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/>
-      <path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
-    </svg>
-  )
-}
-function IcStop() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-    </svg>
-  )
-}
-function IcX() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-  )
-}
-function IcRetry() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="1 4 1 10 7 10"/>
-      <path d="M3.51 15a9 9 0 1 0 .49-4.76"/>
-    </svg>
-  )
-}
-function IcCopy() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </svg>
-  )
-}
-function IcShare() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-    </svg>
-  )
-}
-function IcExpand() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-      <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-    </svg>
-  )
-}
-/* ── Component ──────────────────────────────────────────────────── */
-export default function Dashboard() {
-  const [perfil,        setPerfil]        = useState(null)
-  const [materias,      setMaterias]      = useState([])
-  const [materiaAtiva,  setMateriaAtiva]  = useState(null)
-  const [topicos,       setTopicos]       = useState({})
-  const [topicoAtivo,   setTopicoAtivo]   = useState(null)
-  const [mensagens,     setMensagens]     = useState([])
-  const [input,         setInput]         = useState('')
-  const [carregando,    setCarregando]    = useState(false)
-  const [imagem,        setImagem]        = useState(null)
-  const [planInfo,      setPlanInfo]      = useState({ plano: 'gratis', mensagensHoje: 0, limite: 20 })
-  const [showUpgrade,   setShowUpgrade]   = useState(false)
-  const [resumo,        setResumo]        = useState(null)
-  const [copiedIdx,     setCopiedIdx]     = useState(null)
-  const [shareContent,  setShareContent]  = useState(null)
-  const [gravando,      setGravando]      = useState(false)
-  const [vozDisp,       setVozDisp]       = useState(false)
-  const [vozAtiva,      setVozAtiva]      = useState(false)
-  const [falando,       setFalando]       = useState(false)
-  const [ehPro,         setEhPro]         = useState(false)
-  const [resumoMateria,  setResumoMateria]  = useState({ mediaNotas: null, proximoEvento: null })
-  const [novoChatConfirm,  setNovoChatConfirm]  = useState(null)
-  const [modoQuiz,         setModoQuiz]         = useState(false)
-  const [quizHistorico,    setQuizHistorico]    = useState([])
-  const [perguntaAtual,    setPerguntaAtual]    = useState('')
-  const [gerandoResumo,    setGerandoResumo]    = useState(false)
 
-  const fimChat        = useRef(null)
-  const textareaRef    = useRef(null)
-  const fileInputRef   = useRef(null)
-  const recognitionRef = useRef(null)
-  const resumoRef      = useRef(resumo)
-  const audioRef       = useRef(null)
-  const vozAtivaRef    = useRef(false)
+function SparkPlaceholder() {
+  return (
+    <svg viewBox="0 0 200 40" className="home-spark">
+      <path
+        d="M0,30 Q50,20 100,25 T200,15"
+        fill="none"
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth="1.5"
+        strokeDasharray="4 4"
+      />
+    </svg>
+  )
+}
 
-  // Keep refs in sync for use inside async functions
-  useEffect(() => { resumoRef.current = resumo }, [resumo])
-  useEffect(() => { vozAtivaRef.current = vozAtiva }, [vozAtiva])
+const TIPO_LABEL = { prova: 'Prova', trabalho: 'Trabalho', apresentacao: 'Apresentação', outro: 'Evento' }
 
-  const chatKey = db.getChatKey(materiaAtiva, topicoAtivo)
+/* ── Component ───────────────────────────────────────────────── */
+export default function DashboardHome() {
+  const [perfil,   setPerfil]   = useState(null)
+  const [lastChat, setLastChat] = useState(null)
+  const [eventos,  setEventos]  = useState([])
+  const [notas,    setNotas]    = useState({})
+  const [ehPro,    setEhPro]    = useState(false)
 
   useEffect(() => {
-    async function carregarPerfil() {
+    async function carregar() {
       const p = await db.getPerfil()
-      if (p) {
-        setPerfil(p)
-        const lista = p.materias.split(',').map(m => m.trim()).filter(Boolean)
-        setMaterias(lista)
-        setMateriaAtiva(lista[0])
-      }
-    }
-    carregarPerfil()
-    setTopicos(db.getTopicos())
-    setPlanInfo(getPlanInfo())
-    setVozDisp(typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window))
-    fetchPlano().then(plano => setEhPro(plano === 'pro'))
-  }, [])
-
-  useEffect(() => {
-    if (!materiaAtiva) return
-    try {
-      const acc = JSON.parse(localStorage.getItem('pointai_last_access') || '{}')
-      acc[materiaAtiva] = Date.now()
-      localStorage.setItem('pointai_last_access', JSON.stringify(acc))
-    } catch {}
-  }, [materiaAtiva])
-
-  useEffect(() => {
-    if (!chatKey || !perfil) return
-    async function carregarChat() {
-      const isGeral = materiaAtiva === '__geral__'
-      const [historico, r] = await Promise.all([db.getChat(chatKey), db.getResumo(chatKey)])
-      setResumo(r)
-      if (historico?.length) {
-        setMensagens(historico)
-      } else {
-        const contexto = topicoAtivo ? `${materiaAtiva} → ${topicoAtivo}` : materiaAtiva
-        const msg = isGeral
-          ? `Olá, **${perfil.nome}**! 👋 Aqui é o Chat Geral — pode me perguntar qualquer coisa sobre seus estudos, sem focar em uma matéria específica. Dúvidas, técnicas de estudo, planejamento... estou aqui!`
-          : `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${contexto}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
-        setMensagens([{ role: 'assistant', content: msg, timestamp: new Date().toISOString() }])
-      }
-    }
-    carregarChat()
-  }, [chatKey, perfil])
-
-  useEffect(() => {
-    fimChat.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensagens, carregando])
-
-  /* ── Cross-memory para Chat Geral ──────────────────────────── */
-  function buscarHistoricoMaterias(lista) {
-    const historico = {}
-    for (const m of lista) {
+      if (p) setPerfil(p)
+      const n = await db.getNotas()
+      if (n && typeof n === 'object') setNotas(n)
+      const ev = await db.getEventos()
+      if (Array.isArray(ev)) setEventos(ev)
       try {
-        const raw = localStorage.getItem(`chat_${m}`)
-        if (!raw) continue
-        const msgs = JSON.parse(raw)
-        if (msgs?.length > 1) {
-          // Pega as últimas 6 mensagens (user + assistant) excluindo a boas-vindas
-          historico[m] = msgs.slice(1).slice(-6)
-        }
+        const lc = JSON.parse(localStorage.getItem('pointai_last_chat') || 'null')
+        if (lc?.materia) setLastChat(lc)
+      } catch {}
+      try {
+        const plano = JSON.parse(localStorage.getItem('pointai_plano') || '{}')
+        setEhPro(plano.plano === 'pro')
       } catch {}
     }
-    return Object.keys(historico).length ? historico : null
-  }
+    carregar()
+  }, [])
 
-  /* ── TTS ────────────────────────────────────────────────────── */
-  function limparParaTTS(text) {
-    return stripMarkdown(text)
-      .replace(/https?:\/\/\S+/g, '')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/\n{2,}/g, '. ')
-      .replace(/\n/g, ' ')
-      .replace(/•\s*/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-  }
+  const nome1     = perfil?.nome?.trim().split(' ')[0] || ''
+  const materias  = perfil?.materias
+    ? perfil.materias.split(',').map(m => m.trim()).filter(Boolean)
+    : []
 
-  function pararAudio() {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.src = ''
-      audioRef.current = null
-    }
-    setFalando(false)
-  }
+  // ── Próximos eventos ────────────────────────────────────────
+  const hojeIso = new Date().toISOString().split('T')[0]
+  const proximosEventos = eventos
+    .filter(e => e.data >= hojeIso)
+    .sort((a, b) => a.data.localeCompare(b.data))
+    .slice(0, 3)
 
-  async function lerTexto(texto) {
-    pararAudio()
-    try {
-      const resp = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto: limparParaTTS(texto) }),
-      })
-      if (!resp.ok) return
-      const blob = await resp.blob()
-      const url  = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audioRef.current = audio
-      setFalando(true)
-      audio.onended = () => { setFalando(false); URL.revokeObjectURL(url); audioRef.current = null }
-      audio.onerror = () => { setFalando(false); URL.revokeObjectURL(url); audioRef.current = null }
-      audio.play()
-    } catch { setFalando(false) }
-  }
-
-  /* ── Resumo do chat ─────────────────────────────────────────── */
-  async function gerarResumoChat() {
-    if (gerandoResumo) return
-    setGerandoResumo(true)
-    const tsIA = new Date().toISOString()
-    const msgResumo = { role: 'assistant', content: '', tipo: 'resumo', carregando: true, timestamp: tsIA }
-    setMensagens(prev => [...prev, msgResumo])
-
-    try {
-      const resp = await fetch('/api/resumo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens, perfil, materia: materiaAtiva }),
-      })
-      const data = await resp.json()
-      setMensagens(prev => {
-        const idx = prev.findIndex(m => m.timestamp === tsIA)
-        if (idx < 0) return prev
-        const nova = [...prev]
-        nova[idx] = { ...nova[idx], content: data.resumo || '', carregando: false }
-        db.saveChat(chatKey, nova)
-        return nova
-      })
-    } catch {
-      setMensagens(prev => prev.filter(m => m.timestamp !== tsIA))
-    } finally {
-      setGerandoResumo(false)
-    }
-  }
-
-  /* ── Quiz mode ──────────────────────────────────────────────── */
-  async function iniciarQuiz() {
-    if (carregando || modoQuiz) return
-    const ctx = mensagens.filter(m => !m.tipo && m.content)
-    if (ctx.length < 3) return
-
-    setCarregando(true)
-    try {
-      const resp = await fetch('/api/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'iniciar', mensagens: ctx, materia: materiaAtiva }),
-      })
-      const data = await resp.json()
-      if (data.pergunta) {
-        const tsIA = new Date().toISOString()
-        const msgQuiz = {
-          role: 'assistant', content: data.pergunta,
-          tipo: 'quiz', subTipo: 'pergunta',
-          numero: 1, total: 5, timestamp: tsIA,
-        }
-        const novas = [...mensagens, msgQuiz]
-        setMensagens(novas)
-        db.saveChat(chatKey, novas)
-        setModoQuiz(true)
-        setPerguntaAtual(data.pergunta)
-        setQuizHistorico([{ pergunta: data.pergunta }])
-        if (vozAtivaRef.current) lerTexto(data.pergunta)
-      }
-    } catch {}
-    setCarregando(false)
-  }
-
-  function encerrarQuiz() {
-    setModoQuiz(false)
-    setPerguntaAtual('')
-    setQuizHistorico([])
-  }
-
-  async function enviarRespostaQuiz(resposta) {
-    if (carregando) return
-    setCarregando(true)
-
-    const tsUser = new Date().toISOString()
-    const msgUser = { role: 'user', content: resposta, timestamp: tsUser }
-    const novas1 = [...mensagens, msgUser]
-    setMensagens(novas1)
-
-    const historicoComResposta = quizHistorico.map((q, i) =>
-      i === quizHistorico.length - 1 ? { ...q, resposta_usuario: resposta } : q
-    )
-
-    try {
-      const resp = await fetch('/api/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          acao: 'responder',
-          mensagens: mensagens.filter(m => !m.tipo),
-          materia: materiaAtiva,
-          historicoQuiz: historicoComResposta,
-          respostaUsuario: resposta,
-        }),
-      })
-      const data = await resp.json()
-
-      if (data.feedback !== undefined) {
-        const tsFeedback = new Date().toISOString()
-        const msgFeedback = {
-          role: 'assistant', content: data.feedback,
-          tipo: 'quiz', subTipo: 'feedback',
-          correta: data.correta, numero: data.numero, timestamp: tsFeedback,
-        }
-        let novas2 = [...novas1, msgFeedback]
-
-        if (data.encerrado) {
-          const tsResult = new Date(Date.now() + 1).toISOString()
-          novas2 = [...novas2, {
-            role: 'assistant', content: '',
-            tipo: 'quiz', subTipo: 'resultado',
-            acertos: data.resultado?.acertos ?? 0,
-            total: data.resultado?.total ?? 5,
-            timestamp: tsResult,
-          }]
-          setModoQuiz(false)
-          setQuizHistorico([])
-          setPerguntaAtual('')
-        } else if (data.proxPergunta) {
-          const tsPergunta = new Date(Date.now() + 2).toISOString()
-          novas2 = [...novas2, {
-            role: 'assistant', content: data.proxPergunta,
-            tipo: 'quiz', subTipo: 'pergunta',
-            numero: data.numero + 1, total: 5, timestamp: tsPergunta,
-          }]
-          setPerguntaAtual(data.proxPergunta)
-          setQuizHistorico(prev => [
-            ...prev.map((q, i) =>
-              i === prev.length - 1 ? { ...q, resposta_usuario: resposta, correta: data.correta } : q
-            ),
-            { pergunta: data.proxPergunta },
-          ])
-        }
-
-        setMensagens(novas2)
-        db.saveChat(chatKey, novas2)
-
-        if (vozAtivaRef.current) {
-          const textoTTS = data.encerrado
-            ? data.feedback
-            : `${data.feedback}. Próxima pergunta: ${data.proxPergunta || ''}`
-          lerTexto(textoTTS)
-        }
-      }
-    } catch {}
-    setCarregando(false)
-  }
-
-  /* ── Streaming core ─────────────────────────────────────────── */
-  async function _stream(histMensagens, pdfRequested, imagemEnviada) {
-    const body = {
-      mensagens: histMensagens,
-      perfil,
-      materia: materiaAtiva,
-      topico: topicoAtivo,
-      resumo: resumoRef.current,
-    }
-    // No Chat Geral, incluir histórico das matérias para memória cruzada
-    if (isGeralChat && materias.length) {
-      body.historicoMaterias = buscarHistoricoMaterias(materias)
-    }
-    if (imagemEnviada) {
-      body.imagemBase64 = imagemEnviada.dataUrl.split(',')[1]
-      body.imagemTipo   = imagemEnviada.tipo
-    }
-
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!resp.ok || !resp.body) throw new Error('stream failed')
-
-    const reader  = resp.body.getReader()
-    const decoder = new TextDecoder()
-
-    // Accumulate silently — typing indicator stays visible throughout
-    let fullText = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      fullText += decoder.decode(value, { stream: true })
-    }
-
-    // Message arrives complete — triggers fade+slide via CSS animation
-    setCarregando(false)
-    const finalMsg = {
-      role: 'assistant',
-      content: fullText,
-      hasPdfBtn: pdfRequested,
-      timestamp: new Date().toISOString(),
-    }
-
-    const finais = [...histMensagens, finalMsg]
-    setMensagens(finais)
-    db.saveChat(chatKey, finais)
-
-    // Auto-read aloud if TTS is active
-    if (vozAtivaRef.current) lerTexto(fullText)
-
-    incrementarMensagem()
-    setPlanInfo(getPlanInfo())
-
-    const userCount = finais.filter(m => m.role === 'user').length
-    if (userCount > 0 && userCount % 10 === 0) {
-      fetch('/api/resumir', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: finais.slice(-20), materia: materiaAtiva, perfil }),
-      }).then(r => r.json()).then(d => {
-        if (d.resumo) { setResumo(d.resumo); db.saveResumo(chatKey, d.resumo) }
-      }).catch(() => {})
-    }
-  }
-
-  /* ── Send message ───────────────────────────────────────────── */
-  async function enviar(textoParam) {
-    const textoFinal = typeof textoParam === 'string' ? textoParam : input
-
-    if (modoQuiz) {
-      if (!textoFinal.trim() || carregando) return
-      setInput('')
-      if (textareaRef.current) textareaRef.current.style.height = 'auto'
-      await enviarRespostaQuiz(textoFinal.trim())
-      return
-    }
-
-    const temConteudo = textoFinal.trim() || imagem
-    if (!temConteudo || carregando) return
-
-    const info = getPlanInfo()
-    if (info.plano === 'gratis' && info.mensagensHoje >= info.limite) {
-      setShowUpgrade(true)
-      return
-    }
-
-    const pdfRequested  = PDF_REGEX.test(textoFinal)
-    const novaMensagem  = {
-      role: 'user',
-      content: textoFinal,
-      timestamp: new Date().toISOString(),
-      ...(imagem && { image: imagem.dataUrl }),
-    }
-    const novasMensagens = [...mensagens, novaMensagem]
-    setMensagens(novasMensagens)
-    setInput('')
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
-
-    const imagemParaEnviar = imagem
-    setImagem(null)
-    setCarregando(true)
-
-    try {
-      await _stream(novasMensagens, pdfRequested, imagemParaEnviar)
-    } catch {
-      setCarregando(false)
-      // no streaming messages to clean up
-    }
-  }
-
-  /* ── Retry user message ─────────────────────────────────────── */
-  async function retry(msgIndex) {
-    if (carregando) return
-    const hist = mensagens.slice(0, msgIndex + 1)
-    setMensagens(hist)
-    setCarregando(true)
-    try {
-      await _stream(hist, PDF_REGEX.test(mensagens[msgIndex].content), null)
-    } catch {
-      setCarregando(false)
-      // no streaming messages to clean up
-    }
-  }
-
-  /* ── Aprofundar ─────────────────────────────────────────────── */
-  function aprofundar() {
-    enviar('Pode aprofundar mais esse ponto?')
-  }
-
-  /* ── Copy response ──────────────────────────────────────────── */
-  async function copiar(content, idx) {
-    try {
-      await navigator.clipboard.writeText(stripMarkdown(content))
-      setCopiedIdx(idx)
-      setTimeout(() => setCopiedIdx(null), 2000)
-    } catch {}
-  }
-
-  /* ── Voice dictation ────────────────────────────────────────── */
-  function toggleVoz() {
-    if (!vozDisp) return
-    if (gravando) {
-      recognitionRef.current?.stop()
-      return
-    }
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    const rec = new SR()
-    rec.lang = 'pt-BR'
-    rec.continuous = false
-    rec.interimResults = false
-    rec.onresult = e => {
-      const texto = e.results[0][0].transcript
-      setInput(prev => (prev ? prev + ' ' : '') + texto)
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto'
-        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px'
+  // ── Alertas (faltas próximas, médias baixas) ────────────────
+  const alertas = []
+  Object.entries(notas).forEach(([materia, dados]) => {
+    if (!dados) return
+    const totalAulas = Number(dados.totalAulas) || 0
+    const faltas     = Number(dados.faltas)     || 0
+    if (totalAulas > 0) {
+      const limite    = Math.floor(totalAulas * 0.25)
+      const restantes = limite - faltas
+      const ratio     = faltas / totalAulas
+      if (ratio > 0.20) {
+        alertas.push({
+          id: `f_${materia}`,
+          tipo: 'falta',
+          materia,
+          texto: restantes <= 0
+            ? `Limite de faltas atingido em ${materia}`
+            : `Só ${restantes} falta${restantes !== 1 ? 's' : ''} restante${restantes !== 1 ? 's' : ''} em ${materia}`,
+          severidade: restantes <= 0 ? 'alta' : 'media',
+        })
       }
     }
-    rec.onend  = () => setGravando(false)
-    rec.onerror = () => setGravando(false)
-    recognitionRef.current = rec
-    rec.start()
-    setGravando(true)
-  }
-
-  function selecionarImagem(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => setImagem({ dataUrl: ev.target.result, tipo: file.type })
-    reader.readAsDataURL(file)
-    e.target.value = ''
-  }
-
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar() }
-  }
-
-  function handleInput(e) {
-    setInput(e.target.value)
-    e.target.style.height = 'auto'
-    e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'
-  }
-
-  function trocarMateria(m) {
-    setMensagens([])
-    setImagem(null)
-    setTopicoAtivo(null)
-    setMateriaAtiva(m)
-  }
-  function trocarTopico(t) {
-    setTopicoAtivo(t); setMensagens([]); setImagem(null)
-  }
-  function handlePerfilUpdate(novoPerf) {
-    setPerfil(novoPerf)
-    const lista = novoPerf.materias.split(',').map(m => m.trim()).filter(Boolean)
-    setMaterias(lista)
-    if (!lista.includes(materiaAtiva)) { setMateriaAtiva(lista[0] || null); setTopicoAtivo(null); setMensagens([]) }
-  }
-  function handleTopicosUpdate(novosTopicos) { setTopicos(novosTopicos) }
-
-  function carregarResumoMateria(materia) {
-    if (!materia || materia === '__geral__') {
-      setResumoMateria({ mediaNotas: null, proximoEvento: null })
-      return
-    }
-    const norm = s => s?.toLowerCase().trim() || ''
-    // Notas
-    let mediaNotas = null
-    try {
-      const notas = JSON.parse(localStorage.getItem('pointai_notas') || '[]')
-      const mat = notas.find(n =>
-        norm(n.nome) === norm(materia) ||
-        norm(materia).includes(norm(n.nome)) ||
-        norm(n.nome).includes(norm(materia))
-      )
-      if (mat) {
-        const vals = (mat.notas || []).filter(n => n !== '' && !isNaN(parseFloat(n))).map(parseFloat)
-        if (vals.length > 0) mediaNotas = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
+    const vals = (dados.notas || []).filter(n => n !== '' && n !== null && n !== undefined && !isNaN(parseFloat(n))).map(parseFloat)
+    if (vals.length > 0) {
+      const media = vals.reduce((a, b) => a + b, 0) / vals.length
+      if (media < 7) {
+        alertas.push({
+          id: `m_${materia}`,
+          tipo: 'nota',
+          materia,
+          texto: `Média ${media.toFixed(1)} em ${materia}`,
+          severidade: media < 5 ? 'alta' : 'media',
+        })
       }
-    } catch {}
-    // Próximo evento
-    let proximoEvento = null
-    try {
-      const hoje = new Date().toISOString().split('T')[0]
-      const eventos = JSON.parse(localStorage.getItem('pointai_eventos') || '[]')
-      proximoEvento = eventos
-        .filter(e => e.data >= hoje && (
-          norm(e.materia) === norm(materia) ||
-          norm(materia).includes(norm(e.materia)) ||
-          norm(e.materia).includes(norm(materia))
-        ))
-        .sort((a, b) => a.data.localeCompare(b.data))[0] || null
-    } catch {}
-    setResumoMateria({ mediaNotas, proximoEvento })
-  }
-
-  useEffect(() => { carregarResumoMateria(materiaAtiva) }, [materiaAtiva])
-
-  function novoChat(materia) {
-    if (!materia || !perfil) return
-    try { localStorage.removeItem(`chat_${materia}`) } catch {}
-    if (materia === materiaAtiva && !topicoAtivo) {
-      const isGeral = materia === '__geral__'
-      const msg = isGeral
-        ? `Olá, **${perfil.nome}**! 👋 Aqui é o Chat Geral — pode me perguntar qualquer coisa sobre seus estudos, sem focar em uma matéria específica. Dúvidas, técnicas de estudo, planejamento... estou aqui!`
-        : `Olá, **${perfil.nome}**! 👋 Estou aqui para te ajudar com **${materia}**. Pode me perguntar qualquer coisa — dúvidas, exercícios, resumos ou explicações. Por onde quer começar?`
-      setMensagens([{ role: 'assistant', content: msg, timestamp: new Date().toISOString() }])
-      setResumo(null)
     }
-  }
+  })
+  alertas.sort((a, b) => (a.severidade === 'alta' ? -1 : 1) - (b.severidade === 'alta' ? -1 : 1))
+  const alertasTop  = alertas.slice(0, 2)
+  const temAlertas  = alertasTop.length > 0
+  const piorSeveridade = alertasTop.some(a => a.severidade === 'alta') ? 'alta' : 'media'
 
-  if (!perfil) return (
-    <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <p style={{ color:'var(--text-4)' }}>Carregando...</p>
-    </div>
+  // ── Média geral + sparkline data ────────────────────────────
+  const mediasPorMateria = Object.values(notas).map(d => {
+    const v = (d?.notas || []).filter(n => n !== '' && n !== null && !isNaN(parseFloat(n))).map(parseFloat)
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+  }).filter(m => m !== null)
+  const mediaGeral = mediasPorMateria.length
+    ? (mediasPorMateria.reduce((a, b) => a + b, 0) / mediasPorMateria.length).toFixed(1)
+    : null
+  const corMedia = mediaGeral === null ? '#a1a1aa'
+    : parseFloat(mediaGeral) >= 7 ? '#22c55e'
+    : parseFloat(mediaGeral) >= 5 ? '#d97706' : '#dc2626'
+  const todasNotas = Object.values(notas).flatMap(d =>
+    (d?.notas || []).filter(n => n !== '' && n !== null && !isNaN(parseFloat(n))).map(parseFloat)
   )
 
-  const podeEnviar  = !carregando && (input.trim() || (!modoQuiz && imagem))
-  const isGeralChat = materiaAtiva === '__geral__'
-  const tituloChat  = isGeralChat
-    ? 'Chat Geral'
-    : (topicoAtivo ? `${materiaAtiva} / ${topicoAtivo}` : materiaAtiva)
+  // ── Continuar conversa ──────────────────────────────────────
+  const continuarHref = lastChat
+    ? (lastChat.materia === '__geral__'
+        ? '/dashboard/chat'
+        : `/dashboard/chat?materia=${encodeURIComponent(lastChat.materia)}`)
+    : '/dashboard/chat'
+  const continuarLabel = lastChat
+    ? (lastChat.materia === '__geral__' ? 'Chat Geral' : lastChat.materia)
+    : null
+
+  function handlePerfilUpdate(novoPerf) { setPerfil(novoPerf) }
+
+  if (!perfil) return (
+    <div className="app-shell">
+      <div className="page-area" style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <p style={{ color:'var(--text-4)' }}>Carregando…</p>
+      </div>
+    </div>
+  )
 
   return (
     <div className="app-shell">
-      <style>{`
-        @keyframes speakPulse {
-          0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.5), 0 2px 8px rgba(34,197,94,.3); }
-          50%      { box-shadow: 0 0 0 7px rgba(34,197,94,.0), 0 2px 16px rgba(34,197,94,.5); }
-        }
-        @keyframes speakRing {
-          0%,100% { box-shadow: 0 0 0 2px rgba(34,197,94,.4); }
-          50%      { box-shadow: 0 0 0 5px rgba(34,197,94,.0); }
-        }
-        .avatar-speaking {
-          animation: speakPulse 1.1s ease-in-out infinite !important;
-        }
-        .tts-btn-speaking {
-          color: #f87171 !important;
-          background: rgba(239,68,68,.12) !important;
-          animation: speakRing 1.1s ease-in-out infinite;
-        }
-        .tts-btn-active {
-          color: #22c55e !important;
-          background: rgba(34,197,94,.1) !important;
-        }
-        .resumo-badge {
-          display: inline-flex; align-items: center; gap: 5px;
-          font-size: 11px; font-weight: 700; color: var(--brand);
-          text-transform: uppercase; letter-spacing: .06em;
-          background: rgba(26,122,74,.12); border-radius: 20px; padding: 3px 10px;
-          margin-bottom: 10px;
-        }
-        .resumo-pdf-btn {
-          display: inline-flex; align-items: center; gap: 5px;
-          font-size: 12px; font-weight: 600; color: var(--brand);
-          background: var(--brand-light); border: 1px solid var(--brand-mid);
-          border-radius: 20px; padding: 5px 13px; cursor: pointer; font-family: inherit;
-          margin-top: 12px; transition: background .12s;
-        }
-        .resumo-pdf-btn:hover { background: var(--brand-mid); }
-        .quiz-badge {
-          display: inline-flex; align-items: center; gap: 5px;
-          font-size: 11px; font-weight: 700;
-          text-transform: uppercase; letter-spacing: .06em;
-          border-radius: 20px; padding: 3px 10px; margin-bottom: 8px;
-        }
-        .quiz-badge.pergunta { color: #1d4ed8; background: rgba(29,78,216,.1); }
-        .quiz-badge.feedback-ok { color: #15803d; background: rgba(21,128,61,.1); }
-        .quiz-badge.feedback-err { color: #dc2626; background: rgba(220,38,38,.1); }
-        .quiz-resultado {
-          text-align: center; padding: 8px 0 4px;
-        }
-        .quiz-score { font-size: 34px; font-weight: 800; color: var(--brand); line-height: 1; }
-        .quiz-score-label { font-size: 13px; color: var(--text-3); margin-top: 6px; }
-        .svg-block { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 10px 0; }
-        .svg-block-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
-        .svg-block-label { font-size: 11.5px; font-weight: 600; color: var(--text-4); text-transform: uppercase; letter-spacing: .05em; }
-        .svg-block-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--brand); background: var(--brand-light); border: 1px solid var(--brand-mid); border-radius: 20px; padding: 3px 9px; cursor: pointer; font-family: inherit; transition: background .12s; }
-        .svg-block-btn:hover { background: var(--brand-mid); }
-        .svg-block-canvas { padding: 16px; background: #fff; display: flex; justify-content: center; overflow: auto; }
-        .svg-block-canvas svg { max-width: 100%; height: auto; }
-        .svg-fullscreen-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-        .svg-fullscreen-inner { position: relative; background: #fff; border-radius: var(--radius-lg); padding: 24px; max-width: 95vw; max-height: 95vh; overflow: auto; }
-        .svg-fullscreen-close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-3); line-height: 1; }
-        .svg-fullscreen-close:hover { color: var(--text-1); }
-      `}</style>
+      <style>{CSS}</style>
+      <Sidebar perfil={perfil} onPerfilUpdate={handlePerfilUpdate} />
 
-      <Sidebar
-        perfil={perfil}
-        materias={materias}
-        materiaAtiva={materiaAtiva}
-        onMateriaChange={trocarMateria}
-        topicos={topicos}
-        topicoAtivo={topicoAtivo}
-        onTopicoChange={trocarTopico}
-        onTopicosUpdate={handleTopicosUpdate}
-        onPerfilUpdate={handlePerfilUpdate}
-        onNovoChat={m => setNovoChatConfirm(m)}
-      />
+      <div className="page-area home-area">
+        <div className="home-scroll">
+          <div className="home-container">
 
-      <div className="page-area">
-        {/* Header */}
-        <div className="chat-header">
-          <div
-            className="chat-header-avatar"
-            style={isGeralChat
-              ? { background: 'linear-gradient(135deg,#1d4ed8,#3b82f6)', boxShadow: '0 2px 10px rgba(59,130,246,.32), 0 0 0 1px rgba(96,165,250,.2)' }
-              : {}
-            }
-          >
-            {isGeralChat ? <Globe size={16} strokeWidth={2} /> : 'P'}
-          </div>
-          <div>
-            <p className="chat-header-title">{tituloChat}</p>
-            <p className="chat-header-sub">Point AI · {isGeralChat ? 'Chat livre' : 'Especialista acadêmico'}</p>
-          </div>
-          <div className="chat-header-right">
-            {isGeralChat && (
-              <button
-                className="chat-header-action"
-                onClick={() => setNovoChatConfirm('__geral__')}
-                title="Novo Chat Geral"
+            {/* ── Greeting ────────────────────────────────────── */}
+            <header className="home-greeting">
+              <h1 className="home-greet-line">
+                {saudacao()},{' '}
+                {nome1 && <span className="home-greet-name">{nome1}</span>}
+              </h1>
+              <p className="home-greet-date">{dataLonga()}</p>
+            </header>
+
+            {/* ── Bento grid ──────────────────────────────────── */}
+            <div className={`home-grid${temAlertas ? '' : ' home-grid--no-alerts'}`}>
+
+              {/* ── Continuar (span 2) ───────────────────────── */}
+              <article className="home-card home-card--continuar" style={{ animationDelay: '0ms' }}>
+                <div className="home-card-head">
+                  <span className="home-card-ico home-card-ico--emerald">
+                    <MessageSquare size={16} strokeWidth={2} />
+                  </span>
+                  <p className="home-card-title">Continuar</p>
+                </div>
+
+                {lastChat ? (
+                  <Link href={continuarHref} className="home-continuar-block">
+                    <p className="home-continuar-pre">Você estava conversando sobre</p>
+                    <p className="home-continuar-materia">{continuarLabel}</p>
+                    <p className="home-continuar-quote">
+                      &ldquo;{lastChat.ultimaMensagem || 'Sem mensagens recentes.'}&rdquo;
+                    </p>
+                    <p className="home-continuar-time">{tempoRelativo(lastChat.timestamp)}</p>
+                    <span className="home-cta home-cta--strong">
+                      Continuar <ArrowRight size={13} strokeWidth={2.2} />
+                    </span>
+                  </Link>
+                ) : materias.length > 0 ? (
+                  <>
+                    <p className="home-continuar-prompt">Por onde quer começar hoje?</p>
+                    <div className="home-pills">
+                      {materias.map(m => (
+                        <Link
+                          key={m}
+                          href={`/dashboard/chat?materia=${encodeURIComponent(m)}`}
+                          className="home-pill"
+                        >
+                          {m}
+                        </Link>
+                      ))}
+                      <Link href="/dashboard/chat" className="home-pill home-pill--ghost">
+                        Chat Geral
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="home-continuar-prompt">Você ainda não tem matérias cadastradas.</p>
+                    <p className="home-empty-hint">Adicione no menu lateral em <strong>+ Nova matéria</strong> para começar.</p>
+                    <Link href="/dashboard/chat" className="home-cta home-cta--strong" style={{ marginTop: 12 }}>
+                      Ir para Chat Geral <ArrowRight size={13} strokeWidth={2.2} />
+                    </Link>
+                  </>
+                )}
+              </article>
+
+              {/* ── Próximos eventos (span 1) ────────────────── */}
+              <article className="home-card" style={{ animationDelay: '60ms' }}>
+                <div className="home-card-head">
+                  <span className="home-card-ico home-card-ico--blue">
+                    <Calendar size={16} strokeWidth={2} />
+                  </span>
+                  <p className="home-card-title">Próximos eventos</p>
+                </div>
+
+                {proximosEventos.length === 0 ? (
+                  <div className="home-empty">
+                    <Calendar size={36} strokeWidth={1.2} className="home-empty-ico" />
+                    <p className="home-empty-text">Sem provas ou trabalhos próximos</p>
+                    <Link href="/calendario" className="home-empty-link">
+                      + Adicionar evento
+                    </Link>
+                  </div>
+                ) : (
+                  <>
+                    <ul className="home-event-list">
+                      {proximosEventos.map(e => {
+                        const d  = diasAte(e.data)
+                        const cu = corUrgencia(d)
+                        return (
+                          <li key={e.id || `${e.titulo}-${e.data}`} className="home-event-row">
+                            <span
+                              className="home-event-pill"
+                              style={{ color: cu.fg, background: cu.bg, borderColor: cu.border }}
+                            >
+                              {rotuloRelativo(d)}
+                            </span>
+                            <div className="home-event-body">
+                              <p className="home-event-title">{e.titulo || e.materia || 'Evento'}</p>
+                              <p className="home-event-sub">
+                                {TIPO_LABEL[e.tipo] || 'Evento'}{e.materia ? ` · ${e.materia}` : ''}
+                              </p>
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    <Link href="/calendario" className="home-cta">
+                      Ver tudo <ArrowRight size={13} strokeWidth={2} />
+                    </Link>
+                  </>
+                )}
+              </article>
+
+              {/* ── Evolução (span 2 with alerts, span 3 without) ── */}
+              <article
+                className={`home-card home-card--evolucao${temAlertas ? '' : ' home-card--wide'}`}
+                style={{ animationDelay: '120ms' }}
               >
-                <RotateCcw size={14} strokeWidth={1.8} />
-              </button>
-            )}
-            {!isGeralChat && (
-              <>
-                <Link href="/notas" className="chat-header-action" title="Notas desta matéria">
-                  <BookOpen size={15} strokeWidth={1.8} />
-                </Link>
-                <Link href="/calendario" className="chat-header-action" title="Calendário">
-                  <Calendar size={15} strokeWidth={1.8} />
-                </Link>
-              </>
-            )}
-            <div className="chat-header-sep" />
-            <div className="chat-online-wrap">
-              <div className="online-dot" />
-              <span className="chat-online-label">Online</span>
-            </div>
-          </div>
-        </div>
+                <div className="home-card-head">
+                  <span className="home-card-ico home-card-ico--violet">
+                    <TrendingUp size={16} strokeWidth={2} />
+                  </span>
+                  <p className="home-card-title">Evolução</p>
+                </div>
 
-        {/* Action bar */}
-        {(mensagens.length > 2 || modoQuiz) && (
-          <div className="chat-action-bar">
-            {modoQuiz ? (
-              <>
-                <span className="chat-action-bar-status">
-                  Quiz em andamento
-                </span>
-                <span className="quiz-header-score">
-                  {quizHistorico.filter(q => q.correta).length} acertos
-                </span>
-                <button className="quiz-encerrar-btn" onClick={encerrarQuiz}>
-                  Encerrar
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className="chat-action-btn"
-                  onClick={gerarResumoChat}
-                  disabled={gerandoResumo || carregando}
-                >
-                  <FileText size={13} strokeWidth={1.8} />
-                  {gerandoResumo ? 'Gerando…' : 'Resumir conversa'}
-                </button>
-                <button
-                  className="chat-action-btn"
-                  onClick={iniciarQuiz}
-                  disabled={carregando}
-                >
-                  <HelpCircle size={13} strokeWidth={1.8} />
-                  Iniciar quiz
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Messages */}
-        <div className="chat-area" data-tour="chat-area">
-          {mensagens.map((msg, i) => {
-            const isUser = msg.role === 'user'
-            const prev   = mensagens[i - 1]
-            const showDateSep = msg.timestamp && (!prev?.timestamp || !mesmosDia(msg.timestamp, prev.timestamp))
-
-            return (
-              <div key={i}>
-                {showDateSep && (
-                  <div className="date-sep">
-                    <span className="date-sep-label">{dataDia(msg.timestamp)}</span>
+                {mediaGeral === null ? (
+                  <div className="home-evo-body">
+                    <div className="home-evo-stack">
+                      <span className="home-evo-empty-value">—</span>
+                      <p className="home-evo-empty-text">Lance suas avaliações pra ver evolução</p>
+                    </div>
+                    <SparkPlaceholder />
+                    <Link href="/notas" className="home-cta home-cta--strong">
+                      Lançar notas <ArrowRight size={13} strokeWidth={2.2} />
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="home-evo-body">
+                    <div className="home-evo-stack">
+                      <span className="home-evo-value" style={{ color: corMedia }}>{mediaGeral}</span>
+                      <p className="home-evo-label">
+                        Média geral · {mediasPorMateria.length} matéria{mediasPorMateria.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    {todasNotas.length >= 2 ? (
+                      <Sparkline valores={todasNotas} cor={corMedia} />
+                    ) : (
+                      <SparkPlaceholder />
+                    )}
+                    <Link href="/evolucao" className="home-cta home-cta--strong">
+                      Ver evolução <ArrowRight size={13} strokeWidth={2.2} />
+                    </Link>
                   </div>
                 )}
+              </article>
 
-                <div className={`chat-bubble-wrap msg-group ${isUser ? 'user' : ''}`} {...(!isUser && i === 0 ? { 'data-tour': 'msg-bubble-first' } : {})}>
-                  {!isUser && (
-                    <div className={`chat-avatar${falando && i === mensagens.length - 1 ? ' avatar-speaking' : ''}`}>P</div>
-                  )}
-
-                  <div>
-                    {/* Bubble */}
-                    {msg.tipo === 'resumo' ? (
-                      <div className="chat-bubble assistant" style={{ borderLeft: '3px solid var(--brand)' }}>
-                        <div className="resumo-badge">
-                          <FileText size={10} strokeWidth={2} /> Resumo da Conversa
-                        </div>
-                        {msg.carregando ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-4)', fontSize: 13 }}>
-                            <div className="typing-dots" style={{ display: 'inline-flex' }}>
-                              <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
-                            </div>
-                            Gerando resumo…
-                          </div>
-                        ) : (
-                          <>
-                            <RichMessage content={msg.content} />
-                            <button
-                              className="resumo-pdf-btn"
-                              onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: tituloChat })}
-                            >
-                              <FileText size={12} strokeWidth={1.8} /> Baixar em PDF
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    ) : msg.tipo === 'quiz' ? (
-                      <div className="chat-bubble assistant">
-                        {msg.subTipo === 'pergunta' && (
-                          <>
-                            <div className="quiz-badge pergunta">
-                              <HelpCircle size={10} strokeWidth={2} /> Questão {msg.numero} de {msg.total}
-                            </div>
-                            <RichMessage content={msg.content} />
-                          </>
-                        )}
-                        {msg.subTipo === 'feedback' && (
-                          <>
-                            <div className={`quiz-badge ${msg.correta ? 'feedback-ok' : 'feedback-err'}`}>
-                              {msg.correta ? '✓ Correto' : '✗ Incorreto'}
-                            </div>
-                            <RichMessage content={msg.content} />
-                          </>
-                        )}
-                        {msg.subTipo === 'resultado' && (
-                          <div className="quiz-resultado">
-                            <div className="quiz-score">{msg.acertos}/{msg.total}</div>
-                            <p className="quiz-score-label">
-                              {msg.acertos === msg.total ? 'Perfeito! Excelente desempenho.' :
-                               msg.acertos >= msg.total * 0.7 ? 'Muito bem! Continue revisando.' :
-                               'Revise o conteúdo e tente novamente.'}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
-                        {isUser ? (
-                          <>
-                            {msg.image && <img src={msg.image} alt="Imagem enviada" className="chat-bubble-img" />}
-                            {msg.content && <span>{msg.content}</span>}
-                          </>
-                        ) : (
-                          msg.content && <RichMessage content={msg.content} />
-                        )}
-                      </div>
-                    )}
-
-                    {/* Timestamp */}
-                    {msg.timestamp && (
-                      <p className={`chat-msg-time ${isUser ? 'user' : ''}`}>
-                        {tempoRelativo(msg.timestamp)}
-                      </p>
-                    )}
-
-                    {/* PDF button */}
-                    {!isUser && msg.hasPdfBtn && !msg.streaming && (
-                      <button
-                        className="pdf-btn"
-                        onClick={() => gerarPDFChat({ conteudo: msg.content, perfil, materia: tituloChat })}
-                      >
-                        <FileText size={13} strokeWidth={1.8} /> Baixar em PDF
-                      </button>
-                    )}
-
-                    {/* Hover actions — user messages */}
-                    {isUser && !carregando && !modoQuiz && !msg.tipo && (
-                      <div className="msg-actions user-side">
-                        <button
-                          className="msg-action-btn"
-                          onClick={() => retry(i)}
-                          title="Reenviar mensagem"
-                        >
-                          <IcRetry /> Reenviar
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Hover actions — AI messages */}
-                    {!isUser && !msg.streaming && msg.content && !msg.tipo && (
-                      <div className="msg-actions" {...(i === 0 ? { 'data-tour': 'msg-first' } : {})}>
-                        <button
-                          className="msg-action-btn"
-                          onClick={aprofundar}
-                          title="Aprofundar resposta"
-                          disabled={carregando}
-                        >
-                          <IcExpand /> Aprofundar
-                        </button>
-                        <button
-                          className={`msg-action-btn ${copiedIdx === i ? 'copied' : ''}`}
-                          onClick={() => copiar(msg.content, i)}
-                          title="Copiar resposta"
-                        >
-                          <IcCopy />
-                          {copiedIdx === i ? 'Copiado!' : 'Copiar'}
-                        </button>
-                        <button
-                          className="msg-action-btn"
-                          onClick={() => setShareContent(msg.content)}
-                          title="Compartilhar resposta"
-                        >
-                          <IcShare /> Compartilhar
-                        </button>
-                      </div>
-                    )}
+              {/* ── Atenção (conditional, span 1) ────────────── */}
+              {temAlertas && (
+                <article
+                  className={`home-card home-card--alert home-card--alert-${piorSeveridade}`}
+                  style={{ animationDelay: '180ms' }}
+                >
+                  <div className="home-card-head">
+                    <span className={`home-card-ico home-card-ico--${piorSeveridade === 'alta' ? 'red' : 'amber'}`}>
+                      <AlertTriangle size={16} strokeWidth={2} />
+                    </span>
+                    <p className="home-card-title">Atenção</p>
                   </div>
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Welcome panel — cards + chips, shown only with welcome message */}
-          {mensagens.length === 1 && !carregando && (
-            <div className="chat-welcome-panel">
-              {!isGeralChat && (
-                <div className="chat-welcome-cards">
-                  {/* Card: Média */}
-                  <div className="chat-summary-card">
-                    <div className="chat-summary-card-icon">
-                      <BookOpen size={15} strokeWidth={2} />
-                    </div>
-                    <div className="chat-summary-card-body">
-                      <p className="chat-summary-card-label">Média atual</p>
-                      {resumoMateria.mediaNotas != null ? (
-                        <p className="chat-summary-card-value" style={{ color: corMedia(resumoMateria.mediaNotas) }}>
-                          {resumoMateria.mediaNotas}
-                        </p>
-                      ) : (
-                        <Link href="/notas" className="chat-summary-card-empty">Adicionar notas →</Link>
-                      )}
-                    </div>
-                  </div>
-                  {/* Card: Próximo evento */}
-                  <div className="chat-summary-card">
-                    <div className="chat-summary-card-icon calendar">
-                      <Calendar size={15} strokeWidth={2} />
-                    </div>
-                    <div className="chat-summary-card-body">
-                      <p className="chat-summary-card-label">Próximo evento</p>
-                      {resumoMateria.proximoEvento ? (
-                        <>
-                          <p className="chat-summary-card-value sm" title={resumoMateria.proximoEvento.titulo}>
-                            {resumoMateria.proximoEvento.titulo}
-                          </p>
-                          <p className="chat-summary-card-sub">{formatarData(resumoMateria.proximoEvento.data)}</p>
-                        </>
-                      ) : (
-                        <Link href="/calendario" className="chat-summary-card-empty">Ver calendário →</Link>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  <ul className="home-alert-list">
+                    {alertasTop.map(a => (
+                      <li key={a.id} className={`home-alert-row home-alert-row--${a.severidade}`}>
+                        <span className="home-alert-dot" />
+                        <span className="home-alert-text">{a.texto}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link href="/notas" className="home-cta">
+                    Ver detalhes <ArrowRight size={13} strokeWidth={2} />
+                  </Link>
+                </article>
               )}
-              <div className="chat-chips-wrap" style={{ padding: '0 0 4px' }}>
-                <div className="chat-chips">
-                  {(isGeralChat ? QUICK_CHIPS_GERAL : QUICK_CHIPS).map(c => (
-                    <button key={c} className="chat-chip" onClick={() => enviar(c)}>{c}</button>
-                  ))}
+
+              {/* ── Ações rápidas (span 3) ───────────────────── */}
+              <article
+                className="home-card home-card--full"
+                style={{ animationDelay: temAlertas ? '240ms' : '180ms' }}
+              >
+                <p className="home-card-title home-card-title--standalone">Ações rápidas</p>
+                <div className="home-quick-grid">
+                  <Link href="/dashboard/chat" className="home-quick-btn">
+                    <span className="home-quick-ico"><MessageSquare size={18} strokeWidth={1.7} /></span>
+                    <span className="home-quick-label">Novo chat</span>
+                  </Link>
+                  <Link href="/trabalhos" className="home-quick-btn">
+                    <span className="home-quick-ico"><FileText size={18} strokeWidth={1.7} /></span>
+                    <span className="home-quick-label">Corrigir trabalho</span>
+                  </Link>
+                  <Link href="/simulado" className="home-quick-btn">
+                    <span className="home-quick-ico"><ClipboardList size={18} strokeWidth={1.7} /></span>
+                    <span className="home-quick-label">Simulado</span>
+                    {!ehPro && <span className="home-quick-pro">PRO</span>}
+                  </Link>
+                  <Link href="/plano" className="home-quick-btn">
+                    <span className="home-quick-ico"><Brain size={18} strokeWidth={1.7} /></span>
+                    <span className="home-quick-label">Plano de estudos</span>
+                    {!ehPro && <span className="home-quick-pro">PRO</span>}
+                  </Link>
                 </div>
-              </div>
+              </article>
+
             </div>
-          )}
-
-          {/* Typing indicator */}
-          {carregando && (
-            <div className="chat-bubble-wrap">
-              <div className="chat-avatar">P</div>
-
-              <div className="chat-bubble assistant" style={{ padding:'4px 6px' }}>
-                <div className="typing-dots">
-                  <div className="typing-dot" />
-                  <div className="typing-dot" />
-                  <div className="typing-dot" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div ref={fimChat} />
-        </div>
-
-        {/* Input bar */}
-        <div className="chat-input-bar">
-          {imagem && (
-            <div className="chat-img-preview">
-              <img src={imagem.dataUrl} alt="Preview" />
-              <button className="chat-img-remove" onClick={() => setImagem(null)} aria-label="Remover imagem">
-                <IcX />
-              </button>
-            </div>
-          )}
-
-          <div className="chat-input-row">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png"
-              onChange={selecionarImagem}
-              style={{ display:'none' }}
-            />
-
-            {/* Camera */}
-            <button
-              className={`chat-attach-btn ${imagem ? 'active' : ''}`}
-              onClick={() => fileInputRef.current?.click()}
-              title="Enviar foto da prova ou tarefa"
-              aria-label="Anexar imagem"
-              data-tour="camera-btn"
-            >
-              <IcCamera />
-            </button>
-
-            {/* Microphone */}
-            {vozDisp && (
-              <button
-                className={`chat-mic-btn ${gravando ? 'recording' : ''}`}
-                onClick={toggleVoz}
-                title={gravando ? 'Parar gravação' : 'Ditado por voz'}
-                aria-label={gravando ? 'Parar gravação' : 'Ditado por voz'}
-              >
-                <IcMic />
-              </button>
-            )}
-
-            {/* TTS toggle / stop — Pro only */}
-            {ehPro ? (
-              <button
-                className={`chat-mic-btn ${falando ? 'tts-btn-speaking' : vozAtiva ? 'tts-btn-active' : ''}`}
-                onClick={() => { falando ? pararAudio() : setVozAtiva(v => !v) }}
-                title={falando ? 'Parar áudio' : vozAtiva ? 'Desativar leitura em voz alta' : 'Ativar leitura em voz alta'}
-                aria-label={falando ? 'Parar áudio' : 'Leitura em voz alta'}
-              >
-                {falando ? <IcStop /> : <IcHeadphone />}
-              </button>
-            ) : (
-              <button
-                className="chat-mic-btn"
-                onClick={() => setShowUpgrade(true)}
-                title="Funcionalidade exclusiva do plano Pro"
-                aria-label="Leitura em voz alta — exclusivo Pro"
-                style={{ position: 'relative' }}
-              >
-                <IcHeadphone />
-                <span style={{
-                  position: 'absolute', top: 1, right: 1,
-                  width: 9, height: 9, borderRadius: '50%',
-                  background: '#f59e0b',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <svg width="5" height="5" viewBox="0 0 24 24" fill="white">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-                  </svg>
-                </span>
-              </button>
-            )}
-
-            <textarea
-              ref={textareaRef}
-              className="chat-textarea"
-              value={input}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              placeholder={modoQuiz ? 'Digite sua resposta…' : isGeralChat ? 'Pergunte qualquer coisa…' : `Pergunte sobre ${topicoAtivo || materiaAtiva}…`}
-              rows={1}
-            />
-
-            <button
-              className="chat-send-btn"
-              onClick={enviar}
-              disabled={!podeEnviar}
-              aria-label="Enviar"
-            >
-              ↑
-            </button>
           </div>
-
-          <p className="chat-hint">
-            Enter para enviar · Shift+Enter para nova linha
-            {planInfo.plano === 'gratis' && (
-              <span className={`plan-counter ${planInfo.mensagensHoje >= planInfo.limite - 4 ? 'warning' : ''} ${planInfo.mensagensHoje >= planInfo.limite ? 'danger' : ''}`}>
-                {' '}· {planInfo.mensagensHoje}/{planInfo.limite} mensagens hoje
-              </span>
-            )}
-          </p>
         </div>
       </div>
-
-      {/* Upgrade modal */}
-      {showUpgrade && (
-        <UpgradeModal
-          onClose={() => setShowUpgrade(false)}
-          mensagensHoje={planInfo.mensagensHoje}
-          limite={planInfo.limite}
-        />
-      )}
-
-      {/* Novo chat confirmation modal */}
-      {novoChatConfirm && (
-        <div className="sb-overlay" onClick={() => setNovoChatConfirm(null)}>
-          <div className="sb-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-            <div className="sb-modal-header">
-              <p className="sb-modal-title">Iniciar novo chat?</p>
-              <button className="sb-modal-close" onClick={() => setNovoChatConfirm(null)}>×</button>
-            </div>
-            <p style={{ fontSize: 13.5, color: 'var(--text-3)', lineHeight: 1.6, marginBottom: 20 }}>
-              {novoChatConfirm === '__geral__'
-                ? 'O histórico visual do Chat Geral será apagado. As matérias são mantidas para memória da IA.'
-                : `Iniciar novo chat em "${novoChatConfirm}"? O histórico atual será apagado.`}
-            </p>
-            <div className="sb-modal-footer">
-              <button className="btn btn-ghost" onClick={() => setNovoChatConfirm(null)}>Cancelar</button>
-              <button
-                className="btn btn-primary"
-                onClick={() => { novoChat(novoChatConfirm); setNovoChatConfirm(null) }}
-              >
-                Iniciar novo chat
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Share modal */}
-      {shareContent && (
-        <div className="share-overlay" onClick={() => setShareContent(null)}>
-          <div className="share-modal" onClick={e => e.stopPropagation()}>
-            <div className="share-modal-header">
-              <p className="share-modal-title">Compartilhar resposta</p>
-              <button className="share-modal-close" onClick={() => setShareContent(null)}>×</button>
-            </div>
-            <div className="share-modal-body">
-              <pre className="share-modal-text">{stripMarkdown(shareContent)}</pre>
-            </div>
-            <div className="share-modal-footer">
-              <button className="btn btn-ghost" onClick={() => setShareContent(null)}>Fechar</button>
-              <button
-                className="btn btn-primary"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(stripMarkdown(shareContent))
-                  setShareContent(null)
-                }}
-              >
-                <Copy size={13} strokeWidth={1.8} /> Copiar para compartilhar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
+
+const CSS = `
+  /* ── Layout shell ───────────────────────────────────────── */
+  .home-area  { background: var(--surface-2); }
+  .home-scroll {
+    flex: 1; overflow-y: auto;
+  }
+  .home-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 32px 56px;
+  }
+
+  /* ── Greeting ───────────────────────────────────────────── */
+  .home-greeting { margin-bottom: 32px; }
+  .home-greet-line {
+    font-size: 32px; font-weight: 600; letter-spacing: -.5px;
+    color: var(--text-1); line-height: 1.15; margin: 0;
+  }
+  .home-greet-name {
+    background: linear-gradient(90deg, #34d399 0%, #a7f3d0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-weight: 700;
+  }
+  .home-greet-date {
+    margin-top: 6px;
+    font-size: 14px;
+    color: #71717a;
+    letter-spacing: .1px;
+  }
+
+  /* ── Bento grid ─────────────────────────────────────────── */
+  .home-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-auto-rows: minmax(0, auto);
+    gap: 16px;
+  }
+  .home-card--continuar { grid-column: span 2; }
+  .home-card--evolucao  { grid-column: span 2; }
+  .home-card--evolucao.home-card--wide { grid-column: span 3; }
+  .home-card--alert     { grid-column: span 1; }
+  .home-card--full      { grid-column: span 3; }
+  .home-grid--no-alerts .home-card--evolucao { grid-column: span 3; }
+
+  /* ── Card base ──────────────────────────────────────────── */
+  .home-card {
+    position: relative;
+    background: linear-gradient(180deg, rgba(255,255,255,.025) 0%, rgba(255,255,255,.01) 100%);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 18px;
+    padding: 24px;
+    color: var(--text-1);
+    display: flex; flex-direction: column;
+    transition: transform 200ms cubic-bezier(.16,1,.3,1), border-color 200ms cubic-bezier(.16,1,.3,1), box-shadow 200ms cubic-bezier(.16,1,.3,1);
+    animation: homeStagger 400ms cubic-bezier(.16,1,.3,1) both;
+  }
+  .home-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(34,197,94,.18);
+    box-shadow: 0 8px 32px -8px rgba(34,197,94,.12);
+  }
+
+  /* ── Card head ──────────────────────────────────────────── */
+  .home-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .home-card-ico {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .home-card-ico--emerald { background: rgba(34,197,94,.10);  color: #86efac; }
+  .home-card-ico--blue    { background: rgba(59,130,246,.10); color: #93c5fd; }
+  .home-card-ico--violet  { background: rgba(168,85,247,.10); color: #c4b5fd; }
+  .home-card-ico--amber   { background: rgba(245,158,11,.12); color: #fcd34d; }
+  .home-card-ico--red     { background: rgba(239,68,68,.12);  color: #fca5a5; }
+  .home-card-title {
+    font-size: 15px; font-weight: 600; color: var(--text-1); letter-spacing: -.2px;
+  }
+  .home-card-title--standalone { margin-bottom: 14px; }
+
+  /* ── Continuar (empty: pills) ───────────────────────────── */
+  .home-continuar-prompt {
+    font-size: 14px; color: #d4d4d8; margin-bottom: 14px;
+  }
+  .home-pills {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+  }
+  .home-pill {
+    display: inline-flex; align-items: center;
+    padding: 6px 14px; border-radius: 99px;
+    border: 1px solid rgba(255,255,255,.08);
+    background: rgba(255,255,255,.03);
+    color: #e4e4e7; font-size: 13px; font-weight: 500;
+    text-decoration: none;
+    transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+  }
+  .home-pill:hover {
+    border-color: rgba(34,197,94,.40);
+    background: rgba(34,197,94,.06);
+    color: #bbf7d0;
+  }
+  .home-pill--ghost {
+    border-style: dashed; color: #a1a1aa;
+  }
+  .home-empty-hint {
+    font-size: 12.5px; color: #71717a; line-height: 1.55;
+  }
+
+  /* ── Continuar (with data) ──────────────────────────────── */
+  .home-continuar-block {
+    display: flex; flex-direction: column;
+    text-decoration: none; color: inherit;
+    flex: 1;
+  }
+  .home-continuar-pre {
+    font-size: 12px; color: #71717a; letter-spacing: .2px;
+    text-transform: uppercase; font-weight: 600;
+  }
+  .home-continuar-materia {
+    font-size: 17px; font-weight: 600; color: #f4f4f5;
+    margin-top: 4px;
+  }
+  .home-continuar-quote {
+    margin-top: 10px;
+    padding: 10px 14px;
+    border-left: 2px solid rgba(34,197,94,.45);
+    background: rgba(255,255,255,.02);
+    border-radius: 0 6px 6px 0;
+    font-size: 13px; font-style: italic; color: #a1a1aa;
+    line-height: 1.5;
+  }
+  .home-continuar-time {
+    font-size: 11.5px; color: #52525b; margin-top: 8px;
+  }
+
+  /* ── CTAs ───────────────────────────────────────────────── */
+  .home-cta {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 14px;
+    font-size: 12.5px; font-weight: 600;
+    color: #22c55e; text-decoration: none;
+    transition: color 120ms ease, gap 150ms ease;
+    align-self: flex-start;
+  }
+  .home-cta:hover { color: #4ade80; gap: 8px; }
+  .home-cta--strong { font-size: 13px; font-weight: 600; }
+
+  /* ── Eventos ────────────────────────────────────────────── */
+  .home-event-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .home-event-row  { display: flex; align-items: center; gap: 10px; }
+  .home-event-pill {
+    font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 99px;
+    border: 1px solid; white-space: nowrap; flex-shrink: 0;
+    text-transform: lowercase;
+  }
+  .home-event-body { flex: 1; min-width: 0; }
+  .home-event-title {
+    font-size: 13.5px; font-weight: 500; color: #f4f4f5;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .home-event-sub { font-size: 11.5px; color: #71717a; }
+
+  /* ── Empty state (eventos) ──────────────────────────────── */
+  .home-empty {
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 8px; padding: 6px 0;
+  }
+  .home-empty-ico { color: #3f3f46; }
+  .home-empty-text { font-size: 13px; color: #a1a1aa; }
+  .home-empty-link {
+    font-size: 12px; font-weight: 500;
+    color: rgba(34,197,94,.75);
+    text-decoration: none;
+    transition: color 120ms;
+  }
+  .home-empty-link:hover { color: #22c55e; }
+
+  /* ── Alertas ────────────────────────────────────────────── */
+  .home-card--alert-alta  { border-left: 4px solid rgba(239,68,68,.45);  border-radius: 6px 18px 18px 6px; }
+  .home-card--alert-media { border-left: 4px solid rgba(245,158,11,.45); border-radius: 6px 18px 18px 6px; }
+  .home-alert-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .home-alert-row  {
+    display: flex; align-items: flex-start; gap: 9px;
+    font-size: 13px; line-height: 1.45;
+    padding: 9px 12px; border-radius: 9px;
+  }
+  .home-alert-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+  .home-alert-text { flex: 1; }
+  .home-alert-row--alta  { color: #fca5a5; background: rgba(239,68,68,.07); }
+  .home-alert-row--alta  .home-alert-dot { background: #ef4444; }
+  .home-alert-row--media { color: #fcd34d; background: rgba(245,158,11,.07); }
+  .home-alert-row--media .home-alert-dot { background: #f59e0b; }
+
+  /* ── Evolução ───────────────────────────────────────────── */
+  .home-evo-body  { display: flex; flex-direction: column; gap: 12px; }
+  .home-evo-stack { display: flex; flex-direction: column; gap: 2px; }
+  .home-evo-value {
+    font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -1px;
+  }
+  .home-evo-label  { font-size: 12.5px; color: #71717a; }
+  .home-evo-empty-value {
+    font-size: 36px; font-weight: 700; color: #3f3f46; line-height: 1; letter-spacing: -1px;
+  }
+  .home-evo-empty-text { font-size: 13px; color: #a1a1aa; }
+  .home-spark { width: 100%; max-width: 240px; height: 36px; display: block; }
+
+  /* ── Ações rápidas ──────────────────────────────────────── */
+  .home-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .home-quick-btn {
+    position: relative;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    background: rgba(255,255,255,.025);
+    border: 1px solid rgba(255,255,255,.06);
+    border-radius: 12px;
+    text-decoration: none;
+    color: #e4e4e7;
+    transition: transform 200ms cubic-bezier(.16,1,.3,1), background 150ms, border-color 150ms;
+  }
+  .home-quick-btn:hover {
+    transform: translateY(-2px);
+    background: rgba(34,197,94,.05);
+    border-color: rgba(34,197,94,.22);
+  }
+  .home-quick-ico {
+    width: 36px; height: 36px; border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.04);
+    color: #d4d4d8;
+    flex-shrink: 0;
+  }
+  .home-quick-label {
+    font-size: 13px; font-weight: 500; color: #e4e4e7;
+  }
+  .home-quick-pro {
+    position: absolute; top: 8px; right: 10px;
+    font-size: 9.5px; font-weight: 800; letter-spacing: .4px;
+    color: #fcd34d; background: rgba(245,158,11,.10);
+    border: 1px solid rgba(245,158,11,.32);
+    padding: 1px 6px; border-radius: 5px;
+  }
+
+  /* ── Stagger entrance ───────────────────────────────────── */
+  @keyframes homeStagger {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
+  }
+
+  /* ── Responsive ─────────────────────────────────────────── */
+  @media (max-width: 880px) {
+    .home-container { padding: 28px 18px 40px; }
+    .home-greet-line { font-size: 26px; }
+    .home-grid { grid-template-columns: 1fr; }
+    .home-card--continuar,
+    .home-card--evolucao,
+    .home-card--evolucao.home-card--wide,
+    .home-card--alert,
+    .home-card--full { grid-column: span 1; }
+    .home-quick-grid { grid-template-columns: 1fr 1fr; }
+  }
+`

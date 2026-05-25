@@ -3,8 +3,9 @@ import Anthropic from '@anthropic-ai/sdk'
 const cliente = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const PAGINA_LABELS = {
-  '/dashboard':  'Chat principal com IA acadêmica por matéria (suporta imagens, tabelas, LaTeX)',
-  '/notas':      'Notas e Controle de Faltas — registra notas por prova e monitora frequência',
+  '/dashboard':       'Home — resumo do dia: continuar última conversa, próximos eventos, alertas, atalhos rápidos',
+  '/dashboard/chat':  'Chat principal com IA acadêmica por matéria (suporta imagens, tabelas, LaTeX)',
+  '/notas':           'Notas e Controle de Faltas — registra notas por prova e monitora frequência',
   '/calendario': 'Calendário de Provas e Trabalhos — agenda com urgência colorida',
   '/evolucao':   'Minha Evolução — dashboard de progresso com média geral e alertas',
   '/analise':    'Análise de Materiais — upload de foto de prova/caderno para diagnóstico por IA',
