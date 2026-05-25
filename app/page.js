@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 
 /* ─── Icons ──────────────────────────────────────────────────────── */
@@ -505,7 +506,7 @@ export default function Home() {
         /* ── Nav ── */
         .nav{position:fixed;top:0;left:0;right:0;z-index:300;height:66px;padding:0 48px;display:flex;align-items:center;justify-content:space-between;transition:background .4s,border-color .4s,backdrop-filter .4s;border-bottom:1px solid transparent}
         .nav.solid{background:rgba(12,12,12,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-color:#1a1a1a}
-        .nav-logo{font-size:18px;font-weight:900;color:#22c55e;letter-spacing:-.4px;text-decoration:none}
+        .nav-logo{display:inline-flex;align-items:center;gap:10px;font-size:18px;font-weight:900;color:#22c55e;letter-spacing:-.4px;text-decoration:none}
         .nav-links{display:flex;align-items:center;gap:4px}
         .nav-link{color:#71717a;font-size:14px;font-weight:500;text-decoration:none;padding:7px 14px;border-radius:8px;transition:color .15s,background .15s}
         .nav-link:hover{color:#e4e4e7;background:#ffffff08}
@@ -678,7 +679,10 @@ export default function Home() {
 
       {/* ─── Navbar ─────────────────────────────────────────────────── */}
       <nav className={`nav ${scrolled ? 'solid' : ''}`}>
-        <span className="nav-logo">Point.AI</span>
+        <span className="nav-logo">
+          <Image src="/logo-mark.png" alt="" width={40} height={40} priority />
+          Point.AI
+        </span>
         <div className="nav-links">
           <a href="#funcionalidades" className="nav-link">Funcionalidades</a>
           <a href="#como-funciona" className="nav-link">Como funciona</a>
@@ -1022,7 +1026,10 @@ export default function Home() {
 
       {/* ─── Footer ─────────────────────────────────────────────────── */}
       <footer className="footer">
-        <span className="nav-logo">Point.AI</span>
+        <span className="nav-logo">
+          <Image src="/logo-mark.png" alt="" width={24} height={24} />
+          Point.AI
+        </span>
         <p className="footer-copy">&copy; 2026 Point.AI &mdash; Feito para universitários brasileiros</p>
         <div className="footer-links">
           <Link href="/privacidade" className="footer-a">Política de Privacidade</Link>

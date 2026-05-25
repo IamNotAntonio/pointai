@@ -120,19 +120,16 @@ export default function PointAssistant() {
     width: '52px',
     height: '52px',
     borderRadius: '50%',
-    background: 'linear-gradient(135deg,#1a7a4a 0%,#22c55e 100%)',
-    color: '#fff',
-    fontSize: '19px',
-    fontWeight: '800',
+    backgroundImage: 'url(/logo-mark.png)',
+    backgroundSize: '140%',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    padding: 0,
     border: 'none',
     cursor: 'pointer',
     zIndex: 9999,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
     boxShadow: '0 4px 18px rgba(26,122,74,.45)',
     transition: 'transform .15s, box-shadow .15s, bottom .3s',
-    letterSpacing: '-.5px',
   }
 
   const windowStyle = {
@@ -171,7 +168,6 @@ export default function PointAssistant() {
         title="Assistente Point — Coach do app"
         data-tour="pa-fab"
       >
-        P
         {badge && !aberto && <span style={badgeStyle} />}
       </button>
 
@@ -181,7 +177,7 @@ export default function PointAssistant() {
           {/* Header */}
           <div className="pa-header">
             <div className="pa-header-left">
-              <div className="pa-avatar">P</div>
+              <div className="pa-avatar" />
               <div>
                 <p className="pa-title">Assistente Point</p>
                 <p className="pa-subtitle">Coach do Point.AI · Sempre aqui</p>
@@ -196,7 +192,7 @@ export default function PointAssistant() {
           <div className="pa-messages">
             {mensagens.map((msg, i) => (
               <div key={i} className={`pa-msg ${msg.role}`}>
-                {msg.role === 'assistant' && <div className="pa-msg-avatar">P</div>}
+                {msg.role === 'assistant' && <div className="pa-msg-avatar" />}
                 <div className="pa-bubble">
                   <RichMessage content={msg.content} />
                 </div>
@@ -205,7 +201,7 @@ export default function PointAssistant() {
 
             {carregando && (
               <div className="pa-msg assistant">
-                <div className="pa-msg-avatar">P</div>
+                <div className="pa-msg-avatar" />
                 <div className="pa-bubble">
                   <div className="typing-dots">
                     <div className="typing-dot" />

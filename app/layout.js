@@ -14,8 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Point.AI",
-  description: "Assistente acadêmico pessoal",
+  metadataBase: new URL('https://pointedu.com.br'),
+  title: { default: 'Point.AI', template: '%s · Point.AI' },
+  description: 'Assistente acadêmico com IA para universitários brasileiros. Tire dúvidas, organize matérias, acompanhe notas e prazos.',
+  openGraph: {
+    title: 'Point.AI',
+    description: 'Assistente acadêmico com IA para universitários brasileiros.',
+    url: 'https://pointedu.com.br',
+    siteName: 'Point.AI',
+    locale: 'pt_BR',
+    type: 'website',
+  },
+  twitter: { card: 'summary_large_image', title: 'Point.AI' },
 };
 
 export default function RootLayout({ children }) {
