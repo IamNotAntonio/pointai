@@ -1,9 +1,8 @@
 'use client'
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { motion } from 'motion/react'
 import {
-  Calendar, FileText, TrendingUp, ClipboardList, Search, Brain, MessageSquare,
+  Calendar, FileText, TrendingUp, ClipboardList, Search, Brain,
 } from 'lucide-react'
 import * as db from '../../lib/db'
 import { fetchPlano } from '../../lib/plano'
@@ -81,8 +80,6 @@ function LousaInner() {
 
   const isMobile = layout.w > 0 && layout.w < 1024
 
-  const materiaLabel = materia === 'geral' ? 'Chat Geral' : materia
-
   /*
    * Six items in clockwise order from 12 o'clock:
    *   0   topo:        Calendário
@@ -135,11 +132,7 @@ function LousaInner() {
     <div ref={canvasRef} className="lousa-canvas">
       <style>{`
         .lousa-canvas{position:relative;width:100%;height:100%;min-height:calc(100vh - 64px);overflow:hidden;background:#0a0a0a}
-        .lousa-chat-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px, calc(100vw - 320px));max-width:820px;min-width:340px;height:min(78vh, 720px);min-height:420px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02);z-index:5}
-        .lousa-chat-header{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #161616;flex-shrink:0;background:#0a0a0a}
-        .lousa-chat-header-title{font-size:13.5px;font-weight:700;color:#f4f4f5;letter-spacing:-.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .lousa-chat-header-sub{font-size:11px;color:#71717a;font-weight:600}
-        .lousa-chat-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+        .lousa-chat-wrap{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;min-height:0}
 
         /* Mobile dock */
         .lousa-dock{position:fixed;left:0;right:0;bottom:0;z-index:30;height:88px;background:rgba(10,10,10,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;padding:10px 14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
@@ -151,32 +144,20 @@ function LousaInner() {
         .lousa-dock-item-pro{position:absolute;top:3px;right:3px;font-size:7px;font-weight:800;letter-spacing:.06em;color:#22c55e;background:rgba(26,122,74,.18);border:1px solid rgba(34,197,94,.32);padding:0 4px;border-radius:3px;line-height:1.4}
 
         @media (max-width:1023px){
-          .lousa-chat-card{position:relative;inset:auto;transform:none;left:auto;top:auto;width:calc(100% - 24px);max-width:100%;height:calc(100vh - 64px - 88px - 24px);min-height:auto;margin:12px auto;z-index:5}
-        }
-        @media (max-width:767px){
-          .lousa-chat-card{width:calc(100% - 16px);margin:8px auto;height:calc(100vh - 64px - 88px - 16px)}
+          .lousa-chat-wrap{padding-bottom:88px}
         }
       `}</style>
 
       <GradientDots />
 
-      <div className="lousa-chat-card">
-        <div className="lousa-chat-header">
-          <MessageSquare size={16} strokeWidth={1.7} style={{ color: materia === 'geral' ? '#3b82f6' : '#22c55e', flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="lousa-chat-header-title">{materiaLabel}</p>
-            <p className="lousa-chat-header-sub">Point AI · especialista acadêmico</p>
+      <div className="lousa-chat-wrap">
+        {perfil ? (
+          <Chat materia={materia} onFocusChange={setChatFocused} />
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52525b', fontSize: 13 }}>
+            Carregando perfil…
           </div>
-        </div>
-        <div className="lousa-chat-body">
-          {perfil ? (
-            <Chat materia={materia} onFocusChange={setChatFocused} />
-          ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52525b', fontSize: 13 }}>
-              Carregando perfil…
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* OrbitalItem instances with hideChip — only the drawer/fullscreen
