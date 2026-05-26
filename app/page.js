@@ -19,6 +19,18 @@ const ShaderBackground = dynamic(() => import('./components/ShaderBackground'), 
   ),
 })
 
+const DashboardLiveDemo = dynamic(() => import('./components/landing/DashboardLiveDemo'), {
+  ssr: false,
+  loading: () => (
+    <div aria-hidden style={{
+      background: '#0a0a0a',
+      width: '100%',
+      aspectRatio: '16 / 10',
+      borderRadius: 0,
+    }} />
+  ),
+})
+
 /* ─── Icons ──────────────────────────────────────────────────────── */
 const Icons = {
   Chat: () => (
@@ -1096,15 +1108,7 @@ export default function Home() {
           <div style={{ marginTop: 64 }}>
             <ContainerScroll>
               <div className="preview-frame">
-                <Image
-                  src="/screenshots/shot-2.png"
-                  alt="Point — chat com IA por matéria"
-                  width={1400}
-                  height={900}
-                  sizes="(max-width: 1200px) 100vw, 1200px"
-                  className="preview-image"
-                  priority={false}
-                />
+                <DashboardLiveDemo />
               </div>
             </ContainerScroll>
           </div>
