@@ -1182,7 +1182,7 @@ export default function Home() {
       <section className="section testi-bg">
         <div className="wrap">
           <Reveal style={{ textAlign: 'center' }}>
-            <p className="sec-eyebrow">Resultados reais</p>
+            <p className="sec-eyebrow">Depoimentos</p>
             <h2 className="sec-title" style={{ textAlign: 'center' }}>O que universitários dizem.</h2>
           </Reveal>
 
@@ -1228,8 +1228,7 @@ export default function Home() {
 
         <div style={{ position: 'relative', zIndex: 1 }}>
           <Reveal>
-            <p className="sec-eyebrow" style={{ marginBottom: 20 }}>Pronto?</p>
-            <h2 className="fcta-title">
+            <h2 className="fcta-title" style={{ marginTop: 0 }}>
               Pronto para estudar<br />do jeito certo?
             </h2>
             <p className="fcta-sub">A plataforma que transforma esforço em resultado.</p>
@@ -1246,8 +1245,8 @@ export default function Home() {
           <Reveal className="fcta-note" delay={0.2}>
             {[
               'Sem cartão de crédito',
-              'Cancele quando quiser',
-              '100% gratuito para começar',
+              'Setup em 2 minutos',
+              'Funciona em qualquer curso',
             ].map((note, i) => (
               <span key={i} className="fcta-note-item">
                 <Icons.Check /> {note}
