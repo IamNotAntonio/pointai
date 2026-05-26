@@ -79,6 +79,69 @@ export const sharedItemCss = `
   .lousa-dcard-label{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#71717a;margin-bottom:8px}
   .lousa-cta-btn{display:inline-flex;align-items:center;gap:6px;background:rgba(26,122,74,.14);border:1px solid rgba(34,197,94,.3);color:#86efac;font-size:13px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;font-family:inherit;transition:background .15s}
   .lousa-cta-btn:hover{background:rgba(26,122,74,.22)}
+  .lousa-cta-btn:disabled{opacity:.4;cursor:not-allowed}
+  .lousa-cta-btn:disabled:hover{background:rgba(26,122,74,.14)}
   .lousa-primary-btn{display:inline-flex;align-items:center;gap:8px;background:#1a7a4a;color:#fff;font-size:14px;font-weight:700;padding:11px 22px;border-radius:10px;border:1px solid rgba(34,197,94,.3);cursor:pointer;font-family:inherit;transition:background .15s,transform .15s,box-shadow .15s;box-shadow:0 0 20px rgba(26,122,74,.18)}
   .lousa-primary-btn:hover{background:#155f3a;transform:translateY(-1px);box-shadow:0 0 28px rgba(26,122,74,.3)}
+`
+
+export const fullscreenCss = `
+  .lousa-fs-container{padding:24px 32px 40px;max-width:1280px;margin:0 auto;width:100%}
+  .lousa-fs-header{margin-bottom:24px}
+  .lousa-fs-title{font-size:24px;font-weight:800;letter-spacing:-.025em;color:#f4f4f5;margin-bottom:4px}
+  .lousa-fs-title-materia{color:#22c55e;font-weight:700}
+  .lousa-fs-subtitle{font-size:13.5px;color:#a1a1aa;line-height:1.5}
+  .lousa-fs-stats-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:28px}
+  .lousa-fs-stat-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:16px 18px}
+  .lousa-fs-stat-value{font-size:26px;font-weight:800;color:#22c55e;letter-spacing:-.02em;line-height:1;margin-bottom:6px}
+  .lousa-fs-stat-value.neutral{color:#f4f4f5}
+  .lousa-fs-stat-value.warn{color:#fbbf24}
+  .lousa-fs-stat-value.danger{color:#f87171}
+  .lousa-fs-stat-label{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#71717a}
+  .lousa-fs-stat-sub{font-size:11.5px;color:#71717a;margin-top:6px;line-height:1.4}
+  .lousa-fs-tabs{display:flex;gap:2px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:22px;overflow-x:auto;scrollbar-width:none}
+  .lousa-fs-tabs::-webkit-scrollbar{display:none}
+  .lousa-fs-tab{padding:11px 18px;font-size:13px;font-weight:500;color:#71717a;cursor:pointer;border:none;border-bottom:2px solid transparent;background:none;font-family:inherit;transition:color .15s,border-color .15s;white-space:nowrap}
+  .lousa-fs-tab:hover{color:#d4d4d8}
+  .lousa-fs-tab.active{color:#22c55e;border-bottom-color:#22c55e;font-weight:600}
+  .lousa-fs-table{background:transparent}
+  .lousa-fs-table-header{display:grid;grid-template-columns:2fr 1fr 1fr 1.5fr;gap:12px;padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#71717a;border-bottom:1px solid rgba(255,255,255,.05)}
+  .lousa-fs-table-row{display:grid;grid-template-columns:2fr 1fr 1fr 1.5fr;gap:12px;padding:14px;border-radius:10px;transition:background .15s;font-size:13.5px;color:#d4d4d8;align-items:center}
+  .lousa-fs-table-row:hover{background:rgba(255,255,255,.02)}
+  .lousa-fs-empty{text-align:center;padding:48px 20px;color:#71717a}
+  .lousa-fs-empty-icon{width:48px;height:48px;margin:0 auto 14px;opacity:.4;color:#52525b}
+  .lousa-fs-empty-title{font-size:14.5px;color:#a1a1aa;margin-bottom:6px;font-weight:500}
+  .lousa-fs-empty-sub{font-size:12.5px;color:#71717a;line-height:1.5;max-width:320px;margin:0 auto}
+  .lousa-fs-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:20px 22px;margin-bottom:16px}
+  .lousa-fs-card-title{font-size:14px;font-weight:700;color:#f4f4f5;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .lousa-fs-card-body{font-size:13.5px;color:#a1a1aa;line-height:1.6}
+  .lousa-fs-prediction{background:linear-gradient(135deg, rgba(34,197,94,.08), rgba(34,197,94,.02));border:1px solid rgba(34,197,94,.18);border-radius:14px;padding:20px 22px;margin-bottom:24px;display:flex;align-items:flex-start;gap:14px}
+  .lousa-fs-prediction-icon{flex-shrink:0;color:#22c55e}
+  .lousa-fs-prediction-text{font-size:14px;color:#e4e4e7;line-height:1.55}
+  .lousa-fs-prediction-text strong{color:#22c55e;font-weight:700}
+  .lousa-fs-bar-wrap{height:8px;background:rgba(255,255,255,.04);border-radius:99px;overflow:hidden;margin-top:10px}
+  .lousa-fs-bar-fill{height:100%;border-radius:99px;transition:width .6s ease}
+  .lousa-fs-disabled-hint{font-size:11px;color:#71717a;margin-top:8px}
+  .lousa-fs-locked{background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.08);border-radius:14px;padding:24px;display:flex;align-items:flex-start;gap:16px;margin-bottom:16px}
+  .lousa-fs-locked-icon{flex-shrink:0;width:42px;height:42px;border-radius:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.18);display:inline-flex;align-items:center;justify-content:center;color:#22c55e}
+  .lousa-fs-locked-title{font-size:14px;font-weight:700;color:#e4e4e7;margin-bottom:6px}
+  .lousa-fs-locked-body{font-size:13px;color:#a1a1aa;line-height:1.55}
+  .lousa-fs-locked-tag{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fbbf24;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.22);padding:3px 8px;border-radius:99px;margin-top:8px}
+  .lousa-fs-chart-wrap{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 16px;margin-bottom:24px}
+  .lousa-fs-chart-title{font-size:13px;font-weight:600;color:#d4d4d8;margin-bottom:14px;padding:0 6px}
+  .lousa-fs-split{display:grid;grid-template-columns:1.4fr 1fr;gap:24px}
+  .lousa-fs-cal-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px;display:flex;justify-content:center}
+  .lousa-fs-evento-item{display:flex;align-items:flex-start;gap:12px;padding:14px;border-radius:10px;background:rgba(255,255,255,.015);border:1px solid rgba(255,255,255,.04);transition:background .15s;margin-bottom:8px}
+  .lousa-fs-evento-item:hover{background:rgba(255,255,255,.03)}
+  .lousa-fs-evento-icon{flex-shrink:0;width:32px;height:32px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}
+  .lousa-fs-evento-title{font-size:13.5px;font-weight:600;color:#e4e4e7;margin-bottom:3px}
+  .lousa-fs-evento-meta{font-size:11.5px;color:#71717a}
+  @media (max-width:1023px){
+    .lousa-fs-container{padding:18px 16px 32px}
+    .lousa-fs-stats-grid{grid-template-columns:repeat(2, 1fr)}
+    .lousa-fs-split{grid-template-columns:1fr;gap:18px}
+    .lousa-fs-table-header,.lousa-fs-table-row{grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px}
+    .lousa-fs-table-header{display:none}
+    .lousa-fs-table-row{padding:12px;background:rgba(255,255,255,.02);margin-bottom:8px;border-radius:10px}
+  }
 `
