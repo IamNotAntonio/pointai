@@ -1,30 +1,22 @@
 'use client'
-import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Calendar, FileText, TrendingUp, ClipboardList, Search, Brain, MessageSquare } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import * as db from '../../lib/db'
 import { fetchPlano } from '../../lib/plano'
 import { useProfile } from '../../lib/ProfileContext'
 import Chat from '../Chat'
-import OrbitalItem from './OrbitalItem'
-import {
-  getNotasBadge, NotasDrawer, NotasFullscreen,
-} from './items/NotasItem'
-import {
-  getCalendarioBadge, CalendarioDrawer, CalendarioFullscreen,
-} from './items/CalendarioItem'
-import {
-  getEvolucaoBadge, EvolucaoDrawer, EvolucaoFullscreen,
-} from './items/EvolucaoItem'
-import {
-  getSimuladoBadge, SimuladoDrawer, SimuladoFullscreen,
-} from './items/SimuladoItem'
-import {
-  getAnaliseBadge, AnaliseDrawer, AnaliseFullscreen,
-} from './items/AnaliseItem'
-import {
-  getPlanoBadge, PlanoDrawer, PlanoFullscreen,
-} from './items/PlanoItem'
+import GradientDots from './GradientDots'
+
+// NOTE: items + OrbitalItem ficam dormentes durante D.3a.
+//       Re-import in D.3c quando o orbital lateral nascer:
+// import OrbitalItem from './OrbitalItem'
+// import { getNotasBadge, NotasDrawer, NotasFullscreen } from './items/NotasItem'
+// import { getCalendarioBadge, CalendarioDrawer, CalendarioFullscreen } from './items/CalendarioItem'
+// import { getEvolucaoBadge, EvolucaoDrawer, EvolucaoFullscreen } from './items/EvolucaoItem'
+// import { getSimuladoBadge, SimuladoDrawer, SimuladoFullscreen } from './items/SimuladoItem'
+// import { getAnaliseBadge, AnaliseDrawer, AnaliseFullscreen } from './items/AnaliseItem'
+// import { getPlanoBadge, PlanoDrawer, PlanoFullscreen } from './items/PlanoItem'
 
 export default function Lousa() {
   return (
@@ -38,8 +30,12 @@ function LousaInner() {
   const { perfil } = useProfile()
   const searchParams = useSearchParams()
 
+  // Data still loaded — D.3c will surface it again via the side orbital.
+  // eslint-disable-next-line no-unused-vars
   const [notas, setNotas] = useState([])
+  // eslint-disable-next-line no-unused-vars
   const [eventos, setEventos] = useState([])
+  // eslint-disable-next-line no-unused-vars
   const [isProUser, setIsProUser] = useState(false)
 
   // Materia resolution: URL param > localStorage > 'geral'
@@ -50,7 +46,6 @@ function LousaInner() {
     try { return localStorage.getItem('pointai_materia_ativa') || 'geral' } catch { return 'geral' }
   })
 
-  // Sync state when URL changes
   useEffect(() => {
     const next = urlMateria || (() => {
       try { return localStorage.getItem('pointai_materia_ativa') || 'geral' } catch { return 'geral' }
@@ -58,12 +53,10 @@ function LousaInner() {
     if (next !== materia) setMateria(next)
   }, [urlMateria])
 
-  // Persist current materia
   useEffect(() => {
     try { localStorage.setItem('pointai_materia_ativa', materia) } catch {}
   }, [materia])
 
-  // Load notas / eventos / plano
   useEffect(() => {
     let alive = true
     db.getNotas().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
@@ -72,136 +65,28 @@ function LousaInner() {
     return () => { alive = false }
   }, [])
 
-  // Compute orbital positions
-  const canvasRef = useRef(null)
-  const [layout, setLayout] = useState({ w: 0, h: 0 })
-
-  useEffect(() => {
-    const node = canvasRef.current
-    if (!node) return
-    function measure() {
-      const r = node.getBoundingClientRect()
-      setLayout({ w: r.width, h: r.height })
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(node)
-    return () => ro.disconnect()
-  }, [])
-
-  const isMobile = layout.w > 0 && layout.w < 1024
-  const isXs = layout.w > 0 && layout.w < 768
-
-  const orbitalPositions = useMemo(() => {
-    if (isMobile) return null
-    const { w, h } = layout
-    if (!w || !h) return []
-
-    const cx = w / 2
-    const cy = h / 2
-
-    // Chat dimensions (mirror the CSS: width:min(640px,calc(100vw - 720px)), min 340)
-    const chatWidth = Math.max(340, Math.min(640, w - 80))
-    // Chat height adaptativo — em telas baixas reduz pra dar espaço aos items
-    const chatHeight = h < 760
-      ? Math.max(380, h - 240)
-      : Math.min(640, h * 0.7)
-
-    const chatHalfW = chatWidth / 2
-    const chatHalfH = chatHeight / 2
-    const itemSize = 96
-    const itemHalf = itemSize / 2
-    const gap = 56 // distância entre edge do chat e edge do item
-
-    // Raio derivado (elipse: rx e ry separados)
-    let rx = chatHalfW + gap + itemHalf
-    let ry = chatHalfH + gap + itemHalf
-
-    // Clamp pra items ficarem dentro do canvas com 16px margem
-    const maxRx = cx - itemHalf - 16
-    const maxRy = cy - itemHalf - 16
-    if (rx > maxRx) rx = maxRx
-    if (ry > maxRy) ry = maxRy
-
-    return Array.from({ length: 6 }, (_, i) => {
-      const angle = ((i * 60 - 90) * Math.PI) / 180
-      return {
-        left: cx + rx * Math.cos(angle),
-        top: cy + ry * Math.sin(angle),
-        size: itemSize,
-        floatDelay: (i * 0.6) % 3,
-      }
-    })
-  }, [layout, isMobile])
-
   const materiaLabel = materia === 'geral' ? 'Chat Geral' : materia
 
-  const items = useMemo(() => [
-    {
-      id: 'calendario', Icon: Calendar, label: 'Calendário', isPro: false,
-      badge: getCalendarioBadge({ materia, eventos }),
-      DrawerContent: () => <CalendarioDrawer materia={materia} eventos={eventos} />,
-      FullscreenContent: CalendarioFullscreen,
-    },
-    {
-      id: 'notas', Icon: FileText, label: 'Notas e Faltas', isPro: false,
-      badge: getNotasBadge({ materia, notas }),
-      DrawerContent: () => <NotasDrawer materia={materia} notas={notas} />,
-      FullscreenContent: NotasFullscreen,
-    },
-    {
-      id: 'evolucao', Icon: TrendingUp, label: 'Minha Evolução', isPro: false,
-      badge: getEvolucaoBadge(),
-      DrawerContent: () => <EvolucaoDrawer materia={materia} />,
-      FullscreenContent: EvolucaoFullscreen,
-    },
-    {
-      id: 'plano', Icon: Brain, label: 'Plano de Estudos', isPro: true,
-      badge: getPlanoBadge(),
-      DrawerContent: () => <PlanoDrawer isProUser={isProUser} />,
-      FullscreenContent: PlanoFullscreen,
-    },
-    {
-      id: 'analise', Icon: Search, label: 'Análise de Materiais', isPro: true,
-      badge: getAnaliseBadge(),
-      DrawerContent: () => <AnaliseDrawer isProUser={isProUser} />,
-      FullscreenContent: AnaliseFullscreen,
-    },
-    {
-      id: 'simulado', Icon: ClipboardList, label: 'Simulado Inteligente', isPro: true,
-      badge: getSimuladoBadge(),
-      DrawerContent: () => <SimuladoDrawer isProUser={isProUser} />,
-      FullscreenContent: SimuladoFullscreen,
-    },
-  ], [materia, eventos, notas, isProUser])
-
   return (
-    <div ref={canvasRef} className="lousa-canvas">
+    <div className="lousa-canvas">
       <style>{`
-        .lousa-canvas{position:relative;width:100%;height:100%;min-height:calc(100vh - 64px);overflow:hidden;background:#0a0a0a;background-image:radial-gradient(circle at 50% 45%, rgba(34,197,94,.05) 0%, transparent 600px)}
-        .lousa-chat-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 720px));max-width:640px;min-width:340px;height:min(70vh,640px);min-height:380px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02);z-index:5}
+        .lousa-canvas{position:relative;width:100%;height:100%;min-height:calc(100vh - 64px);overflow:hidden;background:#0a0a0a}
+        .lousa-chat-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px, calc(100vw - 320px));max-width:820px;min-width:340px;height:min(78vh, 720px);min-height:420px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02);z-index:5}
         .lousa-chat-header{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #161616;flex-shrink:0;background:#0a0a0a}
         .lousa-chat-header-title{font-size:13.5px;font-weight:700;color:#f4f4f5;letter-spacing:-.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .lousa-chat-header-sub{font-size:11px;color:#71717a;font-weight:600}
         .lousa-chat-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 
-        /* Mobile dock */
-        .lousa-dock{position:fixed;left:0;right:0;bottom:0;z-index:30;height:88px;background:rgba(10,10,10,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;padding:10px 14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-        .lousa-dock::-webkit-scrollbar{display:none}
-        .lousa-dock .orbital-chip{position:relative !important;left:auto !important;top:auto !important;transform:none !important;width:64px !important;height:64px !important;flex-shrink:0;padding:8px 4px 6px !important;border-radius:16px !important}
-        .lousa-dock .orbital-chip svg{width:18px !important;height:18px !important;margin-top:0 !important}
-        .lousa-dock .orbital-chip span{font-size:10px !important;margin-top:4px !important}
-        .lousa-dock .orbital-chip [title]{display:none !important}
-
         @media (max-width:1023px){
-          .lousa-chat-card{position:relative;inset:auto;transform:none;left:auto;top:auto;width:calc(100% - 24px);max-width:100%;height:calc(100vh - 64px - 88px - 24px);min-height:auto;margin:12px auto;z-index:1}
+          .lousa-chat-card{position:relative;inset:auto;transform:none;left:auto;top:auto;width:calc(100% - 24px);max-width:100%;height:calc(100vh - 64px - 24px);min-height:auto;margin:12px auto;z-index:5}
         }
         @media (max-width:767px){
-          .lousa-chat-card{width:calc(100% - 16px);margin:8px auto}
+          .lousa-chat-card{width:calc(100% - 16px);margin:8px auto;height:calc(100vh - 64px - 16px)}
         }
       `}</style>
 
-      {/* Central chat card */}
+      <GradientDots />
+
       <div className="lousa-chat-card">
         <div className="lousa-chat-header">
           <MessageSquare size={16} strokeWidth={1.7} style={{ color: materia === 'geral' ? '#3b82f6' : '#22c55e', flexShrink: 0 }} />
@@ -220,42 +105,6 @@ function LousaInner() {
           )}
         </div>
       </div>
-
-      {/* Orbital — desktop only */}
-      {!isMobile && orbitalPositions?.length === 6 && items.map((it, i) => (
-        <OrbitalItem
-          key={it.id}
-          id={it.id}
-          Icon={it.Icon}
-          label={it.label}
-          badge={it.badge}
-          isPro={it.isPro}
-          isProUser={isProUser}
-          position={orbitalPositions[i]}
-          DrawerContent={it.DrawerContent}
-          FullscreenContent={it.FullscreenContent}
-        />
-      ))}
-
-      {/* Mobile dock */}
-      {isMobile && (
-        <div className="lousa-dock" role="navigation" aria-label="Ferramentas">
-          {items.map((it) => (
-            <OrbitalItem
-              key={it.id}
-              id={it.id}
-              Icon={it.Icon}
-              label={it.label}
-              badge={null}
-              isPro={it.isPro}
-              isProUser={isProUser}
-              position={{ left: 'auto', top: 'auto', size: 64, floatDelay: 0 }}
-              DrawerContent={it.DrawerContent}
-              FullscreenContent={it.FullscreenContent}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
