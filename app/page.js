@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 
 /* ─── Icons ──────────────────────────────────────────────────────── */
 const Icons = {
@@ -62,6 +63,19 @@ const Icons = {
   Zap: () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>
+  ),
+  Menu: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  ),
+  Close: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="6" y1="6" x2="18" y2="18"/>
+      <line x1="18" y1="6" x2="6" y2="18"/>
     </svg>
   ),
 }
@@ -463,18 +477,80 @@ function CountUp({ target, suffix = '', prefix = '', duration = 1800 }) {
   return <span ref={ref}>{prefix}{display}{suffix}</span>
 }
 
-/* ─── Scroll Reveal Hook ─────────────────────────────────────────── */
-function useScrollReveal(selector = '.reveal') {
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      entries => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); io.unobserve(e.target) } }),
-      { threshold: 0.08, rootMargin: '0px 0px -30px 0px' }
-    )
-    const timeout = setTimeout(() => {
-      document.querySelectorAll(selector).forEach(el => io.observe(el))
-    }, 100)
-    return () => { clearTimeout(timeout); io.disconnect() }
-  }, [selector])
+/* ─── Motion helpers ─────────────────────────────────────────────── */
+const REVEAL_EASE = [0.22, 1, 0.36, 1]
+
+function Reveal({ children, delay = 0, className, style, y = 24 }) {
+  const reduce = useReducedMotion()
+  if (reduce) {
+    return <div className={className} style={style}>{children}</div>
+  }
+  return (
+    <motion.div
+      className={className}
+      style={style}
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.6, ease: REVEAL_EASE, delay }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+/* ─── Hero aurora background ─────────────────────────────────────── */
+function AuroraBlobs() {
+  const reduce = useReducedMotion()
+  const blobs = [
+    { color: 'rgba(34,197,94,0.42)', size: 520, top: '-12%', left: '-6%',  blur: 110, dx:  140, dy:   90, duration: 22 },
+    { color: 'rgba(26,122,74,0.38)', size: 420, top: '15%',  right: '-10%', blur: 100, dx: -120, dy:  120, duration: 28 },
+    { color: 'rgba(14,107,62,0.28)', size: 360, top: '60%',  left: '38%',  blur: 120, dx:   80, dy: -100, duration: 19 },
+  ]
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+      {blobs.map((b, i) => (
+        <motion.div
+          key={i}
+          style={{
+            position: 'absolute',
+            top: b.top,
+            left: b.left,
+            right: b.right,
+            width: b.size,
+            height: b.size,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, ${b.color} 0%, transparent 70%)`,
+            filter: `blur(${b.blur}px)`,
+            willChange: 'transform',
+          }}
+          animate={reduce ? undefined : {
+            x: [0, b.dx, 0, -b.dx * 0.6, 0],
+            y: [0, b.dy, b.dy * 0.4, -b.dy * 0.5, 0],
+          }}
+          transition={reduce ? undefined : { duration: b.duration, repeat: Infinity, ease: 'easeInOut' }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/* ─── Hero headline data ─────────────────────────────────────────── */
+const HERO_WORDS = [
+  { text: 'Estude' },
+  { text: 'com' },
+  { text: 'inteligência,', em: true, lineEnd: true },
+  { text: 'não' },
+  { text: 'com' },
+  { text: 'esforço.' },
+]
+const heroWordContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08, delayChildren: 0.18 } },
+}
+const heroWord = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: REVEAL_EASE } },
 }
 
 /* ─── Page ───────────────────────────────────────────────────────── */
@@ -482,13 +558,22 @@ export default function Home() {
   const [scrolled, setScrolled] = useState(false)
   const [activeTab, setActiveTab] = useState('notas')
   const [supportOpen, setSupportOpen] = useState(false)
-  useScrollReveal('.reveal')
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const reduceMotion = useReducedMotion()
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 60)
     window.addEventListener('scroll', fn, { passive: true })
     return () => window.removeEventListener('scroll', fn)
   }, [])
+
+  useEffect(() => {
+    if (mobileNavOpen) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = prev }
+    }
+  }, [mobileNavOpen])
 
   return (
     <>
@@ -497,11 +582,11 @@ export default function Home() {
         html{scroll-behavior:smooth}
         body{background:#0c0c0c;color:#fff;font-family:var(--font-geist-sans,system-ui,-apple-system,sans-serif);-webkit-font-smoothing:antialiased;overflow-x:hidden}
 
-        /* ── Reveal animations ── */
-        .reveal{opacity:0;transform:translateY(32px);transition:opacity .75s cubic-bezier(.16,1,.3,1),transform .75s cubic-bezier(.16,1,.3,1)}
-        .reveal.revealed{opacity:1;transform:none}
-        .reveal.d1{transition-delay:.1s}.reveal.d2{transition-delay:.2s}.reveal.d3{transition-delay:.3s}
-        .reveal.d4{transition-delay:.4s}.reveal.d5{transition-delay:.5s}.reveal.d6{transition-delay:.6s}
+        /* ── Mobile nav ── */
+        .nav-hamburger{display:none;background:none;border:none;cursor:pointer;color:#e4e4e7;padding:8px;border-radius:8px;align-items:center;justify-content:center;transition:background .15s;margin-left:6px}
+        .nav-hamburger:hover{background:#ffffff08}
+        .mobile-nav-link{color:#e4e4e7;font-size:15px;font-weight:600;text-decoration:none;padding:12px 14px;border-radius:8px;transition:background .15s,color .15s;display:block;text-align:left;background:none;border:none;cursor:pointer;font-family:inherit;width:100%}
+        .mobile-nav-link:hover{background:#ffffff08;color:#22c55e}
 
         /* ── Nav ── */
         .nav{position:fixed;top:0;left:0;right:0;z-index:300;height:66px;padding:0 48px;display:flex;align-items:center;justify-content:space-between;transition:background .4s,border-color .4s,backdrop-filter .4s;border-bottom:1px solid transparent}
@@ -516,7 +601,7 @@ export default function Home() {
         /* ── Hero ── */
         .hero{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:60px;padding:130px 80px 100px;max-width:1280px;margin:0 auto;position:relative}
         .hero-bg{position:fixed;inset:0;pointer-events:none;z-index:0}
-        .hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(26,122,74,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(26,122,74,.055) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 90% 80% at 30% 50%,black 20%,transparent 85%);-webkit-mask-image:radial-gradient(ellipse 90% 80% at 30% 50%,black 20%,transparent 85%);animation:gridDrift 30s linear infinite}
+        .hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(26,122,74,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(26,122,74,.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 90% 80% at 30% 50%,black 20%,transparent 85%);-webkit-mask-image:radial-gradient(ellipse 90% 80% at 30% 50%,black 20%,transparent 85%);animation:gridDrift 30s linear infinite;z-index:1}
         .hero-glow{position:absolute;top:-10%;left:-5%;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(26,122,74,.22) 0%,rgba(26,122,74,.06) 50%,transparent 70%);filter:blur(6px);pointer-events:none}
         .hero-left{position:relative;z-index:2}
         .hero-right{position:relative;z-index:2}
@@ -649,6 +734,7 @@ export default function Home() {
         @media(max-width:640px){
           .nav{padding:0 20px}
           .nav-links .nav-link{display:none}
+          .nav-hamburger{display:flex}
           .feat-grid{grid-template-columns:1fr}
           .metrics{flex-direction:column;gap:20px}
           .metric{border:none;padding:0}
@@ -677,6 +763,59 @@ export default function Home() {
         </div>
       )}
 
+      {/* ─── Mobile nav drawer ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {mobileNavOpen && (
+          <>
+            <motion.div
+              key="m-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileNavOpen(false)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 400, backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+            />
+            <motion.aside
+              key="m-drawer"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+              style={{
+                position: 'fixed', top: 0, right: 0, bottom: 0,
+                width: 300, maxWidth: '85vw',
+                background: '#0c0c0c',
+                borderLeft: '1px solid #1a1a1a',
+                zIndex: 401,
+                padding: '20px 18px 24px',
+                display: 'flex', flexDirection: 'column', gap: 4,
+                boxShadow: '-24px 0 60px rgba(0,0,0,.5)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <span className="nav-logo">
+                  <Image src="/logo-mark.png" alt="" width={32} height={32} />
+                  Point
+                </span>
+                <button onClick={() => setMobileNavOpen(false)} aria-label="Fechar menu" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e4e4e7', padding: 6, borderRadius: 8, display: 'inline-flex' }}>
+                  <Icons.Close />
+                </button>
+              </div>
+              <a href="#funcionalidades" onClick={() => setMobileNavOpen(false)} className="mobile-nav-link">Funcionalidades</a>
+              <a href="#como-funciona" onClick={() => setMobileNavOpen(false)} className="mobile-nav-link">Como funciona</a>
+              <button onClick={() => { setMobileNavOpen(false); setSupportOpen(true) }} className="mobile-nav-link">Suporte</button>
+              <Link href="/login" onClick={() => setMobileNavOpen(false)} className="mobile-nav-link">Entrar</Link>
+              <div style={{ marginTop: 'auto', paddingTop: 20 }}>
+                <Link href="/onboarding" onClick={() => setMobileNavOpen(false)} className="nav-cta" style={{ display: 'block', textAlign: 'center' }}>
+                  Começar grátis
+                </Link>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* ─── Navbar ─────────────────────────────────────────────────── */}
       <nav className={`nav ${scrolled ? 'solid' : ''}`}>
         <span className="nav-logo">
@@ -689,45 +828,90 @@ export default function Home() {
           <button onClick={() => setSupportOpen(true)} className="nav-link" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>Suporte</button>
           <Link href="/login" className="nav-link">Entrar</Link>
           <Link href="/onboarding" className="nav-cta">Começar grátis</Link>
+          <button onClick={() => setMobileNavOpen(true)} className="nav-hamburger" aria-label="Abrir menu">
+            <Icons.Menu />
+          </button>
         </div>
       </nav>
 
       {/* ─── Hero ───────────────────────────────────────────────────── */}
       <section style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh' }}>
+        <AuroraBlobs />
         <div className="hero-grid" />
-        <div className="hero-glow" />
 
         <div className="hero" style={{ position: 'relative', zIndex: 2 }}>
           {/* Left */}
           <div className="hero-left">
-            <div className="badge" style={{ animation: 'fadeUp .6s .1s both' }}>
+            <motion.div
+              className="badge"
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.05, ease: REVEAL_EASE }}
+            >
               <span className="badge-dot" />
               Feito para universitários brasileiros
-            </div>
+            </motion.div>
 
-            <h1 className="hero-h1" style={{ animation: 'fadeUp .7s .2s both' }}>
-              Estude com <em>inteligência</em>,<br />
-              não com esforço.
-            </h1>
+            <motion.h1
+              className="hero-h1"
+              variants={heroWordContainer}
+              initial={reduceMotion ? 'visible' : 'hidden'}
+              animate="visible"
+            >
+              {HERO_WORDS.map((w, i) => (
+                <span key={i} style={{ display: 'inline-block', overflow: 'hidden', verticalAlign: 'bottom' }}>
+                  <motion.span
+                    variants={heroWord}
+                    style={{ display: 'inline-block', marginRight: '0.28em', color: w.em ? '#22c55e' : undefined }}
+                  >
+                    {w.text}
+                  </motion.span>
+                  {w.lineEnd && <br />}
+                </span>
+              ))}
+            </motion.h1>
 
-            <p style={{ fontSize: 15, color: '#c4c4c4', margin: '14px 0 0', animation: 'fadeUp .7s .28s both', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            <motion.p
+              style={{ fontSize: 15, color: '#c4c4c4', margin: '14px 0 0', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.85, ease: REVEAL_EASE }}
+            >
               Para <CourseTypewriter /> e muito mais.
-            </p>
+            </motion.p>
 
-            <p className="hero-sub" style={{ animation: 'fadeUp .7s .36s both', marginTop: 18 }}>
+            <motion.p
+              className="hero-sub"
+              style={{ marginTop: 18 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.95, ease: REVEAL_EASE }}
+            >
               A plataforma que te leva ao melhor desempenho acadêmico — personalizada pro seu curso, sua faculdade e o seu jeito de aprender.
-            </p>
+            </motion.p>
 
-            <div className="hero-btns" style={{ animation: 'fadeUp .7s .4s both' }}>
-              <Link href="/onboarding" className="btn-primary">
-                Começar grátis <Icons.ArrowRight />
-              </Link>
+            <motion.div
+              className="hero-btns"
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 1.05, ease: REVEAL_EASE }}
+            >
+              <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} transition={{ duration: 0.18 }} style={{ display: 'inline-block' }}>
+                <Link href="/onboarding" className="btn-primary">
+                  Começar grátis <Icons.ArrowRight />
+                </Link>
+              </motion.div>
               <a href="#como-funciona" className="btn-outline">
                 <Icons.Play /> Ver como funciona
               </a>
-            </div>
+            </motion.div>
 
-            <div className="metrics" style={{ animation: 'fadeUp .7s .55s both' }}>
+            <motion.div
+              className="metrics"
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 1.2, ease: REVEAL_EASE }}
+            >
               {[
                 { n: '150', suf: '+', pre: '', label: 'cursos suportados' },
                 { n: '24', suf: 'h', pre: '', label: 'disponível' },
@@ -740,23 +924,67 @@ export default function Home() {
                   <p className="metric-l">{m.label}</p>
                 </div>
               ))}
-            </div>
+            </motion.div>
           </div>
 
-          {/* Right — live chat */}
-          <div className="hero-right" style={{ animation: 'fadeUp .8s .3s both' }}>
-            <AnimatedChat />
-          </div>
+          {/* Right — live chat with ambient glow + telemetry chip */}
+          <motion.div
+            className="hero-right"
+            initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.4, ease: REVEAL_EASE }}
+            style={{ position: 'relative' }}
+          >
+            <div aria-hidden style={{
+              position: 'absolute',
+              inset: '-40px',
+              background: 'radial-gradient(circle, rgba(34,197,94,0.18) 0%, transparent 65%)',
+              filter: 'blur(40px)',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }} />
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <AnimatedChat />
+              <motion.div
+                initial={reduceMotion ? false : { opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 1.4, ease: REVEAL_EASE }}
+                style={{
+                  position: 'absolute',
+                  top: -10,
+                  right: -8,
+                  background: 'rgba(10,10,10,0.88)',
+                  border: '1px solid rgba(34,197,94,0.32)',
+                  borderRadius: 99,
+                  padding: '6px 12px 6px 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  color: '#86efac',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  boxShadow: '0 12px 32px rgba(0,0,0,.55)',
+                  zIndex: 3,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', animation: 'pulse 2.2s ease infinite', display: 'inline-block' }} />
+                Resposta em 2.3s
+              </motion.div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
       {/* ─── How it works ───────────────────────────────────────────── */}
       <div className="how-bg" id="como-funciona">
         <div className="how-layout">
-          <div className="reveal" style={{ textAlign: 'center' }}>
+          <Reveal style={{ textAlign: 'center' }}>
             <p className="sec-eyebrow">Como funciona</p>
             <h2 className="sec-title">Três passos para mudar seu semestre.</h2>
-          </div>
+          </Reveal>
           <div className="steps">
             {[
               {
@@ -775,13 +1003,13 @@ export default function Home() {
                 desc: 'Acompanhe seu progresso, melhore suas notas e receba planos de estudo baseados no seu desempenho real.',
               },
             ].map((s, i) => (
-              <div key={i} className={`step reveal d${i + 1}`}>
+              <Reveal key={i} className="step" delay={i * 0.08}>
                 <div className="step-num">{s.n}</div>
                 <div>
                   <p className="step-title">{s.title}</p>
                   <p className="step-desc">{s.desc}</p>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -790,13 +1018,13 @@ export default function Home() {
       {/* ─── Preview ────────────────────────────────────────────────── */}
       <section className="preview-bg" id="preview" style={{ borderTop: '1px solid #111' }}>
         <div className="preview-wrap">
-          <div className="preview-header reveal">
+          <Reveal className="preview-header">
             <p className="sec-eyebrow" style={{ textAlign: 'center' }}>Preview real</p>
             <h2 className="sec-title" style={{ textAlign: 'center' }}>Veja o produto em ação.</h2>
             <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto', maxWidth: 440 }}>Não é um protótipo. É o Point real, funcionando agora mesmo para milhares de estudantes.</p>
-          </div>
+          </Reveal>
 
-          <div style={{ marginTop: 40 }} className="reveal d1">
+          <Reveal style={{ marginTop: 40 }} delay={0.1}>
             <div className="tab-bar">
               {[
                 { id: 'notas', label: 'Notas' },
@@ -888,7 +1116,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
@@ -896,25 +1124,25 @@ export default function Home() {
       <section className="section" id="funcionalidades" style={{ background: '#0a0a0a', borderTop: '1px solid #111' }}>
         <div className="wrap">
           <div className="features-header">
-            <div className="reveal">
+            <Reveal>
               <p className="sec-eyebrow">Funcionalidades</p>
               <h2 className="sec-title">Cada ferramenta resolve<br />um problema real.</h2>
-            </div>
-            <div className="reveal d1">
+            </Reveal>
+            <Reveal delay={0.1}>
               <p className="sec-sub">Desenvolvidas para os gargalos que universitários brasileiros enfrentam semestre após semestre.</p>
-            </div>
+            </Reveal>
           </div>
 
           <div className="feat-grid">
             {FEATURES.map((f, i) => (
-              <div key={i} className={`feat-card reveal d${(i % 3) + 1}`}>
+              <Reveal key={i} className="feat-card" delay={(i % 3) * 0.08}>
                 <div className="feat-top-line" />
                 <div className="feat-icon-wrap">
                   <f.Icon />
                 </div>
                 <p className="feat-title">{f.title}</p>
                 <p className="feat-desc">{f.desc}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -923,7 +1151,7 @@ export default function Home() {
       {/* ─── Courses ────────────────────────────────────────────────── */}
       <section className="courses-sec">
         <div style={{ textAlign: 'center', maxWidth: 800, margin: '0 auto' }}>
-          <div className="reveal">
+          <Reveal>
             <p className="sec-eyebrow">Compatibilidade</p>
             <h2 className="sec-title" style={{ textAlign: 'center' }}>
               Para qualquer curso,<br />em qualquer faculdade.
@@ -931,15 +1159,15 @@ export default function Home() {
             <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto 0', maxWidth: 500 }}>
               O Point aprende o vocabulário, as cobranças e o estilo de cada área do conhecimento.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="courses-chips reveal d1">
+          <Reveal className="courses-chips" delay={0.1}>
             {['Medicina','Direito','Engenharia','Administração','Psicologia','Ciência da Computação','Arquitetura','Enfermagem','Economia','Nutrição','Farmácia','Veterinária','Educação Física','Jornalismo'].map((name, i) => (
               <span key={i} className="chip">{name}</span>
             ))}
-          </div>
+          </Reveal>
 
-          <div className="reveal d2" style={{ marginTop: 28, textAlign: 'center' }}>
+          <Reveal delay={0.2} style={{ marginTop: 28, textAlign: 'center' }}>
             <p style={{ fontSize: 14, color: '#f4f4f5', marginBottom: 10 }}>
               e mais de{' '}
               <span style={{ color: '#22c55e', fontWeight: 700 }}>50</span>
@@ -948,21 +1176,21 @@ export default function Home() {
             <p style={{ fontSize: 13, color: '#c4c4c4' }}>
               Se o seu curso não aparecer, basta digitar — o Point aprende qualquer área.
             </p>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* ─── Testimonials ───────────────────────────────────────────── */}
       <section className="section testi-bg">
         <div className="wrap">
-          <div className="reveal" style={{ textAlign: 'center' }}>
+          <Reveal style={{ textAlign: 'center' }}>
             <p className="sec-eyebrow">Resultados reais</p>
             <h2 className="sec-title" style={{ textAlign: 'center' }}>O que universitários dizem.</h2>
-          </div>
+          </Reveal>
 
           <div className="testi-grid">
             {TESTIMONIALS.map((t, i) => (
-              <div key={i} className={`tcard reveal d${i + 1}`}>
+              <Reveal key={i} className="tcard" delay={i * 0.1}>
                 <div className="tcard-stars">
                   {[...Array(5)].map((_, j) => <Icons.Star key={j} />)}
                 </div>
@@ -974,7 +1202,7 @@ export default function Home() {
                     <p className="tcard-info">{t.course} · {t.uni}</p>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -984,18 +1212,24 @@ export default function Home() {
       <section className="fcta">
         <div className="fcta-glow" />
 
-        <div className="reveal" style={{ position: 'relative', zIndex: 1 }}>
-          <p className="sec-eyebrow" style={{ marginBottom: 20 }}>Pronto?</p>
-          <h2 className="fcta-title">
-            Pronto para estudar<br />do jeito certo?
-          </h2>
-          <p className="fcta-sub">A plataforma que transforma esforço em resultado.</p>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <Reveal>
+            <p className="sec-eyebrow" style={{ marginBottom: 20 }}>Pronto?</p>
+            <h2 className="fcta-title">
+              Pronto para estudar<br />do jeito certo?
+            </h2>
+            <p className="fcta-sub">A plataforma que transforma esforço em resultado.</p>
+          </Reveal>
 
-          <Link href="/onboarding" className="btn-primary reveal d1" style={{ fontSize: 17, padding: '16px 36px', borderRadius: 14 }}>
-            Criar minha conta grátis <Icons.ArrowRight />
-          </Link>
+          <Reveal delay={0.1} style={{ display: 'inline-block' }}>
+            <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} transition={{ duration: 0.18 }} style={{ display: 'inline-block' }}>
+              <Link href="/onboarding" className="btn-primary" style={{ fontSize: 17, padding: '16px 36px', borderRadius: 14 }}>
+                Criar minha conta grátis <Icons.ArrowRight />
+              </Link>
+            </motion.div>
+          </Reveal>
 
-          <div className="fcta-note reveal d2">
+          <Reveal className="fcta-note" delay={0.2}>
             {[
               'Sem cartão de crédito',
               'Cancele quando quiser',
@@ -1005,7 +1239,7 @@ export default function Home() {
                 <Icons.Check /> {note}
               </span>
             ))}
-          </div>
+          </Reveal>
         </div>
       </section>
 
