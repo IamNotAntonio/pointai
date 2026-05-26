@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
+import ContainerScroll from './components/ContainerScroll'
 
 const ShaderBackground = dynamic(() => import('./components/ShaderBackground'), {
   ssr: false,
@@ -534,7 +535,6 @@ const heroWord = {
 /* ─── Page ───────────────────────────────────────────────────────── */
 export default function Home() {
   const [scrolled, setScrolled] = useState(false)
-  const [activeTab, setActiveTab] = useState('notas')
   const [supportOpen, setSupportOpen] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const reduceMotion = useReducedMotion()
@@ -639,8 +639,10 @@ export default function Home() {
 
         /* ── Preview tabs ── */
         .preview-bg{background:#0c0c0c}
-        .preview-wrap{max-width:1200px;margin:0 auto;padding:110px 24px}
+        .preview-wrap{max-width:1200px;margin:0 auto;padding:180px 24px 200px}
         .preview-header{text-align:center;margin-bottom:52px}
+        .preview-frame{border-radius:20px;overflow:hidden;border:1px solid rgba(34,197,94,.18);box-shadow:0 60px 140px rgba(0,0,0,.65),0 0 0 1px rgba(34,197,94,.08),0 0 80px rgba(26,122,74,.12);background:#0a0a0a}
+        .preview-image{display:block;width:100%;height:auto}
         .tab-bar{display:flex;gap:4px;justify-content:center;margin-bottom:40px;background:#0f0f0f;border:1px solid #1a1a1a;border-radius:12px;padding:4px;width:fit-content;margin-left:auto;margin-right:auto}
         .tab-btn{padding:9px 24px;border-radius:9px;font-size:14px;font-weight:600;color:#555;cursor:pointer;border:none;background:transparent;transition:all .2s}
         .tab-btn.active{background:#1a7a4a;color:#fff;box-shadow:0 0 16px rgba(26,122,74,.35)}
@@ -997,104 +999,26 @@ export default function Home() {
       <section className="preview-bg" id="preview" style={{ borderTop: '1px solid #111' }}>
         <div className="preview-wrap">
           <Reveal className="preview-header">
-            <p className="sec-eyebrow" style={{ textAlign: 'center' }}>Preview real</p>
+            <p className="sec-eyebrow" style={{ textAlign: 'center' }}>Veja em ação</p>
             <h2 className="sec-title" style={{ textAlign: 'center' }}>Veja o produto em ação.</h2>
-            <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto', maxWidth: 440 }}>Não é um protótipo. É o Point real, funcionando agora mesmo para milhares de estudantes.</p>
+            <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto', maxWidth: 520 }}>Chat por matéria com IA treinada no seu curso. Notas, faltas e calendário no mesmo lugar.</p>
           </Reveal>
 
-          <Reveal style={{ marginTop: 40 }} delay={0.1}>
-            <div className="tab-bar">
-              {[
-                { id: 'notas', label: 'Notas' },
-                { id: 'calendario', label: 'Calendário' },
-              ].map(t => (
-                <button key={t.id} className={`tab-btn ${activeTab === t.id ? 'active' : ''}`} onClick={() => setActiveTab(t.id)}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="preview-panel">
-              <div className="preview-bar">
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {['#ff5f57','#febc2e','#28c840'].map((c, i) => (
-                    <div key={i} style={{ width: 11, height: 11, borderRadius: '50%', background: c }} />
-                  ))}
-                </div>
-                <span style={{ flex: 1, textAlign: 'center', fontSize: 12.5, color: '#71717a', fontWeight: 500 }}>
-                  {activeTab === 'notas' && 'Point — Notas e Frequência'}
-                  {activeTab === 'calendario' && 'Point — Calendário Acadêmico'}
-                </span>
-                <span style={{ background: 'rgba(26,122,74,.1)', border: '1px solid rgba(26,122,74,.2)', color: '#22c55e', fontSize: 10.5, fontWeight: 600, padding: '3px 10px', borderRadius: 99 }}>
-                  Ao vivo
-                </span>
+          <div style={{ marginTop: 64 }}>
+            <ContainerScroll>
+              <div className="preview-frame">
+                <Image
+                  src="/screenshots/shot-2.png"
+                  alt="Point — chat com IA por matéria"
+                  width={1400}
+                  height={900}
+                  sizes="(max-width: 1200px) 100vw, 1200px"
+                  className="preview-image"
+                  priority={false}
+                />
               </div>
-
-              {activeTab === 'notas' && (
-                <div>
-                  <div className="stat-row">
-                    {[
-                      { val: '8.4', key: 'Média Geral' },
-                      { val: '5', key: 'Matérias' },
-                      { val: '3', key: 'Alertas' },
-                      { val: '87%', key: 'Frequência' },
-                    ].map((s, i) => (
-                      <div key={i} className="stat-cell">
-                        <p className="stat-val">{s.val}</p>
-                        <p className="stat-key">{s.key}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {[
-                      { name: 'Cálculo I', avg: 8.2, abs: 4, maxAbs: 14, color: '#22c55e' },
-                      { name: 'Física II', avg: 6.8, abs: 9, maxAbs: 14, color: '#f59e0b' },
-                      { name: 'Programação', avg: 9.1, abs: 1, maxAbs: 14, color: '#22c55e' },
-                      { name: 'Álgebra Linear', avg: 5.9, abs: 11, maxAbs: 14, color: '#ef4444' },
-                    ].map((m, i) => (
-                      <div key={i}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' }}>
-                          <span style={{ fontSize: 13, color: '#ccc', fontWeight: 600 }}>{m.name}</span>
-                          <div style={{ display: 'flex', gap: 16 }}>
-                            <span style={{ fontSize: 12, color: m.color, fontWeight: 700 }}>Média: {m.avg}</span>
-                            <span style={{ fontSize: 12, color: m.abs >= 10 ? '#ef4444' : '#71717a' }}>Faltas: {m.abs}/{m.maxAbs}</span>
-                          </div>
-                        </div>
-                        <div style={{ height: 5, borderRadius: 99, background: '#151515', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${(m.avg / 10) * 100}%`, borderRadius: 99, background: m.color, transition: 'width 1s ease' }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'calendario' && (
-                <div style={{ padding: '20px 24px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#ccc' }}>Maio 2026</span>
-                    <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>3 eventos próximos</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {[
-                      { date: 'Seg, 20 Mai', event: 'Prova P2 — Cálculo I', days: 0, color: '#ef4444', tag: 'HOJE' },
-                      { date: 'Qua, 22 Mai', event: 'Entrega — Trabalho de Física', days: 2, color: '#f59e0b', tag: '2 dias' },
-                      { date: 'Sex, 30 Mai', event: 'Prova P1 — Álgebra Linear', days: 10, color: '#22c55e', tag: '10 dias' },
-                    ].map((ev, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#111', border: `1px solid ${ev.color}22`, borderRadius: 10, padding: '12px 16px' }}>
-                        <div style={{ width: 3, height: 36, borderRadius: 99, background: ev.color, flexShrink: 0 }} />
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontSize: 13, fontWeight: 600, color: '#e4e4e7' }}>{ev.event}</p>
-                          <p style={{ fontSize: 11.5, color: '#71717a', marginTop: 2 }}>{ev.date}</p>
-                        </div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: ev.color, background: `${ev.color}15`, border: `1px solid ${ev.color}30`, padding: '3px 10px', borderRadius: 99 }}>{ev.tag}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </Reveal>
+            </ContainerScroll>
+          </div>
         </div>
       </section>
 
