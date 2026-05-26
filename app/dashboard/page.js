@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import Sidebar from '../components/Sidebar'
 import * as db from '../lib/db'
 import {
   MessageSquare, Calendar, TrendingUp, AlertTriangle,
@@ -207,7 +206,6 @@ export default function DashboardHome() {
   return (
     <div className="app-shell">
       <style>{CSS}</style>
-      <Sidebar perfil={perfil} onPerfilUpdate={handlePerfilUpdate} />
 
       <div className="page-area home-area">
         <div className="home-scroll">

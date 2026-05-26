@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import Sidebar from '../../components/Sidebar'
 import RichMessage from '../../components/RichMessage'
 import UpgradeModal from '../../components/UpgradeModal'
 import { gerarPDFChat } from '../../lib/pdfExport'
@@ -840,19 +839,6 @@ function Dashboard() {
         .svg-fullscreen-close { position: absolute; top: 12px; right: 14px; background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-3); line-height: 1; }
         .svg-fullscreen-close:hover { color: var(--text-1); }
       `}</style>
-
-      <Sidebar
-        perfil={perfil}
-        materias={materias}
-        materiaAtiva={materiaAtiva}
-        onMateriaChange={trocarMateria}
-        topicos={topicos}
-        topicoAtivo={topicoAtivo}
-        onTopicoChange={trocarTopico}
-        onTopicosUpdate={handleTopicosUpdate}
-        onPerfilUpdate={handlePerfilUpdate}
-        onNovoChat={m => setNovoChatConfirm(m)}
-      />
 
       <div className="page-area">
         {/* Header */}
