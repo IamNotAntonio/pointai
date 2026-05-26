@@ -2,7 +2,21 @@
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
+
+const ShaderBackground = dynamic(() => import('./components/ShaderBackground'), {
+  ssr: false,
+  loading: () => (
+    <div aria-hidden style={{
+      position: 'absolute',
+      inset: 0,
+      zIndex: 0,
+      pointerEvents: 'none',
+      background: 'radial-gradient(ellipse 70% 80% at 30% 50%, rgba(34,197,94,0.18) 0%, transparent 70%), #0c0c0c',
+    }} />
+  ),
+})
 
 /* ─── Icons ──────────────────────────────────────────────────────── */
 const Icons = {
@@ -488,50 +502,14 @@ function Reveal({ children, delay = 0, className, style, y = 24 }) {
   return (
     <motion.div
       className={className}
-      style={style}
+      style={{ willChange: 'transform', ...style }}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.6, ease: REVEAL_EASE, delay }}
+      viewport={{ once: true, margin: '-40px' }}
+      transition={{ duration: 0.4, ease: REVEAL_EASE, delay }}
     >
       {children}
     </motion.div>
-  )
-}
-
-/* ─── Hero aurora background ─────────────────────────────────────── */
-function AuroraBlobs() {
-  const reduce = useReducedMotion()
-  const blobs = [
-    { color: 'rgba(34,197,94,0.42)', size: 520, top: '-12%', left: '-6%',  blur: 110, dx:  140, dy:   90, duration: 22 },
-    { color: 'rgba(26,122,74,0.38)', size: 420, top: '15%',  right: '-10%', blur: 100, dx: -120, dy:  120, duration: 28 },
-    { color: 'rgba(14,107,62,0.28)', size: 360, top: '60%',  left: '38%',  blur: 120, dx:   80, dy: -100, duration: 19 },
-  ]
-  return (
-    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-      {blobs.map((b, i) => (
-        <motion.div
-          key={i}
-          style={{
-            position: 'absolute',
-            top: b.top,
-            left: b.left,
-            right: b.right,
-            width: b.size,
-            height: b.size,
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${b.color} 0%, transparent 70%)`,
-            filter: `blur(${b.blur}px)`,
-            willChange: 'transform',
-          }}
-          animate={reduce ? undefined : {
-            x: [0, b.dx, 0, -b.dx * 0.6, 0],
-            y: [0, b.dy, b.dy * 0.4, -b.dy * 0.5, 0],
-          }}
-          transition={reduce ? undefined : { duration: b.duration, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      ))}
-    </div>
   )
 }
 
@@ -546,11 +524,11 @@ const HERO_WORDS = [
 ]
 const heroWordContainer = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.08, delayChildren: 0.18 } },
+  visible: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
 }
 const heroWord = {
   hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: REVEAL_EASE } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: REVEAL_EASE } },
 }
 
 /* ─── Page ───────────────────────────────────────────────────────── */
@@ -591,7 +569,7 @@ export default function Home() {
         /* ── Nav ── */
         .nav{position:fixed;top:0;left:0;right:0;z-index:300;height:66px;padding:0 48px;display:flex;align-items:center;justify-content:space-between;transition:background .4s,border-color .4s,backdrop-filter .4s;border-bottom:1px solid transparent}
         .nav.solid{background:rgba(12,12,12,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-color:#1a1a1a}
-        .nav-logo{display:inline-flex;align-items:center;gap:10px;font-size:18px;font-weight:900;color:#22c55e;letter-spacing:-.4px;text-decoration:none}
+        .nav-logo{display:inline-flex;align-items:center;gap:12px;font-size:24px;font-weight:900;color:#22c55e;letter-spacing:-.04em;text-decoration:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
         .nav-links{display:flex;align-items:center;gap:4px}
         .nav-link{color:#71717a;font-size:14px;font-weight:500;text-decoration:none;padding:7px 14px;border-radius:8px;transition:color .15s,background .15s}
         .nav-link:hover{color:#e4e4e7;background:#ffffff08}
@@ -794,8 +772,8 @@ export default function Home() {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <span className="nav-logo">
-                  <Image src="/logo-mark.png" alt="" width={32} height={32} />
+                <span className="nav-logo" style={{ fontSize: 22 }}>
+                  <Image src="/logo-mark.png" alt="" width={36} height={36} />
                   Point
                 </span>
                 <button onClick={() => setMobileNavOpen(false)} aria-label="Fechar menu" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e4e4e7', padding: 6, borderRadius: 8, display: 'inline-flex' }}>
@@ -819,7 +797,7 @@ export default function Home() {
       {/* ─── Navbar ─────────────────────────────────────────────────── */}
       <nav className={`nav ${scrolled ? 'solid' : ''}`}>
         <span className="nav-logo">
-          <Image src="/logo-mark.png" alt="" width={40} height={40} priority />
+          <Image src="/logo-mark.png" alt="" width={48} height={48} priority />
           Point
         </span>
         <div className="nav-links">
@@ -836,7 +814,7 @@ export default function Home() {
 
       {/* ─── Hero ───────────────────────────────────────────────────── */}
       <section style={{ position: 'relative', overflow: 'hidden', minHeight: '100vh' }}>
-        <AuroraBlobs />
+        <ShaderBackground />
         <div className="hero-grid" />
 
         <div className="hero" style={{ position: 'relative', zIndex: 2 }}>
@@ -875,7 +853,7 @@ export default function Home() {
               style={{ fontSize: 15, color: '#c4c4c4', margin: '14px 0 0', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.85, ease: REVEAL_EASE }}
+              transition={{ duration: 0.4, delay: 0.5, ease: REVEAL_EASE }}
             >
               Para <CourseTypewriter /> e muito mais.
             </motion.p>
@@ -885,7 +863,7 @@ export default function Home() {
               style={{ marginTop: 18 }}
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.95, ease: REVEAL_EASE }}
+              transition={{ duration: 0.4, delay: 0.6, ease: REVEAL_EASE }}
             >
               A plataforma que te leva ao melhor desempenho acadêmico — personalizada pro seu curso, sua faculdade e o seu jeito de aprender.
             </motion.p>
@@ -894,7 +872,7 @@ export default function Home() {
               className="hero-btns"
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 1.05, ease: REVEAL_EASE }}
+              transition={{ duration: 0.4, delay: 0.7, ease: REVEAL_EASE }}
             >
               <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} transition={{ duration: 0.18 }} style={{ display: 'inline-block' }}>
                 <Link href="/onboarding" className="btn-primary">
@@ -910,7 +888,7 @@ export default function Home() {
               className="metrics"
               initial={reduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 1.2, ease: REVEAL_EASE }}
+              transition={{ duration: 0.4, delay: 0.85, ease: REVEAL_EASE }}
             >
               {[
                 { n: '150', suf: '+', pre: '', label: 'cursos suportados' },
@@ -932,8 +910,8 @@ export default function Home() {
             className="hero-right"
             initial={reduceMotion ? false : { opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.4, ease: REVEAL_EASE }}
-            style={{ position: 'relative' }}
+            transition={{ duration: 0.5, delay: 0.25, ease: REVEAL_EASE }}
+            style={{ position: 'relative', willChange: 'transform' }}
           >
             <div aria-hidden style={{
               position: 'absolute',
@@ -948,7 +926,7 @@ export default function Home() {
               <motion.div
                 initial={reduceMotion ? false : { opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 1.4, ease: REVEAL_EASE }}
+                transition={{ duration: 0.4, delay: 1.0, ease: REVEAL_EASE }}
                 style={{
                   position: 'absolute',
                   top: -10,
