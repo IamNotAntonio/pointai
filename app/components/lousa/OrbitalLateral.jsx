@@ -1,5 +1,4 @@
 'use client'
-import { useEffect, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import { BookOpen, Globe } from 'lucide-react'
 import { useOrbital } from '../../lib/OrbitalContext'
@@ -8,41 +7,20 @@ import { acronym } from '../../lib/acronym'
 /*
  * OrbitalLateral — floating widget at the lousa's bottom-left.
  *
- * Scales responsively across three breakpoints so it never collides
- * with the chat card:
- *   ≥1280px viewport: 300px widget
- *    1180–1279:        260px widget
- *    1024–1179:        220px widget
- *   <1024px:           hidden (mobile dock takes over, handled in Lousa)
+ * Only rendered at viewport ≥1500px (Lousa decides). Below that the
+ * horizontal dock takes over so the widget never collides with the
+ * centered chat content.
  */
-function getScale(w) {
-  if (w >= 1280) return {
-    container: 300, centerSize: 80, radius: 115, chipSize: 64,
-    iconSize: 18, labelSize: 9.5, offset: 24,
-  }
-  if (w >= 1180) return {
-    container: 260, centerSize: 70, radius: 100, chipSize: 56,
-    iconSize: 16, labelSize: 9, offset: 20,
-  }
-  return {
-    container: 220, centerSize: 60, radius: 85, chipSize: 48,
-    iconSize: 14, labelSize: 8.5, offset: 16,
-  }
+const SCALE = {
+  container: 300, centerSize: 80, radius: 115, chipSize: 64,
+  iconSize: 18, labelSize: 9.5, offset: 24,
 }
 
 export default function OrbitalLateral({ materia, isProUser, dimmed = false, items }) {
   const orbital = useOrbital()
   const reduce = useReducedMotion()
-  const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth))
 
-  useEffect(() => {
-    function onResize() { setVw(window.innerWidth) }
-    onResize()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  const s = getScale(vw)
+  const s = SCALE
   const center = s.container / 2
 
   const isGeral = materia === 'geral'

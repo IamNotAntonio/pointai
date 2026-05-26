@@ -78,7 +78,9 @@ function LousaInner() {
     return () => ro.disconnect()
   }, [])
 
-  const isMobile = layout.w > 0 && layout.w < 1024
+  // Below 1500px the orbital lateral (≥300px wide) collides with the
+  // centered chat content; fall back to the horizontal dock instead.
+  const isCompact = layout.w > 0 && layout.w < 1500
 
   /*
    * Six items in clockwise order from 12 o'clock:
@@ -143,7 +145,7 @@ function LousaInner() {
         .lousa-dock-item:hover .lousa-dock-item-label{color:#86efac}
         .lousa-dock-item-pro{position:absolute;top:3px;right:3px;font-size:7px;font-weight:800;letter-spacing:.06em;color:#22c55e;background:rgba(26,122,74,.18);border:1px solid rgba(34,197,94,.32);padding:0 4px;border-radius:3px;line-height:1.4}
 
-        @media (max-width:1023px){
+        @media (max-width:1499px){
           .lousa-chat-wrap{padding-bottom:88px}
         }
       `}</style>
@@ -179,7 +181,7 @@ function LousaInner() {
       ))}
 
       {/* Desktop: orbital lateral widget bottom-left */}
-      {!isMobile && (
+      {!isCompact && (
         <OrbitalLateral
           materia={materia}
           isProUser={isProUser}
@@ -188,8 +190,8 @@ function LousaInner() {
         />
       )}
 
-      {/* Mobile: horizontal dock */}
-      {isMobile && <MobileDock items={items} isProUser={isProUser} />}
+      {/* Compact (≤1499 desktop + tablet + mobile): horizontal dock */}
+      {isCompact && <MobileDock items={items} isProUser={isProUser} />}
     </div>
   )
 }
