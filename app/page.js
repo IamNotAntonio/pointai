@@ -314,6 +314,41 @@ const TESTIMONIALS = [
     uni: 'PUC-SP',
     init: 'RT',
   },
+  {
+    text: 'Consegui revisar Estatística inteira em 3 dias antes da P2. O Point cortou meu tempo de estudo praticamente pela metade.',
+    name: 'Bruno Costa',
+    course: 'Engenharia Civil',
+    uni: 'Mackenzie',
+    init: 'BC',
+  },
+  {
+    text: 'Odiava manter planilha de notas. Hoje vejo média + faltas em 2 cliques. Saiu da minha cabeça e foi pro app.',
+    name: 'Ana Beatriz',
+    course: 'Direito',
+    uni: 'FGV',
+    init: 'AB',
+  },
+  {
+    text: 'Levei minha apostila de Constitucional pro Point e ele me devolveu um plano por capítulo. Tirei 9,0 na P2.',
+    name: 'Camila Rocha',
+    course: 'Direito',
+    uni: 'Insper',
+    init: 'CR',
+  },
+  {
+    text: 'Estava perdido com 4 matérias acumuladas. O calendário automático puxou tudo do portal — achei que organização assim era impossível na faculdade.',
+    name: 'Pedro Souza',
+    course: 'Ciência da Computação',
+    uni: 'UNICAMP',
+    init: 'PS',
+  },
+  {
+    text: 'Comecei usando só pro chat. Hoje confio nas previsões de média e nos alertas de falta antes de tudo. Mudou meu semestre.',
+    name: 'Júlia Almeida',
+    course: 'Nutrição',
+    uni: 'UFRJ',
+    init: 'JA',
+  },
 ]
 
 /* ─── Course names for typewriter ────────────────────────────────── */
@@ -514,6 +549,48 @@ function Reveal({ children, delay = 0, className, style, y = 24 }) {
   )
 }
 
+/* ─── Falling pattern (Final CTA backdrop) ──────────────────────── */
+const FALLING_ITEMS = Array.from({ length: 12 }, (_, i) => ({
+  id: i,
+  left: `${(i * 100) / 12 + 3 + (i % 4) * 1.5}%`,
+  delay: (i * 0.74) % 6.2,
+  duration: 9 + ((i * 1.7) % 6),
+  size: 2 + (i % 3),
+  opacity: 0.18 + ((i % 4) * 0.06),
+}))
+
+function FallingPattern() {
+  const reduce = useReducedMotion()
+  if (reduce) return null
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
+      {FALLING_ITEMS.map(it => (
+        <motion.span
+          key={it.id}
+          style={{
+            position: 'absolute',
+            top: -20,
+            left: it.left,
+            width: it.size,
+            height: it.size * 3,
+            borderRadius: 99,
+            background: `rgba(34,197,94,${it.opacity})`,
+            willChange: 'transform',
+          }}
+          initial={{ y: -40 }}
+          animate={{ y: '110vh' }}
+          transition={{
+            duration: it.duration,
+            repeat: Infinity,
+            delay: it.delay,
+            ease: 'linear',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 /* ─── Hero headline data ─────────────────────────────────────────── */
 const HERO_WORDS = [
   { text: 'Estude' },
@@ -685,9 +762,21 @@ export default function Home() {
 
         /* ── Courses section ── */
         .courses-sec{padding:72px 24px;background:#070707;border-top:1px solid #111;border-bottom:1px solid #111}
-        .courses-chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:36px;max-width:760px;margin-left:auto;margin-right:auto}
-        .chip{display:inline-flex;align-items:center;padding:9px 18px;border-radius:99px;font-size:13px;font-weight:600;background:rgba(26,122,74,.08);border:1px solid rgba(34,197,94,.18);color:#86efac;cursor:default;transition:transform .2s,box-shadow .2s}
+        .chip{display:inline-flex;align-items:center;padding:9px 18px;border-radius:99px;font-size:13px;font-weight:600;background:rgba(26,122,74,.08);border:1px solid rgba(34,197,94,.18);color:#86efac;cursor:default;transition:transform .2s,box-shadow .2s;flex-shrink:0;white-space:nowrap}
         .chip:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(26,122,74,.15)}
+
+        /* ── Marquees ── */
+        .marquee-mask{overflow:hidden;mask-image:linear-gradient(to right,transparent,black 8%,black 92%,transparent);-webkit-mask-image:linear-gradient(to right,transparent,black 8%,black 92%,transparent);padding:8px 0;margin-top:36px}
+        .marquee-track{display:flex;gap:12px;width:max-content;animation:marqueeScroll 40s linear infinite}
+        .marquee-mask:hover .marquee-track{animation-play-state:paused}
+        .testi-marquee{display:flex;flex-direction:column;gap:16px;margin-top:52px}
+        .testi-row-mask{overflow:hidden;mask-image:linear-gradient(to right,transparent,black 6%,black 94%,transparent);-webkit-mask-image:linear-gradient(to right,transparent,black 6%,black 94%,transparent);padding:4px 0}
+        .testi-row-track{display:flex;gap:16px;width:max-content;animation:marqueeScroll 60s linear infinite}
+        .testi-row-track.reverse{animation:marqueeScrollRev 60s linear infinite}
+        .testi-row-mask:hover .testi-row-track{animation-play-state:paused}
+        .testi-row-track .tcard{flex:0 0 360px;margin:0}
+        @keyframes marqueeScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+        @keyframes marqueeScrollRev{from{transform:translateX(-50%)}to{transform:translateX(0)}}
 
         /* ── Keyframes ── */
         @keyframes gridDrift{from{background-position:0 0,0 0}to{background-position:60px 60px,60px 60px}}
@@ -1063,11 +1152,18 @@ export default function Home() {
             </p>
           </Reveal>
 
-          <Reveal className="courses-chips" delay={0.1}>
-            {['Medicina','Direito','Engenharia','Administração','Psicologia','Ciência da Computação','Arquitetura','Enfermagem','Economia','Nutrição','Farmácia','Veterinária','Educação Física','Jornalismo'].map((name, i) => (
-              <span key={i} className="chip">{name}</span>
-            ))}
-          </Reveal>
+          {(() => {
+            const courses = ['Medicina','Direito','Engenharia','Administração','Psicologia','Ciência da Computação','Arquitetura','Enfermagem','Economia','Nutrição','Farmácia','Veterinária','Educação Física','Jornalismo']
+            return (
+              <div className="marquee-mask">
+                <div className="marquee-track">
+                  {[...courses, ...courses].map((name, i) => (
+                    <span key={i} className="chip" aria-hidden={i >= courses.length}>{name}</span>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           <Reveal delay={0.2} style={{ marginTop: 28, textAlign: 'center' }}>
             <p style={{ fontSize: 14, color: '#f4f4f5', marginBottom: 10 }}>
@@ -1090,29 +1186,45 @@ export default function Home() {
             <h2 className="sec-title" style={{ textAlign: 'center' }}>O que universitários dizem.</h2>
           </Reveal>
 
-          <div className="testi-grid">
-            {TESTIMONIALS.map((t, i) => (
-              <Reveal key={i} className="tcard" delay={i * 0.1}>
-                <div className="tcard-stars">
-                  {[...Array(5)].map((_, j) => <Icons.Star key={j} />)}
+          {(() => {
+            const half = Math.ceil(TESTIMONIALS.length / 2)
+            const row1 = TESTIMONIALS.slice(0, half)
+            const row2 = TESTIMONIALS.slice(half)
+            const renderRow = (rows, reverse) => (
+              <div className="testi-row-mask">
+                <div className={`testi-row-track ${reverse ? 'reverse' : ''}`}>
+                  {[...rows, ...rows].map((t, i) => (
+                    <div key={i} className="tcard" aria-hidden={i >= rows.length}>
+                      <div className="tcard-stars">
+                        {[...Array(5)].map((_, j) => <Icons.Star key={j} />)}
+                      </div>
+                      <p className="tcard-quote">&ldquo;{t.text}&rdquo;</p>
+                      <div className="tcard-author">
+                        <div className="tcard-av">{t.init}</div>
+                        <div>
+                          <p className="tcard-name">{t.name}</p>
+                          <p className="tcard-info">{t.course} · {t.uni}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <p className="tcard-quote">&ldquo;{t.text}&rdquo;</p>
-                <div className="tcard-author">
-                  <div className="tcard-av">{t.init}</div>
-                  <div>
-                    <p className="tcard-name">{t.name}</p>
-                    <p className="tcard-info">{t.course} · {t.uni}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+              </div>
+            )
+            return (
+              <div className="testi-marquee">
+                {renderRow(row1, false)}
+                {renderRow(row2, true)}
+              </div>
+            )
+          })()}
         </div>
       </section>
 
       {/* ─── Final CTA ──────────────────────────────────────────────── */}
       <section className="fcta">
         <div className="fcta-glow" />
+        <FallingPattern />
 
         <div style={{ position: 'relative', zIndex: 1 }}>
           <Reveal>
