@@ -123,7 +123,9 @@ function SidebarInner({ perfil, onPerfilUpdate }) {
 
   async function sair() {
     await db.signOut()
-    router.push('/login')
+    // Hard navigation — bypass Next router cache to ensure no stale
+    // auth state survives in client memory.
+    window.location.href = '/login'
   }
 
   async function salvarPerfil() {

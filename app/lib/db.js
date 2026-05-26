@@ -54,14 +54,35 @@ export async function getUser() {
 }
 
 export async function signOut() {
+  // Race Supabase signOut against a 3s timeout — never block the UI if the
+  // network call hangs. We always run the local cleanup below regardless.
   try {
-    await getClient().auth.signOut()
-  } catch {}
-  // Clear all local app data
+    const client = getClient()
+    if (client) {
+      await Promise.race([
+        client.auth.signOut(),
+        new Promise(resolve => setTimeout(resolve, 3000)),
+      ])
+    }
+  } catch (e) {
+    console.warn('Supabase signOut failed:', e)
+  }
+
   if (typeof window !== 'undefined') {
-    const keys = []
-    for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i))
-    keys.forEach(k => localStorage.removeItem(k))
+    try {
+      const keys = []
+      for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i))
+      keys.forEach(k => localStorage.removeItem(k))
+      sessionStorage.clear()
+      // Wipe Supabase auth cookies (sb-*-auth-token). On signOut failure these
+      // can linger and resurrect a stale session on the next login.
+      document.cookie.split(';').forEach(c => {
+        const name = c.trim().split('=')[0]
+        if (name.startsWith('sb-')) {
+          document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+        }
+      })
+    } catch {}
   }
 }
 

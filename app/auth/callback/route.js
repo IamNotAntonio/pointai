@@ -40,14 +40,19 @@ export async function GET(request) {
     return NextResponse.redirect(new URL(next, origin))
   }
 
-  // Check if user already completed onboarding
+  // Check if user already completed onboarding. We require ALL the
+  // critical fields, not just `nome` — Supabase triggers or Google OAuth
+  // may pre-populate the row with a name without the rest being filled.
   const { data: perfil } = await supabase
     .from('perfis')
-    .select('nome')
+    .select('nome, curso, faculdade, materias')
     .eq('user_id', user.id)
     .maybeSingle()
 
-  if (!perfil?.nome) {
+  const onboardingCompleto =
+    perfil?.nome && perfil?.curso && perfil?.faculdade && perfil?.materias
+
+  if (!onboardingCompleto) {
     return NextResponse.redirect(new URL('/onboarding?from=callback', origin))
   }
 

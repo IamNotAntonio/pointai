@@ -67,10 +67,22 @@ export async function signUpWithEmail(email, password) {
 export async function signInWithGoogle() {
   const supabase = getSupabaseBrowser()
   if (!supabase) return { error: 'Não foi possível conectar. Tente novamente.' }
+
+  // Clear any existing session before starting OAuth. A stale session can
+  // collide with the new code exchange and bounce the user back to the
+  // landing page after callback.
+  try { await supabase.auth.signOut() } catch {}
+
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${origin}/auth/callback` },
+    options: {
+      redirectTo: `${origin}/auth/callback`,
+      queryParams: {
+        access_type: 'offline',     // persistent refresh token
+        prompt: 'select_account',   // always show account picker, never silent reuse
+      },
+    },
   })
   return { data, error: error ? translateAuthError(error) : null }
 }
