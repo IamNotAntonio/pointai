@@ -8,6 +8,7 @@ import {
   Calendar, Bell, ChevronDown, Edit, Star, Sun, Moon, LogOut, Sparkles,
 } from 'lucide-react'
 import * as db from '../lib/db'
+import { useProfile } from '../lib/ProfileContext'
 
 const PLANS = [
   { id: 'free',     name: 'Grátis',    price: 'R$0',     period: '',     desc: 'Acesso completo sem limite de uso.',           current: true,  featured: false },
@@ -32,7 +33,7 @@ export default function TopBar() {
   const router = useRouter()
   const reduce = useReducedMotion()
 
-  const [perfil, setPerfil] = useState(null)
+  const { perfil, updatePerfil } = useProfile()
   const [userMeta, setUserMeta] = useState(null)
   const [tema, setTema] = useState('dark')
   const [plano, setPlano] = useState('gratis')
@@ -61,20 +62,6 @@ export default function TopBar() {
       setPlano(p.plano || 'gratis')
     } catch {}
 
-    db.getPerfil().then(p => {
-      if (p) {
-        setPerfil(p)
-        setFormPerfil({
-          nome: p.nome || '',
-          curso: p.curso || '',
-          universidade: p.universidade || '',
-          semestre: p.semestre || '',
-          materias: p.materias || '',
-          objetivo: p.objetivo || '',
-        })
-      }
-    }).catch(() => {})
-
     db.getUser().then(user => {
       if (user) {
         setUserMeta({
@@ -83,6 +70,9 @@ export default function TopBar() {
         })
       }
     }).catch(() => {})
+
+    function onOpenPlans() { setPlanosOpen(true) }
+    window.addEventListener('open-plans-modal', onOpenPlans)
 
     db.getEventos().then(eventos => {
       const todayStart = new Date()
@@ -96,7 +86,24 @@ export default function TopBar() {
         .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
       setEventoProximo(futuros[0] || null)
     }).catch(() => {})
+
+    return () => {
+      window.removeEventListener('open-plans-modal', onOpenPlans)
+    }
   }, [])
+
+  // Keep formPerfil in sync with the context-driven perfil
+  useEffect(() => {
+    if (!perfil) return
+    setFormPerfil({
+      nome: perfil.nome || '',
+      curso: perfil.curso || '',
+      universidade: perfil.universidade || '',
+      semestre: perfil.semestre || '',
+      materias: perfil.materias || '',
+      objetivo: perfil.objetivo || '',
+    })
+  }, [perfil])
 
   useEffect(() => {
     if (!accountOpen && !notifOpen) return
@@ -126,8 +133,8 @@ export default function TopBar() {
 
   async function salvarPerfil() {
     setSalvando(true)
-    await db.savePerfil(formPerfil)
-    setPerfil(formPerfil)
+    // Optimistic merge in context + fire-and-forget persist
+    updatePerfil(formPerfil)
     setSalvando(false)
     setEditOpen(false)
   }
