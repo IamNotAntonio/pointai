@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 export async function GET(request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const next = searchParams.get('next')
 
   if (!code) {
     return NextResponse.redirect(new URL('/login?error=no_code', origin))
@@ -31,6 +32,12 @@ export async function GET(request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.redirect(new URL('/login?error=no_user', origin))
+  }
+
+  // Explicit redirect target (e.g. ?next=/redefinir-senha from password reset flow).
+  // Only allow same-origin relative paths to avoid open-redirect.
+  if (next && next.startsWith('/') && !next.startsWith('//')) {
+    return NextResponse.redirect(new URL(next, origin))
   }
 
   // Check if user already completed onboarding
