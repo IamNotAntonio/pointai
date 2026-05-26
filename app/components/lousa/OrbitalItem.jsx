@@ -35,72 +35,71 @@ export default function OrbitalItem({
 
   return (
     <>
-      {/* Closed: orbital chip */}
-      {mode === 'closed' && (
-        <motion.button
-          layoutId={`orbital-${id}`}
-          onClick={() => orbital.open(id)}
-          animate={reduce ? {} : { y: floatKeyframes }}
-          transition={reduce ? { duration: 0 } : {
-            duration: floatDuration, repeat: Infinity, delay: floatDelay, ease: 'easeInOut',
-          }}
-          whileHover={{ scale: 1.04 }}
-          style={{
-            position: 'absolute',
-            left: position?.left ?? '50%',
-            top: position?.top ?? '50%',
-            translate: '-50% -50%',
-            width: chipSize,
-            height: chipSize,
-            borderRadius: 22,
-            background: '#161616',
-            border: '1px solid rgba(255,255,255,.08)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            padding: '14px 6px 8px',
-            cursor: 'pointer',
-            color: '#d4d4d8',
-            fontFamily: 'inherit',
-            textAlign: 'center',
-            willChange: 'transform',
-            transition: 'border-color .18s, box-shadow .18s, color .18s',
-          }}
-          aria-label={label}
-          className="orbital-chip"
-        >
-          {isPro && !isProUser && (
-            <span style={{
-              position: 'absolute', top: 7, right: 7,
-              fontSize: 8, fontWeight: 800, letterSpacing: '.06em',
-              color: '#22c55e', background: 'rgba(26,122,74,.18)',
-              border: '1px solid rgba(34,197,94,.32)',
-              padding: '1px 5px', borderRadius: 4,
-            }}>PRO</span>
-          )}
-          <Icon size={26} strokeWidth={1.6} style={{ marginTop: 2 }} />
-          <span style={{ fontSize: 11.5, fontWeight: 500, marginTop: 8, lineHeight: 1.2, color: '#e4e4e7' }}>{label}</span>
-          {badge && (
-            <span
-              title={badge}
-              style={{
-                fontSize: 9.5, fontWeight: 600, color: '#86efac',
-                marginTop: 4, maxWidth: '100%', padding: '0 4px',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}
-            >
-              {badge}
-            </span>
-          )}
-        </motion.button>
-      )}
+      {/* Chip — sempre renderizado, sem layoutId. Dim quando algum painel está aberto. */}
+      <motion.button
+        onClick={() => orbital.open(id)}
+        animate={reduce ? {} : { y: floatKeyframes }}
+        transition={reduce ? { duration: 0 } : {
+          duration: floatDuration, repeat: Infinity, delay: floatDelay, ease: 'easeInOut',
+        }}
+        whileHover={mode === 'closed' ? { scale: 1.04 } : {}}
+        style={{
+          position: 'absolute',
+          left: position?.left ?? '50%',
+          top: position?.top ?? '50%',
+          translate: '-50% -50%',
+          width: chipSize,
+          height: chipSize,
+          borderRadius: 22,
+          background: '#161616',
+          border: '1px solid rgba(255,255,255,.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          padding: '14px 6px 8px',
+          cursor: mode === 'closed' ? 'pointer' : 'default',
+          color: '#d4d4d8',
+          fontFamily: 'inherit',
+          textAlign: 'center',
+          willChange: 'transform',
+          transition: 'border-color .18s, box-shadow .18s, color .18s, opacity .2s',
+          opacity: mode === 'closed' ? 1 : 0.35,
+          pointerEvents: mode === 'closed' ? 'auto' : 'none',
+        }}
+        aria-label={label}
+        className="orbital-chip"
+      >
+        {isPro && !isProUser && (
+          <span style={{
+            position: 'absolute', top: 7, right: 7,
+            fontSize: 8, fontWeight: 800, letterSpacing: '.06em',
+            color: '#22c55e', background: 'rgba(26,122,74,.18)',
+            border: '1px solid rgba(34,197,94,.32)',
+            padding: '1px 5px', borderRadius: 4,
+          }}>PRO</span>
+        )}
+        <Icon size={26} strokeWidth={1.6} style={{ marginTop: 2 }} />
+        <span style={{ fontSize: 11.5, fontWeight: 500, marginTop: 8, lineHeight: 1.2, color: '#e4e4e7' }}>{label}</span>
+        {badge && (
+          <span
+            title={badge}
+            style={{
+              fontSize: 9.5, fontWeight: 600, color: '#86efac',
+              marginTop: 4, maxWidth: '100%', padding: '0 4px',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {badge}
+          </span>
+        )}
+      </motion.button>
 
       {/* Backdrop */}
       <AnimatePresence>
         {mode !== 'closed' && (
           <motion.div
-            key={`backdrop-${mode}`}
+            key={`backdrop-${id}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -116,75 +115,84 @@ export default function OrbitalItem({
         )}
       </AnimatePresence>
 
-      {/* Drawer */}
-      {mode === 'drawer' && (
-        <motion.div
-          layoutId={`orbital-${id}`}
-          transition={{ type: 'spring', stiffness: 280, damping: 30 }}
-          style={{
-            position: 'fixed',
-            right: 24, top: 88,
-            width: 'min(420px, calc(100vw - 48px))',
-            height: 'calc(100vh - 112px)',
-            background: '#0d0d0d',
-            border: '1px solid rgba(255,255,255,.08)',
-            borderRadius: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            zIndex: 50,
-            boxShadow: '0 24px 60px rgba(0,0,0,.65)',
-          }}
-          className="orbital-panel"
-        >
-          <PanelHeader
-            Icon={Icon}
-            label={label}
-            actions={[
-              { Icon: Maximize2, onClick: orbital.expand, label: 'Expandir' },
-              { Icon: X, onClick: orbital.close, label: 'Fechar' },
-            ]}
-            big={false}
-          />
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 20px', minHeight: 0 }}>
-            {DrawerContent ? <DrawerContent /> : null}
-          </div>
-        </motion.div>
-      )}
+      {/* Drawer & Fullscreen — layoutId compartilhado SÓ entre eles. */}
+      <AnimatePresence>
+        {mode === 'drawer' && (
+          <motion.div
+            key={`panel-${id}`}
+            layoutId={`panel-${id}`}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 34, mass: 0.7 }}
+            style={{
+              position: 'fixed',
+              right: 24, top: 88,
+              width: 'min(420px, calc(100vw - 48px))',
+              height: 'calc(100vh - 112px)',
+              background: '#0d0d0d',
+              border: '1px solid rgba(255,255,255,.08)',
+              borderRadius: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              zIndex: 50,
+              boxShadow: '0 24px 60px rgba(0,0,0,.65)',
+            }}
+            className="orbital-panel"
+          >
+            <PanelHeader
+              Icon={Icon}
+              label={label}
+              actions={[
+                { Icon: Maximize2, onClick: orbital.expand, label: 'Expandir' },
+                { Icon: X, onClick: orbital.close, label: 'Fechar' },
+              ]}
+              big={false}
+            />
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 20px', minHeight: 0 }}>
+              {DrawerContent ? <DrawerContent /> : null}
+            </div>
+          </motion.div>
+        )}
 
-      {/* Fullscreen */}
-      {mode === 'fullscreen' && (
-        <motion.div
-          layoutId={`orbital-${id}`}
-          transition={{ type: 'spring', stiffness: 280, damping: 30 }}
-          style={{
-            position: 'fixed',
-            inset: 32,
-            background: '#0d0d0d',
-            border: '1px solid rgba(255,255,255,.08)',
-            borderRadius: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            zIndex: 50,
-            boxShadow: '0 40px 100px rgba(0,0,0,.7)',
-          }}
-          className="orbital-panel orbital-panel-full"
-        >
-          <PanelHeader
-            Icon={Icon}
-            label={label}
-            actions={[
-              { Icon: Minimize2, onClick: orbital.minimize, label: 'Minimizar' },
-              { Icon: X, onClick: orbital.close, label: 'Fechar' },
-            ]}
-            big={true}
-          />
-          <div style={{ flex: 1, overflowY: 'auto', padding: '28px 36px 36px', minHeight: 0 }}>
-            {FullscreenContent ? <FullscreenContent /> : null}
-          </div>
-        </motion.div>
-      )}
+        {mode === 'fullscreen' && (
+          <motion.div
+            key={`panel-${id}`}
+            layoutId={`panel-${id}`}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 34, mass: 0.7 }}
+            style={{
+              position: 'fixed',
+              inset: 32,
+              background: '#0d0d0d',
+              border: '1px solid rgba(255,255,255,.08)',
+              borderRadius: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              zIndex: 50,
+              boxShadow: '0 40px 100px rgba(0,0,0,.7)',
+            }}
+            className="orbital-panel orbital-panel-full"
+          >
+            <PanelHeader
+              Icon={Icon}
+              label={label}
+              actions={[
+                { Icon: Minimize2, onClick: orbital.minimize, label: 'Minimizar' },
+                { Icon: X, onClick: orbital.close, label: 'Fechar' },
+              ]}
+              big={true}
+            />
+            <div style={{ flex: 1, overflowY: 'auto', padding: '28px 36px 36px', minHeight: 0 }}>
+              {FullscreenContent ? <FullscreenContent /> : null}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         .orbital-chip:hover{border-color:rgba(34,197,94,.4) !important;box-shadow:0 0 24px rgba(34,197,94,.12) !important;color:#22c55e !important}

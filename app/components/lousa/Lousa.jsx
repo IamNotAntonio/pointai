@@ -96,15 +96,39 @@ function LousaInner() {
     if (isMobile) return null
     const { w, h } = layout
     if (!w || !h) return []
+
     const cx = w / 2
     const cy = h / 2
-    const radius = Math.max(340, Math.min(440, h * 0.42))
+
+    // Chat dimensions (mirror the CSS: width:min(640px,calc(100vw - 720px)), min 340)
+    const chatWidth = Math.max(340, Math.min(640, w - 80))
+    // Chat height adaptativo — em telas baixas reduz pra dar espaço aos items
+    const chatHeight = h < 760
+      ? Math.max(380, h - 240)
+      : Math.min(640, h * 0.7)
+
+    const chatHalfW = chatWidth / 2
+    const chatHalfH = chatHeight / 2
+    const itemSize = 96
+    const itemHalf = itemSize / 2
+    const gap = 56 // distância entre edge do chat e edge do item
+
+    // Raio derivado (elipse: rx e ry separados)
+    let rx = chatHalfW + gap + itemHalf
+    let ry = chatHalfH + gap + itemHalf
+
+    // Clamp pra items ficarem dentro do canvas com 16px margem
+    const maxRx = cx - itemHalf - 16
+    const maxRy = cy - itemHalf - 16
+    if (rx > maxRx) rx = maxRx
+    if (ry > maxRy) ry = maxRy
+
     return Array.from({ length: 6 }, (_, i) => {
       const angle = ((i * 60 - 90) * Math.PI) / 180
       return {
-        left: cx + radius * Math.cos(angle),
-        top: cy + radius * Math.sin(angle),
-        size: 96,
+        left: cx + rx * Math.cos(angle),
+        top: cy + ry * Math.sin(angle),
+        size: itemSize,
         floatDelay: (i * 0.6) % 3,
       }
     })
@@ -155,7 +179,7 @@ function LousaInner() {
     <div ref={canvasRef} className="lousa-canvas">
       <style>{`
         .lousa-canvas{position:relative;width:100%;height:100%;min-height:calc(100vh - 64px);overflow:hidden;background:#0a0a0a;background-image:radial-gradient(circle at 50% 45%, rgba(34,197,94,.05) 0%, transparent 600px)}
-        .lousa-chat-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 720px));max-width:640px;min-width:340px;height:min(70vh,640px);min-height:480px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02);z-index:5}
+        .lousa-chat-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100vw - 720px));max-width:640px;min-width:340px;height:min(70vh,640px);min-height:380px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02);z-index:5}
         .lousa-chat-header{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #161616;flex-shrink:0;background:#0a0a0a}
         .lousa-chat-header-title{font-size:13.5px;font-weight:700;color:#f4f4f5;letter-spacing:-.01em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .lousa-chat-header-sub{font-size:11px;color:#71717a;font-weight:600}
