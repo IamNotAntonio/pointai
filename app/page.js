@@ -480,7 +480,7 @@ function useScrollReveal(selector = '.reveal') {
 /* ─── Page ───────────────────────────────────────────────────────── */
 export default function Home() {
   const [scrolled, setScrolled] = useState(false)
-  const [activeTab, setActiveTab] = useState('chat')
+  const [activeTab, setActiveTab] = useState('notas')
   const [supportOpen, setSupportOpen] = useState(false)
   useScrollReveal('.reveal')
 
@@ -566,7 +566,7 @@ export default function Home() {
 
         /* ── How it works ── */
         .how-bg{background:#070707;border-top:1px solid #111;border-bottom:1px solid #111}
-        .how-layout{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;max-width:1200px;margin:0 auto;padding:110px 24px}
+        .how-layout{max-width:720px;margin:0 auto;padding:110px 24px}
         .steps{display:flex;flex-direction:column;gap:0;margin-top:44px}
         .step{display:flex;gap:24px;padding:28px 0;border-bottom:1px solid #0f0f0f;position:relative}
         .step:last-child{border:none}
@@ -642,7 +642,7 @@ export default function Home() {
           .metrics{justify-content:center}
           .metric:first-child{padding-left:32px}
           .features-header{grid-template-columns:1fr}
-          .how-layout{grid-template-columns:1fr;padding:80px 24px}
+          .how-layout{padding:80px 24px}
           .feat-grid{grid-template-columns:repeat(2,1fr)}
           .testi-grid{grid-template-columns:1fr}
         }
@@ -729,7 +729,7 @@ export default function Home() {
 
             <div className="metrics" style={{ animation: 'fadeUp .7s .55s both' }}>
               {[
-                { n: '9', suf: 'M+', pre: '', label: 'universitários no Brasil' },
+                { n: '150', suf: '+', pre: '', label: 'cursos suportados' },
                 { n: '24', suf: 'h', pre: '', label: 'disponível' },
                 { n: '100', suf: '%', pre: '', label: 'personalizado' },
               ].map((m, i) => (
@@ -750,106 +750,39 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── Courses ────────────────────────────────────────────────── */}
-      <section className="courses-sec">
-        <div style={{ textAlign: 'center', maxWidth: 800, margin: '0 auto' }}>
-          <div className="reveal">
-            <p className="sec-eyebrow">Compatibilidade</p>
-            <h2 className="sec-title" style={{ textAlign: 'center' }}>
-              Para qualquer curso,<br />em qualquer faculdade.
-            </h2>
-            <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto 0', maxWidth: 500 }}>
-              O Point aprende o vocabulário, as cobranças e o estilo de cada área do conhecimento.
-            </p>
-          </div>
-
-          <div className="courses-chips reveal d1">
-            {['Medicina','Direito','Engenharia','Administração','Psicologia','Ciência da Computação','Arquitetura','Enfermagem','Economia','Nutrição','Farmácia','Veterinária','Educação Física','Jornalismo'].map((name, i) => (
-              <span key={i} className="chip">{name}</span>
-            ))}
-          </div>
-
-          <div className="reveal d2" style={{ marginTop: 28, textAlign: 'center' }}>
-            <p style={{ fontSize: 14, color: '#f4f4f5', marginBottom: 10 }}>
-              e mais de{' '}
-              <span style={{ color: '#22c55e', fontWeight: 700 }}>50</span>
-              {' '}outros cursos reconhecidos automaticamente
-            </p>
-            <p style={{ fontSize: 13, color: '#c4c4c4' }}>
-              Se o seu curso não aparecer, basta digitar — o Point aprende qualquer área.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Features ───────────────────────────────────────────────── */}
-      <section className="section" id="funcionalidades" style={{ background: '#0a0a0a', borderTop: '1px solid #111' }}>
-        <div className="wrap">
-          <div className="features-header">
-            <div className="reveal">
-              <p className="sec-eyebrow">Funcionalidades</p>
-              <h2 className="sec-title">Cada ferramenta resolve<br />um problema real.</h2>
-            </div>
-            <div className="reveal d1">
-              <p className="sec-sub">Desenvolvidas para os gargalos que universitários brasileiros enfrentam semestre após semestre.</p>
-            </div>
-          </div>
-
-          <div className="feat-grid">
-            {FEATURES.map((f, i) => (
-              <div key={i} className={`feat-card reveal d${(i % 3) + 1}`}>
-                <div className="feat-top-line" />
-                <div className="feat-icon-wrap">
-                  <f.Icon />
-                </div>
-                <p className="feat-title">{f.title}</p>
-                <p className="feat-desc">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ─── How it works ───────────────────────────────────────────── */}
       <div className="how-bg" id="como-funciona">
         <div className="how-layout">
-          <div>
-            <div className="reveal">
-              <p className="sec-eyebrow">Como funciona</p>
-              <h2 className="sec-title">Três passos para mudar seu semestre.</h2>
-            </div>
-            <div className="steps">
-              {[
-                {
-                  n: '1',
-                  title: 'Crie sua conta em 2 minutos',
-                  desc: 'Informe seu curso, faculdade e matérias. Sem formulários longos, sem complicação.',
-                },
-                {
-                  n: '2',
-                  title: 'A IA aprende com você',
-                  desc: 'O Point personaliza tudo para o seu perfil acadêmico — respostas, exercícios e alertas feitos para você.',
-                },
-                {
-                  n: '3',
-                  title: 'Evolua toda semana',
-                  desc: 'Acompanhe seu progresso, melhore suas notas e receba planos de estudo baseados no seu desempenho real.',
-                },
-              ].map((s, i) => (
-                <div key={i} className={`step reveal d${i + 1}`}>
-                  <div className="step-num">{s.n}</div>
-                  <div>
-                    <p className="step-title">{s.title}</p>
-                    <p className="step-desc">{s.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="reveal" style={{ textAlign: 'center' }}>
+            <p className="sec-eyebrow">Como funciona</p>
+            <h2 className="sec-title">Três passos para mudar seu semestre.</h2>
           </div>
-
-          <div className="reveal d2">
-            {/* Visual: chat live */}
-            <AnimatedChat />
+          <div className="steps">
+            {[
+              {
+                n: '1',
+                title: 'Crie sua conta em 2 minutos',
+                desc: 'Informe seu curso, faculdade e matérias. Sem formulários longos, sem complicação.',
+              },
+              {
+                n: '2',
+                title: 'A IA aprende com você',
+                desc: 'O Point personaliza tudo para o seu perfil acadêmico — respostas, exercícios e alertas feitos para você.',
+              },
+              {
+                n: '3',
+                title: 'Evolua toda semana',
+                desc: 'Acompanhe seu progresso, melhore suas notas e receba planos de estudo baseados no seu desempenho real.',
+              },
+            ].map((s, i) => (
+              <div key={i} className={`step reveal d${i + 1}`}>
+                <div className="step-num">{s.n}</div>
+                <div>
+                  <p className="step-title">{s.title}</p>
+                  <p className="step-desc">{s.desc}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -866,7 +799,6 @@ export default function Home() {
           <div style={{ marginTop: 40 }} className="reveal d1">
             <div className="tab-bar">
               {[
-                { id: 'chat', label: 'Chat IA' },
                 { id: 'notas', label: 'Notas' },
                 { id: 'calendario', label: 'Calendário' },
               ].map(t => (
@@ -884,7 +816,6 @@ export default function Home() {
                   ))}
                 </div>
                 <span style={{ flex: 1, textAlign: 'center', fontSize: 12.5, color: '#71717a', fontWeight: 500 }}>
-                  {activeTab === 'chat' && 'Point — Chat · Cálculo I'}
                   {activeTab === 'notas' && 'Point — Notas e Frequência'}
                   {activeTab === 'calendario' && 'Point — Calendário Acadêmico'}
                 </span>
@@ -892,12 +823,6 @@ export default function Home() {
                   Ao vivo
                 </span>
               </div>
-
-              {activeTab === 'chat' && (
-                <div style={{ padding: '0' }}>
-                  <AnimatedChat />
-                </div>
-              )}
 
               {activeTab === 'notas' && (
                 <div>
@@ -963,6 +888,66 @@ export default function Home() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Features ───────────────────────────────────────────────── */}
+      <section className="section" id="funcionalidades" style={{ background: '#0a0a0a', borderTop: '1px solid #111' }}>
+        <div className="wrap">
+          <div className="features-header">
+            <div className="reveal">
+              <p className="sec-eyebrow">Funcionalidades</p>
+              <h2 className="sec-title">Cada ferramenta resolve<br />um problema real.</h2>
+            </div>
+            <div className="reveal d1">
+              <p className="sec-sub">Desenvolvidas para os gargalos que universitários brasileiros enfrentam semestre após semestre.</p>
+            </div>
+          </div>
+
+          <div className="feat-grid">
+            {FEATURES.map((f, i) => (
+              <div key={i} className={`feat-card reveal d${(i % 3) + 1}`}>
+                <div className="feat-top-line" />
+                <div className="feat-icon-wrap">
+                  <f.Icon />
+                </div>
+                <p className="feat-title">{f.title}</p>
+                <p className="feat-desc">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Courses ────────────────────────────────────────────────── */}
+      <section className="courses-sec">
+        <div style={{ textAlign: 'center', maxWidth: 800, margin: '0 auto' }}>
+          <div className="reveal">
+            <p className="sec-eyebrow">Compatibilidade</p>
+            <h2 className="sec-title" style={{ textAlign: 'center' }}>
+              Para qualquer curso,<br />em qualquer faculdade.
+            </h2>
+            <p className="sec-sub" style={{ textAlign: 'center', margin: '0 auto 0', maxWidth: 500 }}>
+              O Point aprende o vocabulário, as cobranças e o estilo de cada área do conhecimento.
+            </p>
+          </div>
+
+          <div className="courses-chips reveal d1">
+            {['Medicina','Direito','Engenharia','Administração','Psicologia','Ciência da Computação','Arquitetura','Enfermagem','Economia','Nutrição','Farmácia','Veterinária','Educação Física','Jornalismo'].map((name, i) => (
+              <span key={i} className="chip">{name}</span>
+            ))}
+          </div>
+
+          <div className="reveal d2" style={{ marginTop: 28, textAlign: 'center' }}>
+            <p style={{ fontSize: 14, color: '#f4f4f5', marginBottom: 10 }}>
+              e mais de{' '}
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>50</span>
+              {' '}outros cursos reconhecidos automaticamente
+            </p>
+            <p style={{ fontSize: 13, color: '#c4c4c4' }}>
+              Se o seu curso não aparecer, basta digitar — o Point aprende qualquer área.
+            </p>
           </div>
         </div>
       </section>
@@ -1035,7 +1020,7 @@ export default function Home() {
           <Link href="/privacidade" className="footer-a">Política de Privacidade</Link>
           <Link href="/termos" className="footer-a">Termos de Uso</Link>
           <button onClick={() => setSupportOpen(true)} className="footer-a" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Suporte</button>
-          <a href="mailto:contato@pointai.com.br" className="footer-a">Contato</a>
+          <a href="mailto:contato@pointedu.com.br" className="footer-a">Contato</a>
         </div>
       </footer>
     </>
