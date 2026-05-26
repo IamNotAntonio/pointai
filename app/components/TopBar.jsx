@@ -1,11 +1,11 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
-  Calendar, Bell, ChevronDown, Edit, Star, Sun, Moon, LogOut, Sparkles,
+  Calendar, Bell, ChevronDown, ChevronRight, Edit, Star, Sun, Moon, LogOut, Sparkles,
 } from 'lucide-react'
 import * as db from '../lib/db'
 import { useProfile } from '../lib/ProfileContext'
@@ -228,6 +228,15 @@ export default function TopBar() {
         .tb-dd-item.danger:hover{background:rgba(239,68,68,.08);color:#fca5a5}
         .tb-dd-divider{height:1px;background:#161616;margin:4px 6px}
 
+        /* Nav breadcrumb pill (centered, behind the right-side actions) */
+        .topbar-navpill{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:8px;background:rgba(20,20,20,.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.06);border-radius:999px;padding:7px 16px;z-index:1;pointer-events:none;max-width:calc(100vw - 540px)}
+        .topbar-navpill-root{font-size:12.5px;font-weight:500;color:#71717a;letter-spacing:.01em}
+        .topbar-navpill-sep{color:#52525b;display:inline-flex;align-items:center;flex-shrink:0}
+        .topbar-navpill-leaf{font-size:13px;font-weight:600;color:#e4e4e7;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+
+        @media (max-width:900px){
+          .topbar-navpill{display:none}
+        }
         @media (max-width:768px){
           .topbar-inner{padding:0 14px;gap:8px}
           .topbar-logo-text{display:none}
@@ -242,6 +251,10 @@ export default function TopBar() {
             <Image src="/logo-mark.png" alt="" width={32} height={32} priority />
             <span className="topbar-logo-text">Point</span>
           </Link>
+
+          <Suspense fallback={null}>
+            <NavPill reduce={reduce} />
+          </Suspense>
 
           <div className="topbar-spacer" />
 
@@ -451,5 +464,30 @@ export default function TopBar() {
         </div>
       )}
     </>
+  )
+}
+
+function NavPill({ reduce }) {
+  const sp = useSearchParams()
+  const m = sp.get('materia')
+  const leaf = m && m.length > 0 ? m : 'Chat Geral'
+  const displayLeaf = leaf.length > 30 ? leaf.slice(0, 27) + '…' : leaf
+  return (
+    <div className="topbar-navpill" title={leaf}>
+      <span className="topbar-navpill-root">Lousa</span>
+      <span className="topbar-navpill-sep"><ChevronRight size={10} strokeWidth={2} /></span>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={leaf}
+          className="topbar-navpill-leaf"
+          initial={reduce ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {displayLeaf}
+        </motion.span>
+      </AnimatePresence>
+    </div>
   )
 }

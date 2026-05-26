@@ -141,10 +141,6 @@ function LousaInner() {
         .lousa-chat-header-sub{font-size:11px;color:#71717a;font-weight:600}
         .lousa-chat-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 
-        /* Hidden OrbitalItem rack — keeps drawer/fullscreen machinery alive
-           without rendering chips in the canvas. */
-        .lousa-orbital-rack{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none}
-
         /* Mobile dock */
         .lousa-dock{position:fixed;left:0;right:0;bottom:0;z-index:30;height:88px;background:rgba(10,10,10,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;padding:10px 14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
         .lousa-dock::-webkit-scrollbar{display:none}
@@ -183,24 +179,23 @@ function LousaInner() {
         </div>
       </div>
 
-      {/* Off-screen OrbitalItem rack — chip is parked at -9999px so only the
-          drawer/fullscreen surface is visible when activeId is set. */}
-      <div className="lousa-orbital-rack" aria-hidden>
-        {items.map(item => (
-          <OrbitalItem
-            key={item.id}
-            id={item.id}
-            Icon={item.Icon}
-            label={item.label}
-            badge={null}
-            isPro={item.isPro}
-            isProUser={isProUser}
-            position={{ left: '-9999px', top: '-9999px', size: 1, floatDelay: 0 }}
-            DrawerContent={item.DrawerContent}
-            FullscreenContent={item.FullscreenContent}
-          />
-        ))}
-      </div>
+      {/* OrbitalItem instances with hideChip — only the drawer/fullscreen
+          surface renders. No off-screen rack needed since the chip is
+          skipped entirely. */}
+      {items.map(item => (
+        <OrbitalItem
+          key={item.id}
+          id={item.id}
+          Icon={item.Icon}
+          label={item.label}
+          badge={null}
+          isPro={item.isPro}
+          isProUser={isProUser}
+          hideChip
+          DrawerContent={item.DrawerContent}
+          FullscreenContent={item.FullscreenContent}
+        />
+      ))}
 
       {/* Desktop: orbital lateral widget bottom-left */}
       {!isMobile && (

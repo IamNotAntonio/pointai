@@ -21,6 +21,7 @@ import { useOrbital } from '../../lib/OrbitalContext'
 export default function OrbitalItem({
   id, Icon, label, badge, isPro = false, isProUser = false,
   position, DrawerContent, FullscreenContent,
+  hideChip = false,
 }) {
   const orbital = useOrbital()
   const reduce = useReducedMotion()
@@ -33,69 +34,79 @@ export default function OrbitalItem({
 
   const chipSize = position?.size ?? 96
 
+  const handleClose = () => orbital.close()
+  const handleExpand = () => orbital.expand()
+  const handleMinimize = () => orbital.minimize()
+
   return (
     <>
-      {/* Chip — sempre renderizado, sem layoutId. Dim quando algum painel está aberto. */}
-      <motion.button
-        onClick={() => orbital.open(id)}
-        animate={reduce ? {} : { y: floatKeyframes }}
-        transition={reduce ? { duration: 0 } : {
-          duration: floatDuration, repeat: Infinity, delay: floatDelay, ease: 'easeInOut',
-        }}
-        whileHover={mode === 'closed' ? { scale: 1.04 } : {}}
-        style={{
-          position: 'absolute',
-          left: position?.left ?? '50%',
-          top: position?.top ?? '50%',
-          translate: '-50% -50%',
-          width: chipSize,
-          height: chipSize,
-          borderRadius: 22,
-          background: '#161616',
-          border: '1px solid rgba(255,255,255,.08)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          padding: '14px 6px 8px',
-          cursor: mode === 'closed' ? 'pointer' : 'default',
-          color: '#d4d4d8',
-          fontFamily: 'inherit',
-          textAlign: 'center',
-          willChange: 'transform',
-          transition: 'border-color .18s, box-shadow .18s, color .18s, opacity .2s',
-          opacity: mode === 'closed' ? 1 : 0.35,
-          pointerEvents: mode === 'closed' ? 'auto' : 'none',
-        }}
-        aria-label={label}
-        className="orbital-chip"
-      >
-        {isPro && !isProUser && (
-          <span style={{
-            position: 'absolute', top: 7, right: 7,
-            fontSize: 8, fontWeight: 800, letterSpacing: '.06em',
-            color: '#22c55e', background: 'rgba(26,122,74,.18)',
-            border: '1px solid rgba(34,197,94,.32)',
-            padding: '1px 5px', borderRadius: 4,
-          }}>PRO</span>
-        )}
-        <Icon size={26} strokeWidth={1.6} style={{ marginTop: 2 }} />
-        <span style={{ fontSize: 11.5, fontWeight: 500, marginTop: 8, lineHeight: 1.2, color: '#e4e4e7' }}>{label}</span>
-        {badge && (
-          <span
-            title={badge}
-            style={{
-              fontSize: 9.5, fontWeight: 600, color: '#86efac',
-              marginTop: 4, maxWidth: '100%', padding: '0 4px',
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}
-          >
-            {badge}
-          </span>
-        )}
-      </motion.button>
+      {/* Chip — only rendered when this component is the chip source.
+          When hideChip is true (e.g. Lousa's drawer/fullscreen rack), we
+          skip it entirely. The visible chip lives in OrbitalLateral or the
+          mobile dock. */}
+      {!hideChip && (
+        <motion.button
+          onClick={() => orbital.open(id)}
+          animate={reduce ? {} : { y: floatKeyframes }}
+          transition={reduce ? { duration: 0 } : {
+            duration: floatDuration, repeat: Infinity, delay: floatDelay, ease: 'easeInOut',
+          }}
+          whileHover={mode === 'closed' ? { scale: 1.04 } : {}}
+          style={{
+            position: 'absolute',
+            left: position?.left ?? '50%',
+            top: position?.top ?? '50%',
+            translate: '-50% -50%',
+            width: chipSize,
+            height: chipSize,
+            borderRadius: 22,
+            background: '#161616',
+            border: '1px solid rgba(255,255,255,.08)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            padding: '14px 6px 8px',
+            cursor: mode === 'closed' ? 'pointer' : 'default',
+            color: '#d4d4d8',
+            fontFamily: 'inherit',
+            textAlign: 'center',
+            willChange: 'transform',
+            transition: 'border-color .18s, box-shadow .18s, color .18s, opacity .2s',
+            opacity: mode === 'closed' ? 1 : 0.35,
+            pointerEvents: mode === 'closed' ? 'auto' : 'none',
+          }}
+          aria-label={label}
+          className="orbital-chip"
+        >
+          {isPro && !isProUser && (
+            <span style={{
+              position: 'absolute', top: 7, right: 7,
+              fontSize: 8, fontWeight: 800, letterSpacing: '.06em',
+              color: '#22c55e', background: 'rgba(26,122,74,.18)',
+              border: '1px solid rgba(34,197,94,.32)',
+              padding: '1px 5px', borderRadius: 4,
+            }}>PRO</span>
+          )}
+          <Icon size={26} strokeWidth={1.6} style={{ marginTop: 2 }} />
+          <span style={{ fontSize: 11.5, fontWeight: 500, marginTop: 8, lineHeight: 1.2, color: '#e4e4e7' }}>{label}</span>
+          {badge && (
+            <span
+              title={badge}
+              style={{
+                fontSize: 9.5, fontWeight: 600, color: '#86efac',
+                marginTop: 4, maxWidth: '100%', padding: '0 4px',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </motion.button>
+      )}
 
-      {/* Backdrop */}
+      {/* Backdrop — explicit pointerEvents:auto guards against any ancestor
+          with pointer-events:none cascading down to the click handler. */}
       <AnimatePresence>
         {mode !== 'closed' && (
           <motion.div
@@ -104,12 +115,14 @@ export default function OrbitalItem({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            onClick={orbital.close}
+            onClick={handleClose}
             style={{
               position: 'fixed', inset: 0, zIndex: 40,
               background: mode === 'fullscreen' ? 'rgba(0,0,0,.75)' : 'rgba(0,0,0,.5)',
               backdropFilter: mode === 'fullscreen' ? 'blur(14px)' : 'blur(8px)',
               WebkitBackdropFilter: mode === 'fullscreen' ? 'blur(14px)' : 'blur(8px)',
+              pointerEvents: 'auto',
+              cursor: 'pointer',
             }}
           />
         )}
@@ -138,6 +151,7 @@ export default function OrbitalItem({
               overflow: 'hidden',
               zIndex: 50,
               boxShadow: '0 24px 60px rgba(0,0,0,.65)',
+              pointerEvents: 'auto',
             }}
             className="orbital-panel"
           >
@@ -145,8 +159,8 @@ export default function OrbitalItem({
               Icon={Icon}
               label={label}
               actions={[
-                { Icon: Maximize2, onClick: orbital.expand, label: 'Expandir' },
-                { Icon: X, onClick: orbital.close, label: 'Fechar' },
+                { Icon: Maximize2, onClick: handleExpand, label: 'Expandir' },
+                { Icon: X, onClick: handleClose, label: 'Fechar' },
               ]}
               big={false}
             />
@@ -175,6 +189,7 @@ export default function OrbitalItem({
               overflow: 'hidden',
               zIndex: 50,
               boxShadow: '0 40px 100px rgba(0,0,0,.7)',
+              pointerEvents: 'auto',
             }}
             className="orbital-panel orbital-panel-full"
           >
@@ -182,8 +197,8 @@ export default function OrbitalItem({
               Icon={Icon}
               label={label}
               actions={[
-                { Icon: Minimize2, onClick: orbital.minimize, label: 'Minimizar' },
-                { Icon: X, onClick: orbital.close, label: 'Fechar' },
+                { Icon: Minimize2, onClick: handleMinimize, label: 'Minimizar' },
+                { Icon: X, onClick: handleClose, label: 'Fechar' },
               ]}
               big={true}
             />

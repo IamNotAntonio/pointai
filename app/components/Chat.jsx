@@ -12,6 +12,23 @@ import RichMessage from './RichMessage'
 
 const EASE = [0.22, 1, 0.36, 1]
 
+const REVEAL_CONTAINER = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.08 } },
+}
+const REVEAL_ITEM = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE } },
+}
+const REVEAL_WORDS = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.03 } },
+}
+const REVEAL_WORD = {
+  hidden: { opacity: 0, y: 6 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: EASE } },
+}
+
 const CHIPS = [
   { id: 'resumo',     Icon: FileText,   label: 'Resumir conteúdo' },
   { id: 'exercicios', Icon: PenLine,    label: 'Criar exercícios' },
@@ -237,28 +254,38 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           <motion.div
             key="empty"
             className="v0-empty"
-            initial={reduce ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -10 }}
-            transition={{ duration: 0.25, ease: EASE }}
+            variants={reduce ? undefined : REVEAL_CONTAINER}
+            initial={reduce ? false : 'hidden'}
+            animate={reduce ? undefined : 'visible'}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -10, transition: { duration: 0.25, ease: EASE } }}
           >
-            <Headline nome={nome} materia={materia} isGeral={isGeral} />
-            <InputCard
-              variant="large"
-              textareaRef={textareaEmptyRef}
-              value={input}
-              onChange={onChangeEmpty}
-              onKeyDown={onKeyDown}
-              onSubmit={enviar}
-              onFocusChange={onFocusChange}
-              placeholder={placeholder}
-              attachments={attachments}
-              onAttachClick={openFilePicker}
-              onRemoveAttach={removeAttachment}
-              carregando={carregando}
-              canSend={canSend}
-            />
-            <ChipBar onPick={aplicarChip} />
+            <Headline nome={nome} materia={materia} isGeral={isGeral} reduce={reduce} />
+            <motion.div
+              variants={reduce ? undefined : REVEAL_ITEM}
+              style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+            >
+              <InputCard
+                variant="large"
+                textareaRef={textareaEmptyRef}
+                value={input}
+                onChange={onChangeEmpty}
+                onKeyDown={onKeyDown}
+                onSubmit={enviar}
+                onFocusChange={onFocusChange}
+                placeholder={placeholder}
+                attachments={attachments}
+                onAttachClick={openFilePicker}
+                onRemoveAttach={removeAttachment}
+                carregando={carregando}
+                canSend={canSend}
+              />
+            </motion.div>
+            <motion.div
+              variants={reduce ? undefined : REVEAL_ITEM}
+              style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+            >
+              <ChipBar onPick={aplicarChip} reduce={reduce} />
+            </motion.div>
           </motion.div>
         ) : (
           <motion.div
@@ -299,31 +326,79 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
 
 /* ─── Sub-components ───────────────────────────────────────────── */
 
-function Headline({ nome, materia, isGeral }) {
+function Headline({ nome, materia, isGeral, reduce }) {
+  const l2 = isGeral
+    ? [{ t: 'O' }, { t: 'que' }, { t: 'vamos' }, { t: 'estudar' }, { t: 'hoje?' }]
+    : [
+        { t: 'O' }, { t: 'que' }, { t: 'vamos' }, { t: 'ver' }, { t: 'de' },
+        { t: materia, em: true },
+        { t: 'hoje?' },
+      ]
+
+  if (reduce) {
+    return (
+      <div className="v0-headline">
+        <p className="v0-headline-l1">
+          Olá{nome ? <>, <strong>{nome}</strong></> : null}! 👋
+        </p>
+        <h1 className="v0-headline-l2">
+          {isGeral
+            ? <>O que vamos estudar hoje?</>
+            : <>O que vamos ver de <strong>{materia}</strong> hoje?</>}
+        </h1>
+      </div>
+    )
+  }
+
   return (
-    <div className="v0-headline">
-      <p className="v0-headline-l1">
+    <motion.div className="v0-headline" variants={REVEAL_ITEM}>
+      <motion.p className="v0-headline-l1" variants={REVEAL_WORD}>
         Olá{nome ? <>, <strong>{nome}</strong></> : null}! 👋
-      </p>
-      <h1 className="v0-headline-l2">
-        {isGeral
-          ? <>O que vamos estudar hoje?</>
-          : <>O que vamos ver de <strong>{materia}</strong> hoje?</>}
-      </h1>
-    </div>
+      </motion.p>
+      <motion.h1 className="v0-headline-l2" variants={REVEAL_WORDS}>
+        {l2.map((w, i) => (
+          <motion.span
+            key={i}
+            variants={REVEAL_WORD}
+            style={{
+              display: 'inline-block',
+              marginRight: '0.28em',
+              color: w.em ? '#22c55e' : undefined,
+              fontWeight: w.em ? 800 : undefined,
+            }}
+          >
+            {w.t}
+          </motion.span>
+        ))}
+      </motion.h1>
+    </motion.div>
   )
 }
 
-function ChipBar({ onPick }) {
+function ChipBar({ onPick, reduce }) {
+  const chipContainer = reduce ? undefined : {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.04 } },
+  }
+  const chipItem = reduce ? undefined : {
+    hidden: { opacity: 0, scale: 0.92 },
+    visible: { opacity: 1, scale: 1, transition: { duration: 0.3, ease: EASE } },
+  }
   return (
-    <div className="v0-chips">
+    <motion.div className="v0-chips" variants={chipContainer}>
       {CHIPS.map(c => (
-        <button key={c.id} type="button" className="v0-chip" onClick={() => onPick(c.id)}>
+        <motion.button
+          key={c.id}
+          type="button"
+          className="v0-chip"
+          variants={chipItem}
+          onClick={() => onPick(c.id)}
+        >
           <c.Icon size={13} strokeWidth={1.8} />
           {c.label}
-        </button>
+        </motion.button>
       ))}
-    </div>
+    </motion.div>
   )
 }
 
