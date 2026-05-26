@@ -1,22 +1,24 @@
 'use client'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { MessageSquare } from 'lucide-react'
+import { motion } from 'motion/react'
+import {
+  Calendar, FileText, TrendingUp, ClipboardList, Search, Brain, MessageSquare,
+} from 'lucide-react'
 import * as db from '../../lib/db'
 import { fetchPlano } from '../../lib/plano'
 import { useProfile } from '../../lib/ProfileContext'
+import { useOrbital } from '../../lib/OrbitalContext'
 import Chat from '../Chat'
 import GradientDots from './GradientDots'
-
-// NOTE: items + OrbitalItem ficam dormentes durante D.3a.
-//       Re-import in D.3c quando o orbital lateral nascer:
-// import OrbitalItem from './OrbitalItem'
-// import { getNotasBadge, NotasDrawer, NotasFullscreen } from './items/NotasItem'
-// import { getCalendarioBadge, CalendarioDrawer, CalendarioFullscreen } from './items/CalendarioItem'
-// import { getEvolucaoBadge, EvolucaoDrawer, EvolucaoFullscreen } from './items/EvolucaoItem'
-// import { getSimuladoBadge, SimuladoDrawer, SimuladoFullscreen } from './items/SimuladoItem'
-// import { getAnaliseBadge, AnaliseDrawer, AnaliseFullscreen } from './items/AnaliseItem'
-// import { getPlanoBadge, PlanoDrawer, PlanoFullscreen } from './items/PlanoItem'
+import OrbitalItem from './OrbitalItem'
+import OrbitalLateral from './OrbitalLateral'
+import { getNotasBadge, NotasDrawer, NotasFullscreen } from './items/NotasItem'
+import { getCalendarioBadge, CalendarioDrawer, CalendarioFullscreen } from './items/CalendarioItem'
+import { getEvolucaoBadge, EvolucaoDrawer, EvolucaoFullscreen } from './items/EvolucaoItem'
+import { getSimuladoBadge, SimuladoDrawer, SimuladoFullscreen } from './items/SimuladoItem'
+import { getAnaliseBadge, AnaliseDrawer, AnaliseFullscreen } from './items/AnaliseItem'
+import { getCerebroBadge, CerebroDrawer, CerebroFullscreen } from './items/CerebroPointItem'
 
 export default function Lousa() {
   return (
@@ -30,15 +32,11 @@ function LousaInner() {
   const { perfil } = useProfile()
   const searchParams = useSearchParams()
 
-  // Data still loaded — D.3c will surface it again via the side orbital.
-  // eslint-disable-next-line no-unused-vars
   const [notas, setNotas] = useState([])
-  // eslint-disable-next-line no-unused-vars
   const [eventos, setEventos] = useState([])
-  // eslint-disable-next-line no-unused-vars
   const [isProUser, setIsProUser] = useState(false)
+  const [chatFocused, setChatFocused] = useState(false)
 
-  // Materia resolution: URL param > localStorage > 'geral'
   const urlMateria = searchParams.get('materia')
   const [materia, setMateria] = useState(() => {
     if (urlMateria) return urlMateria
@@ -65,10 +63,76 @@ function LousaInner() {
     return () => { alive = false }
   }, [])
 
+  const canvasRef = useRef(null)
+  const [layout, setLayout] = useState({ w: 0, h: 0 })
+
+  useEffect(() => {
+    const node = canvasRef.current
+    if (!node) return
+    function measure() {
+      const r = node.getBoundingClientRect()
+      setLayout({ w: r.width, h: r.height })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [])
+
+  const isMobile = layout.w > 0 && layout.w < 1024
+
   const materiaLabel = materia === 'geral' ? 'Chat Geral' : materia
 
+  /*
+   * Six items in clockwise order from 12 o'clock:
+   *   0   topo:        Calendário
+   *   60  dir-cima:    Notas e Faltas
+   *   120 dir-baixo:   Minha Evolução
+   *   180 baixo:       Cérebro Point (replaces Plano de Estudos)
+   *   240 esq-baixo:   Análise de Materiais (PRO)
+   *   300 esq-cima:    Simulado Inteligente (PRO)
+   */
+  const items = useMemo(() => [
+    {
+      id: 'calendario', Icon: Calendar, label: 'Calendário', shortLabel: 'Calendário', isPro: false,
+      badge: getCalendarioBadge({ materia, eventos }),
+      DrawerContent: () => <CalendarioDrawer materia={materia} eventos={eventos} />,
+      FullscreenContent: CalendarioFullscreen,
+    },
+    {
+      id: 'notas', Icon: FileText, label: 'Notas e Faltas', shortLabel: 'Notas', isPro: false,
+      badge: getNotasBadge({ materia, notas }),
+      DrawerContent: () => <NotasDrawer materia={materia} notas={notas} />,
+      FullscreenContent: NotasFullscreen,
+    },
+    {
+      id: 'evolucao', Icon: TrendingUp, label: 'Minha Evolução', shortLabel: 'Evolução', isPro: false,
+      badge: getEvolucaoBadge(),
+      DrawerContent: () => <EvolucaoDrawer materia={materia} />,
+      FullscreenContent: EvolucaoFullscreen,
+    },
+    {
+      id: 'cerebro', Icon: Brain, label: 'Cérebro Point', shortLabel: 'Cérebro', isPro: false,
+      badge: getCerebroBadge(),
+      DrawerContent: CerebroDrawer,
+      FullscreenContent: CerebroFullscreen,
+    },
+    {
+      id: 'analise', Icon: Search, label: 'Análise de Materiais', shortLabel: 'Análise', isPro: true,
+      badge: getAnaliseBadge(),
+      DrawerContent: () => <AnaliseDrawer isProUser={isProUser} />,
+      FullscreenContent: AnaliseFullscreen,
+    },
+    {
+      id: 'simulado', Icon: ClipboardList, label: 'Simulado Inteligente', shortLabel: 'Simulado', isPro: true,
+      badge: getSimuladoBadge(),
+      DrawerContent: () => <SimuladoDrawer isProUser={isProUser} />,
+      FullscreenContent: SimuladoFullscreen,
+    },
+  ], [materia, eventos, notas, isProUser])
+
   return (
-    <div className="lousa-canvas">
+    <div ref={canvasRef} className="lousa-canvas">
       <style>{`
         .lousa-canvas{position:relative;width:100%;height:100%;min-height:calc(100vh - 64px);overflow:hidden;background:#0a0a0a}
         .lousa-chat-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(820px, calc(100vw - 320px));max-width:820px;min-width:340px;height:min(78vh, 720px);min-height:420px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02);z-index:5}
@@ -77,11 +141,24 @@ function LousaInner() {
         .lousa-chat-header-sub{font-size:11px;color:#71717a;font-weight:600}
         .lousa-chat-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 
+        /* Hidden OrbitalItem rack — keeps drawer/fullscreen machinery alive
+           without rendering chips in the canvas. */
+        .lousa-orbital-rack{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;pointer-events:none}
+
+        /* Mobile dock */
+        .lousa-dock{position:fixed;left:0;right:0;bottom:0;z-index:30;height:88px;background:rgba(10,10,10,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;padding:10px 14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+        .lousa-dock::-webkit-scrollbar{display:none}
+        .lousa-dock-item{position:relative;flex-shrink:0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:64px;height:64px;border-radius:16px;background:#161616;border:1px solid rgba(255,255,255,.08);color:#d4d4d8;cursor:pointer;font-family:inherit;padding:6px 4px;transition:border-color .15s,color .15s,background .15s}
+        .lousa-dock-item:hover{border-color:rgba(34,197,94,.4);color:#22c55e}
+        .lousa-dock-item-label{font-size:10px;font-weight:500;color:#a1a1aa;line-height:1;text-align:center;white-space:nowrap}
+        .lousa-dock-item:hover .lousa-dock-item-label{color:#86efac}
+        .lousa-dock-item-pro{position:absolute;top:3px;right:3px;font-size:7px;font-weight:800;letter-spacing:.06em;color:#22c55e;background:rgba(26,122,74,.18);border:1px solid rgba(34,197,94,.32);padding:0 4px;border-radius:3px;line-height:1.4}
+
         @media (max-width:1023px){
-          .lousa-chat-card{position:relative;inset:auto;transform:none;left:auto;top:auto;width:calc(100% - 24px);max-width:100%;height:calc(100vh - 64px - 24px);min-height:auto;margin:12px auto;z-index:5}
+          .lousa-chat-card{position:relative;inset:auto;transform:none;left:auto;top:auto;width:calc(100% - 24px);max-width:100%;height:calc(100vh - 64px - 88px - 24px);min-height:auto;margin:12px auto;z-index:5}
         }
         @media (max-width:767px){
-          .lousa-chat-card{width:calc(100% - 16px);margin:8px auto;height:calc(100vh - 64px - 16px)}
+          .lousa-chat-card{width:calc(100% - 16px);margin:8px auto;height:calc(100vh - 64px - 88px - 16px)}
         }
       `}</style>
 
@@ -97,7 +174,7 @@ function LousaInner() {
         </div>
         <div className="lousa-chat-body">
           {perfil ? (
-            <Chat materia={materia} />
+            <Chat materia={materia} onFocusChange={setChatFocused} />
           ) : (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52525b', fontSize: 13 }}>
               Carregando perfil…
@@ -105,6 +182,62 @@ function LousaInner() {
           )}
         </div>
       </div>
+
+      {/* Off-screen OrbitalItem rack — chip is parked at -9999px so only the
+          drawer/fullscreen surface is visible when activeId is set. */}
+      <div className="lousa-orbital-rack" aria-hidden>
+        {items.map(item => (
+          <OrbitalItem
+            key={item.id}
+            id={item.id}
+            Icon={item.Icon}
+            label={item.label}
+            badge={null}
+            isPro={item.isPro}
+            isProUser={isProUser}
+            position={{ left: '-9999px', top: '-9999px', size: 1, floatDelay: 0 }}
+            DrawerContent={item.DrawerContent}
+            FullscreenContent={item.FullscreenContent}
+          />
+        ))}
+      </div>
+
+      {/* Desktop: orbital lateral widget bottom-left */}
+      {!isMobile && (
+        <OrbitalLateral
+          materia={materia}
+          isProUser={isProUser}
+          dimmed={chatFocused}
+          items={items}
+        />
+      )}
+
+      {/* Mobile: horizontal dock */}
+      {isMobile && <MobileDock items={items} isProUser={isProUser} />}
+    </div>
+  )
+}
+
+function MobileDock({ items, isProUser }) {
+  const orbital = useOrbital()
+  return (
+    <div className="lousa-dock" role="navigation" aria-label="Ferramentas">
+      {items.map(item => {
+        const proLocked = item.isPro && !isProUser
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className="lousa-dock-item"
+            onClick={() => orbital.open(item.id)}
+            aria-label={item.label}
+          >
+            {proLocked && <span className="lousa-dock-item-pro">PRO</span>}
+            <item.Icon size={18} strokeWidth={1.6} />
+            <span className="lousa-dock-item-label">{item.shortLabel || item.label}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

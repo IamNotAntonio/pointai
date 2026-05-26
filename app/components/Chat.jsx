@@ -62,7 +62,7 @@ function detectKind(file) {
  * Transition is driven by isEmpty (= no user message yet). The first
  * setMensagens([userMsg]) flips the state and AnimatePresence cross-fades.
  */
-export default function Chat({ materia = 'geral', className }) {
+export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const { perfil } = useProfile()
   const reduce = useReducedMotion()
 
@@ -250,6 +250,7 @@ export default function Chat({ materia = 'geral', className }) {
               onChange={onChangeEmpty}
               onKeyDown={onKeyDown}
               onSubmit={enviar}
+              onFocusChange={onFocusChange}
               placeholder={placeholder}
               attachments={attachments}
               onAttachClick={openFilePicker}
@@ -280,6 +281,7 @@ export default function Chat({ materia = 'geral', className }) {
                 onChange={onChangeMsgs}
                 onKeyDown={onKeyDown}
                 onSubmit={enviar}
+                onFocusChange={onFocusChange}
                 placeholder={placeholder}
                 attachments={attachments}
                 onAttachClick={openFilePicker}
@@ -326,7 +328,7 @@ function ChipBar({ onPick }) {
 }
 
 function InputCard({
-  variant, textareaRef, value, onChange, onKeyDown, onSubmit,
+  variant, textareaRef, value, onChange, onKeyDown, onSubmit, onFocusChange,
   placeholder, attachments, onAttachClick, onRemoveAttach,
   carregando, canSend,
 }) {
@@ -354,6 +356,8 @@ function InputCard({
         value={value}
         onChange={onChange}
         onKeyDown={onKeyDown}
+        onFocus={() => onFocusChange?.(true)}
+        onBlur={() => onFocusChange?.(false)}
         placeholder={placeholder}
         disabled={carregando}
         rows={1}
