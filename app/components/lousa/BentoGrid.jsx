@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { useBento } from '../../lib/BentoContext'
@@ -32,6 +33,7 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
   const reduce = useReducedMotion()
   const [expanded, setExpanded] = useState(true)
   const [hydrated, setHydrated] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     try {
@@ -39,6 +41,7 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
       setExpanded(v == null ? true : v === 'true')
     } catch {}
     setHydrated(true)
+    setMounted(true)
   }, [])
 
   function toggle() {
@@ -103,65 +106,70 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
         </motion.div>
       </section>
 
-      {/* Fullscreen overlay with backdrop + layoutId morph */}
-      <AnimatePresence>
-        {activeItem && (
-          <>
-            <motion.div
-              key="bento-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              onClick={bento.closeItem}
-              style={{
-                position: 'fixed', inset: 0, zIndex: 100,
-                background: 'rgba(0,0,0,.75)',
-                backdropFilter: 'blur(14px)',
-                WebkitBackdropFilter: 'blur(14px)',
-                pointerEvents: 'auto',
-                cursor: 'pointer',
-              }}
-            />
-            <motion.div
-              key={`bento-fs-${activeItem.id}`}
-              layoutId={`panel-${activeItem.id}`}
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 34, mass: 0.7 }}
-              style={{
-                position: 'fixed',
-                inset: 32,
-                background: '#0d0d0d',
-                border: '1px solid rgba(255,255,255,.08)',
-                borderRadius: 20,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                zIndex: 110,
-                boxShadow: '0 40px 100px rgba(0,0,0,.7)',
-                pointerEvents: 'auto',
-              }}
-              className="bento-fs"
-            >
-              <header className="bento-fs-toolbar">
-                <button
-                  type="button"
-                  onClick={bento.closeItem}
-                  className="bento-fs-close"
-                  aria-label="Fechar"
-                >
-                  <X size={18} strokeWidth={1.8} />
-                </button>
-              </header>
-              <div className="bento-fs-body">
-                <activeItem.Fullscreen />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {/* Fullscreen overlay rendered via portal into document.body —
+          escapes the TopBar's sticky stacking context, so the X button
+          actually receives clicks regardless of zoom level. */}
+      {mounted && createPortal(
+        <AnimatePresence>
+          {activeItem && (
+            <>
+              <motion.div
+                key="bento-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.22 }}
+                onClick={bento.closeItem}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 100,
+                  background: 'rgba(0,0,0,.75)',
+                  backdropFilter: 'blur(14px)',
+                  WebkitBackdropFilter: 'blur(14px)',
+                  pointerEvents: 'auto',
+                  cursor: 'pointer',
+                }}
+              />
+              <motion.div
+                key={`bento-fs-${activeItem.id}`}
+                layoutId={`panel-${activeItem.id}`}
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 34, mass: 0.7 }}
+                style={{
+                  position: 'fixed',
+                  inset: 32,
+                  background: '#0d0d0d',
+                  border: '1px solid rgba(255,255,255,.08)',
+                  borderRadius: 20,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  overflow: 'hidden',
+                  zIndex: 110,
+                  boxShadow: '0 40px 100px rgba(0,0,0,.7)',
+                  pointerEvents: 'auto',
+                }}
+                className="bento-fs"
+              >
+                <header className="bento-fs-toolbar">
+                  <button
+                    type="button"
+                    onClick={bento.closeItem}
+                    className="bento-fs-close"
+                    aria-label="Fechar"
+                  >
+                    <X size={18} strokeWidth={1.8} />
+                  </button>
+                </header>
+                <div className="bento-fs-body">
+                  <activeItem.Fullscreen />
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </>
   )
 }

@@ -1,6 +1,5 @@
 'use client'
-import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { useState, useEffect, Suspense } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { useProfile } from '../lib/ProfileContext'
@@ -19,6 +18,7 @@ export default function Sidebar() {
 function SidebarInner() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const reduce = useReducedMotion()
   const { perfil, updatePerfil } = useProfile()
 
@@ -63,6 +63,16 @@ function SidebarInner() {
     setAddOpen(false)
   }
 
+  // Idempotent: always navigates, even if already on the target route.
+  function goGeral() {
+    try { localStorage.setItem('pointai_materia_ativa', 'geral') } catch {}
+    router.push('/dashboard')
+  }
+  function goMateria(m) {
+    try { localStorage.setItem('pointai_materia_ativa', m) } catch {}
+    router.push(`/dashboard?materia=${encodeURIComponent(m)}`)
+  }
+
   const width = collapsed ? 56 : 240
   const transition = reduce ? { duration: 0 } : { duration: 0.25, ease: [0.22, 1, 0.36, 1] }
 
@@ -94,7 +104,7 @@ function SidebarInner() {
         {/* Items */}
         <div className="sidebar-min-items">
           <SidebarItem
-            href="/dashboard"
+            onClick={goGeral}
             active={isGeralActive}
             collapsed={collapsed}
             label="Chat Geral"
@@ -109,7 +119,7 @@ function SidebarInner() {
             return (
               <SidebarItem
                 key={m}
-                href={`/dashboard?materia=${encodeURIComponent(m)}`}
+                onClick={() => goMateria(m)}
                 active={active}
                 collapsed={collapsed}
                 label={m}
@@ -140,7 +150,7 @@ function SidebarInner() {
         .sidebar-min-items::-webkit-scrollbar{width:6px}
         .sidebar-min-items::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:8px}
 
-        .sidebar-min-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:#a1a1aa;font-size:13px;font-weight:500;text-decoration:none;transition:background .12s,color .12s,border-color .12s;border-left:2px solid transparent;margin:1px 0;min-height:36px}
+        .sidebar-min-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:#a1a1aa;font-size:13px;font-weight:500;text-decoration:none;transition:background .12s,color .12s,border-color .12s;border-left:2px solid transparent;border-top:none;border-right:none;border-bottom:none;margin:1px 0;min-height:36px;background:none;cursor:pointer;font-family:inherit;text-align:left;width:100%}
         .sidebar-min-item:hover{background:rgba(255,255,255,.04);color:#e4e4e7}
         .sidebar-min-item.active{background:rgba(34,197,94,.08);color:#22c55e;border-left-color:#22c55e;font-weight:600}
         .sidebar-min-item-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
@@ -190,10 +200,11 @@ function SidebarInner() {
   )
 }
 
-function SidebarItem({ href, active, collapsed, label, icon, initial, isGeral }) {
+function SidebarItem({ onClick, active, collapsed, label, icon, initial, isGeral }) {
   return (
-    <Link
-      href={href}
+    <button
+      type="button"
+      onClick={onClick}
       className={`sidebar-min-item ${active ? 'active' : ''}`}
       title={label}
       aria-label={collapsed ? label : undefined}
@@ -208,6 +219,6 @@ function SidebarItem({ href, active, collapsed, label, icon, initial, isGeral })
           <span className="sidebar-min-item-label">{label}</span>
         </>
       )}
-    </Link>
+    </button>
   )
 }
