@@ -52,6 +52,54 @@ Most feature data (notas, eventos, chats, etc.) is **localStorage-only** at the 
 
 `signOut()` in `lib/db.js` wipes all localStorage keys on logout.
 
+#### Cérebro Point — Supabase-backed graph (D.4)
+
+The "Cérebro Point" feature persists a knowledge graph per user+matéria in
+two Supabase tables. Run these migrations in the Supabase SQL editor
+before D.4 features work:
+
+```sql
+CREATE TABLE conceitos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  materia text NOT NULL,
+  nome text NOT NULL,
+  descricao_curta text,
+  peso int DEFAULT 1,
+  is_seed boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, materia, nome)
+);
+
+CREATE TABLE conexoes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  conceito_a_id uuid REFERENCES conceitos(id) ON DELETE CASCADE NOT NULL,
+  conceito_b_id uuid REFERENCES conceitos(id) ON DELETE CASCADE NOT NULL,
+  forca int DEFAULT 1,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(user_id, conceito_a_id, conceito_b_id)
+);
+
+CREATE INDEX idx_conceitos_user_materia ON conceitos(user_id, materia);
+CREATE INDEX idx_conexoes_user ON conexoes(user_id);
+
+ALTER TABLE conceitos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conexoes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "owner all conceitos" ON conceitos
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "owner all conexoes" ON conexoes
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+```
+
+After each AI turn in Chat.jsx, a fire-and-forget POST to
+`/api/extrair-conceitos` runs Claude Haiku 4.5 over the user+AI
+exchange, upserts the extracted concepts (case-insensitive match on
+`nome`), and connects every pair. The free tier caps at 500 total
+connections per user; Pro is unlimited.
+
 ### Routes (Pages)
 
 **Public:**

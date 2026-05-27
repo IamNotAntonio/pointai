@@ -225,6 +225,34 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           materia: chatKey, ultimaMensagem: preview, timestamp: Date.now(),
         }))
       } catch {}
+
+      // Fire-and-forget concept extraction. Não bloqueia a UI; o card do
+      // Cérebro Point escuta o evento 'cerebro-updated' pra recarregar stats.
+      try {
+        const contextoAnterior = mensagens
+          .slice(-2)
+          .map(m => `${m.role === 'user' ? 'Aluno' : 'IA'}: ${(m.content || '').slice(0, 200)}`)
+          .join('\n')
+        fetch('/api/extrair-conceitos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userMessage: texto || '(anexo)',
+            aiResponse: fullText,
+            materia: chatKey === '__geral__' ? 'geral' : chatKey,
+            contextoAnterior,
+          }),
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(stats => {
+            if (stats) {
+              try {
+                window.dispatchEvent(new CustomEvent('cerebro-updated', { detail: stats }))
+              } catch {}
+            }
+          })
+          .catch(() => { /* silent */ })
+      } catch {}
     } catch {
       setMensagens(prev => [...prev, {
         role: 'assistant',
