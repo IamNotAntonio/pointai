@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
-import { ChevronDown, ChevronUp, X } from 'lucide-react'
+import { ChevronDown, X } from 'lucide-react'
 import { useBento } from '../../lib/BentoContext'
 import { CerebroCard, CerebroFullscreen } from './items/CerebroPointItem'
 import { NotasCard, NotasFullscreen } from './items/NotasItem'
@@ -38,7 +38,13 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
   useEffect(() => {
     try {
       const v = localStorage.getItem(STORAGE_KEY)
-      setExpanded(v == null ? true : v === 'true')
+      if (v != null) {
+        setExpanded(v === 'true')
+      } else {
+        // No saved preference: default expanded, but collapse on short viewports.
+        const shortViewport = typeof window !== 'undefined' && window.innerHeight < 700
+        setExpanded(!shortViewport)
+      }
     } catch {}
     setHydrated(true)
     setMounted(true)
@@ -59,20 +65,23 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
       <style>{BENTO_CSS}</style>
 
       <section className="bento-section" aria-label="Suas funções">
-        <header className="bento-header">
-          <span className="bento-header-label">Suas funções</span>
-          <button
-            type="button"
-            className="bento-toggle"
-            onClick={toggle}
-            aria-label={expanded ? 'Recolher funções' : 'Expandir funções'}
-            aria-expanded={expanded}
+        <button
+          type="button"
+          className="bento-header"
+          onClick={toggle}
+          aria-label={expanded ? 'Recolher suas funções' : 'Expandir suas funções'}
+          aria-expanded={expanded}
+        >
+          <motion.span
+            className="bento-header-chev"
+            animate={{ rotate: expanded ? 0 : -90 }}
+            transition={reduce ? { duration: 0 } : { duration: 0.2, ease: EASE }}
+            aria-hidden
           >
-            {expanded
-              ? <ChevronDown size={14} strokeWidth={2} />
-              : <ChevronUp size={14} strokeWidth={2} />}
-          </button>
-        </header>
+            <ChevronDown size={14} strokeWidth={2} />
+          </motion.span>
+          <span className="bento-header-label">Suas funções</span>
+        </button>
 
         <motion.div
           className="bento-grid-wrap"
@@ -176,23 +185,25 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
 
 const BENTO_CSS = `
   .bento-section{width:100%;max-width:1100px;margin:0 auto;padding:0 16px}
-  .bento-header{display:flex;align-items:center;justify-content:space-between;padding:0 4px 10px}
-  .bento-header-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#71717a}
-  .bento-toggle{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:#a1a1aa;width:28px;height:28px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s,color .15s,border-color .15s}
-  .bento-toggle:hover{background:rgba(255,255,255,.06);color:#e4e4e7;border-color:rgba(255,255,255,.1)}
+  /* Single clickable button: chevron + label grouped, generous hit area */
+  .bento-header{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;margin:0 0 8px -4px;background:none;border:none;border-radius:8px;cursor:pointer;color:#71717a;font-family:inherit;transition:background .15s,color .15s}
+  .bento-header:hover{background:rgba(255,255,255,.04);color:#a1a1aa}
+  .bento-header-chev{display:inline-flex;align-items:center;justify-content:center;color:inherit;width:14px;height:14px}
+  .bento-header-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:inherit;line-height:1}
   .bento-grid-wrap{will-change:height,opacity}
-  .bento-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;padding-bottom:4px}
+  .bento-grid{display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;padding-bottom:4px}
   .bento-cell-span-2{grid-column:span 2}
   .bento-cell-span-1{grid-column:span 1}
 
-  .bento-card{position:relative;width:100%;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:16px;cursor:pointer;text-align:left;color:#d4d4d8;font-family:inherit;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden;display:block}
-  .bento-card:hover{background:rgba(255,255,255,.05);border-color:rgba(34,197,94,.28);box-shadow:0 0 20px rgba(34,197,94,.08)}
+  /* Uniform card surface: same border-radius, border, bg, hover across all 6 */
+  .bento-card{position:relative;width:100%;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:14px;min-height:110px;cursor:pointer;text-align:left;color:#d4d4d8;font-family:inherit;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden;display:block}
+  .bento-card:hover{background:rgba(255,255,255,.05);border-color:rgba(34,197,94,.3);box-shadow:0 0 20px rgba(34,197,94,.08)}
   .bento-card.bento-card-locked{opacity:.72}
   .bento-card.bento-card-locked:hover{opacity:.9}
-  .bento-card-large{min-height:130px}
-  .bento-card-icon-wrap{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;background:rgba(34,197,94,.10);color:#22c55e;border:1px solid rgba(34,197,94,.18);margin-bottom:8px}
-  .bento-card-title{font-size:14px;font-weight:700;color:#f4f4f5;letter-spacing:-.01em;margin:0 0 6px}
-  .bento-card-mega{font-size:32px;font-weight:800;letter-spacing:-.025em;line-height:1;margin:4px 0 6px}
+  .bento-card-large{min-height:120px;padding:16px}
+  .bento-card-icon-wrap{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:rgba(34,197,94,.10);color:#22c55e;border:1px solid rgba(34,197,94,.18);margin-bottom:6px}
+  .bento-card-title{font-size:14px;font-weight:700;color:#f4f4f5;letter-spacing:-.01em;margin:0 0 4px}
+  .bento-card-mega{font-size:29px;font-weight:800;letter-spacing:-.025em;line-height:1;margin:2px 0 4px}
   .bento-card-strong{font-size:14px;font-weight:700;color:#e4e4e7;margin:6px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .bento-card-stat{font-size:12.5px;color:#a1a1aa;line-height:1.4}
   .bento-card-stat strong{color:#e4e4e7;font-weight:700}

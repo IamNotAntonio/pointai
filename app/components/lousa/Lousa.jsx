@@ -58,7 +58,7 @@ function LousaInner() {
       <style>{`
         .lousa-canvas{position:relative;width:100%;height:100%;min-height:calc(100vh - 64px);overflow:hidden;background:#0a0a0a}
         .lousa-stack{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;z-index:5}
-        .lousa-chat-shell{flex:1;min-height:0;display:flex;flex-direction:column}
+        .lousa-chat-shell{flex:1;min-height:360px;display:flex;flex-direction:column}
         .lousa-bento-shell{flex-shrink:0;padding:8px 0 22px}
 
         @media (max-width:767px){
