@@ -93,6 +93,9 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const isEmpty = !mensagens.some(m => m.role === 'user')
 
   /* ── Load chat history when matéria changes ─────────────────── */
+  // NOTE: emptyArea / dockArea are intentionally NOT in deps — useAutoResizeTextarea
+  // returns a fresh object every render, so including them would cause an
+  // endless re-fetch loop that constantly clears input + mensagens.
   useEffect(() => {
     if (!perfil || !materia) return
     let alive = true
@@ -105,7 +108,8 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     emptyArea.adjustHeight(true)
     dockArea.adjustHeight(true)
     return () => { alive = false }
-  }, [chatKey, perfil, isGeral, materia, emptyArea, dockArea])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatKey, perfil, isGeral, materia])
 
   useEffect(() => {
     if (isEmpty) return

@@ -115,7 +115,7 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
               transition={{ duration: 0.22 }}
               onClick={bento.closeItem}
               style={{
-                position: 'fixed', inset: 0, zIndex: 40,
+                position: 'fixed', inset: 0, zIndex: 100,
                 background: 'rgba(0,0,0,.75)',
                 backdropFilter: 'blur(14px)',
                 WebkitBackdropFilter: 'blur(14px)',
@@ -139,7 +139,7 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                zIndex: 50,
+                zIndex: 110,
                 boxShadow: '0 40px 100px rgba(0,0,0,.7)',
                 pointerEvents: 'auto',
               }}
