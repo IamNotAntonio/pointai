@@ -481,7 +481,7 @@ function ThinkingDots() {
 }
 
 const V0_CSS = `
-  .v0-chat{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .v0-chat{position:relative;width:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}
 
   /* ── Mouse follower ── */
   .v0-mouse-orb{position:fixed;left:0;top:0;width:50rem;height:50rem;border-radius:50%;pointer-events:none;z-index:0;opacity:.025;background:radial-gradient(circle, #22c55e 0%, transparent 70%);filter:blur(96px);will-change:transform}
