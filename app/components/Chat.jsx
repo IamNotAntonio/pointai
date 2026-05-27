@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
   ArrowUp, Paperclip, X,
-  FileText, PenLine, Lightbulb, HelpCircle, Calendar,
+  FileText, PenLine, Lightbulb, HelpCircle,
   Image as ImageIcon,
 } from 'lucide-react'
 import { useProfile } from '../lib/ProfileContext'
@@ -17,7 +17,6 @@ const CHIPS = [
   { id: 'exercicios', Icon: PenLine,    label: 'Criar exercícios' },
   { id: 'explicar',   Icon: Lightbulb,  label: 'Explicar conceito' },
   { id: 'duvida',     Icon: HelpCircle, label: 'Tirar dúvida' },
-  { id: 'plano',      Icon: Calendar,   label: 'Plano de estudos' },
 ]
 
 function chipTemplate(id, materia, isGeral) {
@@ -34,10 +33,6 @@ function chipTemplate(id, materia, isGeral) {
       return 'Me explique sobre '
     case 'duvida':
       return 'Tenho uma dúvida sobre '
-    case 'plano':
-      return isGeral
-        ? 'Monte um plano de estudos pra próxima semana'
-        : `Monte um plano de estudos pra prova de ${materia}`
     default:
       return ''
   }

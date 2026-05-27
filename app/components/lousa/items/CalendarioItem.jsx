@@ -1,46 +1,19 @@
 'use client'
 import 'react-day-picker/style.css'
 import { useState, useEffect, useMemo, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import { DayPicker } from 'react-day-picker'
 import { ptBR } from 'date-fns/locale'
-import { format, isSameDay, differenceInCalendarDays } from 'date-fns'
+import { format, isSameDay } from 'date-fns'
 import {
   Calendar, CalendarPlus, AlertCircle, ClipboardList, BookOpen,
 } from 'lucide-react'
 import * as db from '../../../lib/db'
-import { DrawerCard, sharedItemCss, fullscreenCss } from './_shared'
-
-/* ─── Data helpers ──────────────────────────────────────────────── */
-function eventosDaMateria(eventos, materia) {
-  const all = Array.isArray(eventos) ? eventos : []
-  if (materia === 'geral') return all
-  return all.filter(e => e.materia === materia || e.disciplina === materia)
-}
-
-function withTime(eventos) {
-  return eventos
-    .map(e => ({ ...e, _ts: new Date(e.data).getTime() }))
-    .filter(e => !Number.isNaN(e._ts))
-}
-
-function proximos(eventos) {
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const ts = todayStart.getTime()
-  return withTime(eventos)
-    .filter(e => e._ts >= ts)
-    .sort((a, b) => a._ts - b._ts)
-}
-
-function deltaLabel(ts) {
-  const days = differenceInCalendarDays(new Date(ts), new Date())
-  if (days <= 0) return 'hoje'
-  if (days === 1) return 'amanhã'
-  if (days < 14) return `em ${days} dias`
-  return format(new Date(ts), "d 'de' MMM", { locale: ptBR })
-}
+import {
+  useCurrentMateria,
+  eventosDaMateria, proximosEventos, deltaLabel,
+  sharedItemCss, fullscreenCss,
+} from './_shared'
 
 const TYPE_STYLES = {
   prova:        { Icon: AlertCircle,   color: '#f87171', label: 'Prova' },
@@ -54,83 +27,38 @@ function typeOf(ev) {
   return TYPE_STYLES[t] || TYPE_STYLES.aula
 }
 
-export function getCalendarioBadge({ materia, eventos }) {
-  const lista = proximos(eventosDaMateria(eventos, materia))
-  if (!lista.length) return null
-  const ev = lista[0]
-  const ts = typeOf(ev)
-  return `${ts.label} · ${deltaLabel(ev._ts)}`
-}
-
-/* ─── Drawer (unchanged) ────────────────────────────────────────── */
-export function CalendarioDrawer({ materia, eventos }) {
-  const lista = proximos(eventosDaMateria(eventos, materia)).slice(0, 5)
-
-  if (!lista.length) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 12px' }}>
-        <Calendar size={36} strokeWidth={1.4} style={{ color: '#52525b', marginBottom: 14 }} />
-        <p style={{ fontSize: 13.5, color: '#a1a1aa', lineHeight: 1.55, marginBottom: 18 }}>
-          Nenhum evento próximo {materia !== 'geral' ? <>em <strong style={{ color: '#e4e4e7' }}>{materia}</strong></> : null}.
-        </p>
-        <button className="lousa-cta-btn" disabled title="Disponível em breve">
-          <CalendarPlus size={14} strokeWidth={2} /> Novo evento
-        </button>
-        <style>{sharedItemCss}</style>
-      </div>
-    )
-  }
+/* ─── Bento card ────────────────────────────────────────────────── */
+export function CalendarioCard({ materia, eventos, onClick }) {
+  const lista = proximosEventos(eventosDaMateria(eventos, materia))
+  const prox = lista[0]
+  const proxType = prox ? typeOf(prox) : null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <DrawerCard label="Próximos eventos">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {lista.map((ev, i) => {
-            const ts = typeOf(ev)
-            return (
-              <div key={ev.id || i} style={{
-                display: 'flex', alignItems: 'flex-start', gap: 10,
-                padding: '10px 12px', background: '#0d0d0d',
-                border: `1px solid ${ts.color}26`,
-                borderRadius: 10,
-              }}>
-                <span style={{
-                  width: 28, height: 28, borderRadius: 8,
-                  background: `${ts.color}1a`, color: ts.color,
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>
-                  <ts.Icon size={14} strokeWidth={1.8} />
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: '#e4e4e7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {ev.titulo}
-                  </p>
-                  <p style={{ fontSize: 11.5, color: '#71717a', marginTop: 2 }}>
-                    {ts.label} · {deltaLabel(ev._ts)}{ev.materia && materia === 'geral' ? ` · ${ev.materia}` : ''}
-                  </p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </DrawerCard>
-
-      <button className="lousa-cta-btn" disabled title="Disponível em breve" style={{ alignSelf: 'flex-start', marginTop: 4 }}>
-        <CalendarPlus size={14} strokeWidth={2} /> Novo evento
-      </button>
-
-      <style>{sharedItemCss}</style>
-    </div>
+    <motion.button
+      type="button"
+      layoutId="panel-calendario"
+      onClick={onClick}
+      className="bento-card"
+      whileHover={{ scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      aria-label="Abrir Calendário"
+    >
+      <div className="bento-card-icon-wrap">
+        <Calendar size={20} strokeWidth={1.7} />
+      </div>
+      <p className="bento-card-title">Calendário</p>
+      {prox ? (
+        <>
+          <p className="bento-card-strong" style={{ color: proxType.color }}>
+            {prox.titulo}
+          </p>
+          <p className="bento-card-sub">{proxType.label} · {deltaLabel(prox._ts)}</p>
+        </>
+      ) : (
+        <p className="bento-card-sub" style={{ marginTop: 6 }}>Sem eventos próximos</p>
+      )}
+    </motion.button>
   )
-}
-
-/* ─── Materia hook ──────────────────────────────────────────────── */
-function useCurrentMateria() {
-  const sp = useSearchParams()
-  const urlMateria = sp.get('materia')
-  if (urlMateria) return urlMateria
-  if (typeof window === 'undefined') return 'geral'
-  try { return localStorage.getItem('pointai_materia_ativa') || 'geral' } catch { return 'geral' }
 }
 
 /* ─── Fullscreen ────────────────────────────────────────────────── */
@@ -155,15 +83,16 @@ function CalendarioFullscreenInner() {
     return () => { alive = false }
   }, [])
 
-  const lista = useMemo(() => withTime(eventosDaMateria(eventos, materia)), [eventos, materia])
+  const lista = useMemo(() => {
+    const mateFiltered = eventosDaMateria(eventos, materia)
+    return mateFiltered
+      .map(e => ({ ...e, _ts: new Date(e.data).getTime() }))
+      .filter(e => !Number.isNaN(e._ts))
+  }, [eventos, materia])
 
-  // Build modifier sets for the calendar (one per type)
-  const provaDays = useMemo(() => lista.filter(e => (e.tipo || '').toLowerCase() === 'prova').map(e => new Date(e._ts)), [lista])
+  const provaDays    = useMemo(() => lista.filter(e => (e.tipo || '').toLowerCase() === 'prova').map(e => new Date(e._ts)), [lista])
   const trabalhoDays = useMemo(() => lista.filter(e => ['trabalho', 'apresentacao'].includes((e.tipo || '').toLowerCase())).map(e => new Date(e._ts)), [lista])
-  const aulaDays = useMemo(() => lista.filter(e => {
-    const t = (e.tipo || '').toLowerCase()
-    return t === 'aula' || t === ''
-  }).map(e => new Date(e._ts)), [lista])
+  const aulaDays     = useMemo(() => lista.filter(e => { const t = (e.tipo || '').toLowerCase(); return t === 'aula' || t === '' }).map(e => new Date(e._ts)), [lista])
 
   const filtered = useMemo(() => {
     const sorted = [...lista].sort((a, b) => a._ts - b._ts)
@@ -200,7 +129,6 @@ function CalendarioFullscreenInner() {
       </header>
 
       <div className="lousa-fs-split">
-        {/* Left: month view */}
         <div className="lousa-fs-cal-card">
           <DayPicker
             mode="single"
@@ -221,7 +149,6 @@ function CalendarioFullscreenInner() {
           />
         </div>
 
-        {/* Right: filter + list */}
         <div>
           <div className="lousa-fs-tabs" role="tablist" style={{ marginBottom: 16 }}>
             {[
@@ -309,7 +236,6 @@ function CalendarioFullscreenInner() {
   )
 }
 
-/* ─── react-day-picker dark/Point overrides ──────────────────────── */
 const DAYPICKER_CSS = `
   .rdp-point{
     --rdp-accent-color: #22c55e;
@@ -339,6 +265,4 @@ const DAYPICKER_CSS = `
   .rdp-point .rdp-day.rdp-has-prova .rdp-day_button::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#f87171}
   .rdp-point .rdp-day.rdp-has-trabalho .rdp-day_button::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#fbbf24}
   .rdp-point .rdp-day.rdp-has-aula .rdp-day_button::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#22c55e}
-  .rdp-point .rdp-day.rdp-has-prova.rdp-has-trabalho .rdp-day_button::after,
-  .rdp-point .rdp-day.rdp-has-prova.rdp-has-aula .rdp-day_button::after{background:#f87171}
 `

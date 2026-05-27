@@ -2,12 +2,12 @@
 import TopBar from '../components/TopBar'
 import Sidebar from '../components/Sidebar'
 import { ProfileProvider } from '../lib/ProfileContext'
-import { OrbitalProvider } from '../lib/OrbitalContext'
+import { BentoProvider } from '../lib/BentoContext'
 
 export default function DashboardLayout({ children }) {
   return (
     <ProfileProvider>
-      <OrbitalProvider>
+      <BentoProvider>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0a0a0a' }}>
           <TopBar />
           <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
@@ -17,7 +17,7 @@ export default function DashboardLayout({ children }) {
             </main>
           </div>
         </div>
-      </OrbitalProvider>
+      </BentoProvider>
     </ProfileProvider>
   )
 }

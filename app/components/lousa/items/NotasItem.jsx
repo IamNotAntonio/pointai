@@ -1,52 +1,18 @@
 'use client'
 import { useState, useEffect, useMemo, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
-  FileText, FileX, Plus, TrendingUp, AlertCircle, CalendarDays, Lock,
+  FileText, FileX, Plus, TrendingUp, AlertCircle, CalendarDays,
 } from 'lucide-react'
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine, Area, AreaChart,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
 } from 'recharts'
 import * as db from '../../../lib/db'
-import { DrawerCard, sharedItemCss, fullscreenCss } from './_shared'
-
-/* ─── Data helpers ──────────────────────────────────────────────── */
-function notasDaMateria(notas, materia) {
-  if (!Array.isArray(notas) || !materia) return []
-  if (materia === 'geral') return notas
-  return notas.filter(n => n.materia === materia || n.disciplina === materia)
-}
-
-function mediaPonderada(items) {
-  if (!items.length) return null
-  let soma = 0, pesoTotal = 0
-  for (const it of items) {
-    const nota = Number(it.nota)
-    const peso = Number(it.peso ?? 1) || 1
-    if (!Number.isNaN(nota)) {
-      soma += nota * peso
-      pesoTotal += peso
-    }
-  }
-  return pesoTotal > 0 ? soma / pesoTotal : null
-}
-
-function sortByDate(items, dir = 'desc') {
-  return [...items].sort((a, b) => {
-    const ta = new Date(a.data || a.criado_em || 0).getTime() || 0
-    const tb = new Date(b.data || b.criado_em || 0).getTime() || 0
-    return dir === 'desc' ? tb - ta : ta - tb
-  })
-}
-
-function corNota(n) {
-  const v = Number(n)
-  if (Number.isNaN(v)) return '#71717a'
-  if (v >= 7) return '#22c55e'
-  if (v >= 5) return '#fbbf24'
-  return '#f87171'
-}
+import {
+  useCurrentMateria,
+  notasDaMateria, mediaPonderada, sortByDate, corNota,
+  sharedItemCss, fullscreenCss,
+} from './_shared'
 
 function tempoRelativo(iso) {
   if (!iso) return ''
@@ -67,87 +33,72 @@ function formatDate(iso) {
   } catch { return iso }
 }
 
-export function getNotasBadge({ materia, notas }) {
-  const lista = notasDaMateria(notas, materia)
-  if (!lista.length) return null
-  const m = mediaPonderada(lista)
-  return m == null ? null : `Média ${m.toFixed(1)}`
-}
-
-/* ─── Drawer (unchanged from D.3c) ──────────────────────────────── */
-export function NotasDrawer({ materia, notas }) {
+/* ─── Bento card ────────────────────────────────────────────────── */
+export function NotasCard({ materia, notas, onClick }) {
   const lista = notasDaMateria(notas, materia)
   const media = mediaPonderada(lista)
   const ultima = sortByDate(lista, 'desc')[0]
-  const faltas = ultima?.faltas ?? null
+  const faltas = ultima?.faltas ?? 0
   const maxFaltas = ultima?.maxFaltas ?? 15
-  const pctFaltas = faltas != null ? Math.min((faltas / maxFaltas) * 100, 100) : 0
-  const corFaltas = pctFaltas >= 80 ? '#f87171' : pctFaltas >= 60 ? '#fbbf24' : '#22c55e'
+  const reduce = useReducedMotion()
 
-  if (materia === 'geral' || !lista.length) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 12px' }}>
-        <FileX size={36} strokeWidth={1.4} style={{ color: '#52525b', marginBottom: 14 }} />
-        <p style={{ fontSize: 13.5, color: '#a1a1aa', lineHeight: 1.55, marginBottom: 18 }}>
-          {materia === 'geral'
-            ? 'Selecione uma matéria na sidebar para ver suas notas.'
-            : <>Você ainda não registrou notas em <strong style={{ color: '#e4e4e7' }}>{materia}</strong>.</>}
-        </p>
-        {materia !== 'geral' && (
-          <button className="lousa-cta-btn" disabled title="Disponível em breve">
-            <Plus size={14} strokeWidth={2} /> Registrar primeira nota
-          </button>
-        )}
-        <style>{sharedItemCss}</style>
-      </div>
-    )
-  }
+  const spark = useMemo(() => {
+    const asc = sortByDate(lista, 'asc').slice(-6)
+    return asc.map((n, i) => ({ name: i.toString(), nota: Number(n.nota) }))
+  }, [lista])
+
+  const mediaColor = media == null ? '#71717a' : corNota(media)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <DrawerCard label="Média da matéria">
-        <p style={{ fontSize: 36, fontWeight: 900, color: '#22c55e', letterSpacing: '-.02em', lineHeight: 1 }}>
-          {media?.toFixed(1) ?? '—'}
-        </p>
-        {ultima && (
-          <p style={{ fontSize: 12, color: '#71717a', marginTop: 6 }}>
-            Última: {ultima.titulo || 'Avaliação'} · {ultima.nota}
+    <motion.button
+      type="button"
+      layoutId="panel-notas"
+      onClick={onClick}
+      className="bento-card bento-card-large"
+      whileHover={{ scale: 1.005 }}
+      whileTap={{ scale: 0.99 }}
+      aria-label="Abrir Notas e Faltas"
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="bento-card-icon-wrap">
+            <FileText size={22} strokeWidth={1.7} />
+          </div>
+          <p className="bento-card-title">Notas e Faltas</p>
+          <p className="bento-card-mega" style={{ color: mediaColor }}>
+            {media != null ? media.toFixed(1) : '—'}
           </p>
-        )}
-      </DrawerCard>
-
-      {ultima && (
-        <DrawerCard label="Última nota">
-          <p style={{ fontSize: 13.5, fontWeight: 700, color: '#f4f4f5', marginBottom: 4 }}>
-            {ultima.titulo || 'Avaliação'}
+          <p className="bento-card-stat">
+            {lista.length} {lista.length === 1 ? 'avaliação' : 'avaliações'} · {faltas}/{maxFaltas} faltas
           </p>
-          <p style={{ fontSize: 12, color: '#a1a1aa' }}>
-            Nota <strong style={{ color: '#22c55e' }}>{ultima.nota}</strong> · {tempoRelativo(ultima.data || ultima.criado_em)}
-          </p>
-        </DrawerCard>
-      )}
-
-      <DrawerCard label="Faltas">
-        <p style={{ fontSize: 18, fontWeight: 800, color: '#f4f4f5', marginBottom: 8 }}>
-          {faltas ?? 0}/{maxFaltas} <span style={{ fontSize: 11.5, fontWeight: 600, color: '#71717a' }}>({Math.round(pctFaltas)}%)</span>
-        </p>
-        <div style={{ height: 6, borderRadius: 99, background: '#161616', overflow: 'hidden' }}>
-          <div style={{ width: `${pctFaltas}%`, height: '100%', background: corFaltas, transition: 'width .4s ease', borderRadius: 99 }} />
         </div>
-      </DrawerCard>
-
-      <style>{sharedItemCss}</style>
-    </div>
+        {spark.length >= 2 && (
+          <div className="bento-card-viz" aria-hidden>
+            <ResponsiveContainer width={72} height={48}>
+              <AreaChart data={spark} margin={{ top: 4, right: 2, bottom: 4, left: 2 }}>
+                <defs>
+                  <linearGradient id="notas-spark-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"  stopColor="#22c55e" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="nota"
+                  stroke="#22c55e"
+                  strokeWidth={1.5}
+                  fill="url(#notas-spark-grad)"
+                  dot={false}
+                  isAnimationActive={!reduce}
+                  animationDuration={900}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </motion.button>
   )
-}
-
-/* ─── Materia hook ──────────────────────────────────────────────── */
-function useCurrentMateria() {
-  const sp = useSearchParams()
-  const urlMateria = sp.get('materia')
-  if (urlMateria) return urlMateria
-  if (typeof window === 'undefined') return 'geral'
-  try { return localStorage.getItem('pointai_materia_ativa') || 'geral' } catch { return 'geral' }
 }
 
 /* ─── Fullscreen ────────────────────────────────────────────────── */
@@ -182,15 +133,12 @@ function NotasFullscreenInner() {
 
   const isGeral = materia === 'geral'
 
-  const containerInit = reduce ? false : { opacity: 0, y: 8 }
-  const containerTrans = { duration: 0.3, ease: [0.22, 1, 0.36, 1] }
-
   return (
     <motion.div
       className="lousa-fs-container"
-      initial={containerInit}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={containerTrans}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
     >
       <style>{fullscreenCss}</style>
 
@@ -245,6 +193,7 @@ function NotasFullscreenInner() {
           </AnimatePresence>
         </>
       )}
+      <style>{sharedItemCss}</style>
     </motion.div>
   )
 }
@@ -275,7 +224,6 @@ function StatsGrid({ lista, media, faltas, maxFaltas, pct, corFaltas }) {
 
 function PredictionCard({ media }) {
   const acima = media >= 7
-  // Equal-weight assumption: avg(current, next) = 7 → next = 14 - current
   const proximaNota = Math.max(0, 14 - media)
   const inviavel = proximaNota > 10
   return (

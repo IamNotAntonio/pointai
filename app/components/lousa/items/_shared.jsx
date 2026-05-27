@@ -1,14 +1,83 @@
 'use client'
+import { useSearchParams } from 'next/navigation'
 
-export function DrawerCard({ label, children, style }) {
-  return (
-    <div className="lousa-dcard" style={style}>
-      <p className="lousa-dcard-label">{label}</p>
-      <div>{children}</div>
-    </div>
-  )
+/* ─── Materia hook (URL → localStorage → 'geral') ──────────────── */
+export function useCurrentMateria() {
+  const sp = useSearchParams()
+  const urlMateria = sp.get('materia')
+  if (urlMateria) return urlMateria
+  if (typeof window === 'undefined') return 'geral'
+  try { return localStorage.getItem('pointai_materia_ativa') || 'geral' } catch { return 'geral' }
 }
 
+/* ─── Notas helpers ─────────────────────────────────────────────── */
+export function notasDaMateria(notas, materia) {
+  if (!Array.isArray(notas) || !materia) return []
+  if (materia === 'geral') return notas
+  return notas.filter(n => n.materia === materia || n.disciplina === materia)
+}
+
+export function mediaPonderada(items) {
+  if (!items?.length) return null
+  let soma = 0, pesoTotal = 0
+  for (const it of items) {
+    const nota = Number(it.nota)
+    const peso = Number(it.peso ?? 1) || 1
+    if (!Number.isNaN(nota)) { soma += nota * peso; pesoTotal += peso }
+  }
+  return pesoTotal > 0 ? soma / pesoTotal : null
+}
+
+export function sortByDate(items, dir = 'desc') {
+  return [...(items || [])].sort((a, b) => {
+    const ta = new Date(a.data || a.criado_em || 0).getTime() || 0
+    const tb = new Date(b.data || b.criado_em || 0).getTime() || 0
+    return dir === 'desc' ? tb - ta : ta - tb
+  })
+}
+
+export function corNota(n) {
+  const v = Number(n)
+  if (Number.isNaN(v)) return '#71717a'
+  if (v >= 7) return '#22c55e'
+  if (v >= 5) return '#fbbf24'
+  return '#f87171'
+}
+
+/* ─── Eventos helpers ───────────────────────────────────────────── */
+export function eventosDaMateria(eventos, materia) {
+  const all = Array.isArray(eventos) ? eventos : []
+  if (materia === 'geral') return all
+  return all.filter(e => e.materia === materia || e.disciplina === materia)
+}
+
+export function proximosEventos(eventos) {
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const ts = todayStart.getTime()
+  return (eventos || [])
+    .map(e => ({ ...e, _ts: new Date(e.data).getTime() }))
+    .filter(e => !Number.isNaN(e._ts) && e._ts >= ts)
+    .sort((a, b) => a._ts - b._ts)
+}
+
+export function deltaDias(ts) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((new Date(ts).getTime() - today.getTime()) / 86400000)
+}
+
+export function deltaLabel(ts) {
+  const d = deltaDias(ts)
+  if (d <= 0) return 'hoje'
+  if (d === 1) return 'amanhã'
+  if (d < 14) return `em ${d} dias`
+  try {
+    return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  } catch { return '' }
+}
+
+/* ─── Fullscreen skeleton ───────────────────────────────────────── */
 export function FullscreenSkeleton({ Icon, title, bullets }) {
   return (
     <div style={{ maxWidth: 640, margin: '40px auto 0' }}>

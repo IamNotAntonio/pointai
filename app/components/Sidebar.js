@@ -22,14 +22,19 @@ function SidebarInner() {
   const reduce = useReducedMotion()
   const { perfil, updatePerfil } = useProfile()
 
-  const [collapsed, setCollapsed] = useState(false)
+  // Default is collapsed (compact rail) — D.3g.
+  const [collapsed, setCollapsed] = useState(true)
   const [hydrated, setHydrated] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [novaMateria, setNovaMateria] = useState('')
 
   // Hydrate collapsed flag from localStorage post-mount (avoid SSR mismatch)
   useEffect(() => {
-    try { setCollapsed(localStorage.getItem(STORAGE_KEY) === 'true') } catch {}
+    // Honour stored preference; default (when no key) stays collapsed=true.
+    try {
+      const v = localStorage.getItem(STORAGE_KEY)
+      if (v != null) setCollapsed(v === 'true')
+    } catch {}
     setHydrated(true)
   }, [])
 
