@@ -50,6 +50,14 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
     setMounted(true)
   }, [])
 
+  // Auto-collapse when the chat sends its first message (D.5). Visual only —
+  // doesn't overwrite the saved preference, so a reload restores the user's choice.
+  useEffect(() => {
+    function onCollapse() { setExpanded(false) }
+    window.addEventListener('bento-collapse', onCollapse)
+    return () => window.removeEventListener('bento-collapse', onCollapse)
+  }, [])
+
   function toggle() {
     setExpanded(e => {
       const next = !e

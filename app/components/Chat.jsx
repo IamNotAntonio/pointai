@@ -49,7 +49,7 @@ function detectKind(file) {
   return 'file'
 }
 
-function useAutoResizeTextarea({ minHeight = 60, maxHeight = 200 } = {}) {
+function useAutoResizeTextarea({ minHeight = 56, maxHeight = 200 } = {}) {
   const textareaRef = useRef(null)
   const adjustHeight = useCallback((reset) => {
     const el = textareaRef.current
@@ -66,10 +66,13 @@ function useAutoResizeTextarea({ minHeight = 60, maxHeight = 200 } = {}) {
 }
 
 /**
- * Chat — floating (no outer card), animated-ai-chat-inspired visual.
- *   Empty state: gradient headline + animated line + glassy input card + chips.
- *   Messages state: scrolling history + glassy input dock at the bottom.
- *   Mouse follower: subtle green orb tracks the cursor while the textarea is focused.
+ * Chat — adaptive (D.5).
+ *   Empty state: gradient headline + glassy input centered + chips. Bento visible.
+ *   Active state (≥1 user msg): chat becomes protagonist — history scrolls,
+ *     a SINGLE persistent input card slides from center to the bottom dock via
+ *     Motion layout, headline disappears, bento auto-collapses (window event).
+ *   Adaptive widths handled in CSS: text in a 720px readable column, wide blocks
+ *     (code/tables/charts/svg/images) break out to full canvas width.
  */
 export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const { perfil } = useProfile()
@@ -87,15 +90,14 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
 
   const fimRef = useRef(null)
   const fileInputRef = useRef(null)
-  const emptyArea = useAutoResizeTextarea({ minHeight: 60, maxHeight: 200 })
-  const dockArea = useAutoResizeTextarea({ minHeight: 48, maxHeight: 160 })
+  const area = useAutoResizeTextarea({ minHeight: 56, maxHeight: 200 })
 
   const isEmpty = !mensagens.some(m => m.role === 'user')
 
   /* ── Load chat history when matéria changes ─────────────────── */
-  // NOTE: emptyArea / dockArea are intentionally NOT in deps — useAutoResizeTextarea
-  // returns a fresh object every render, so including them would cause an
-  // endless re-fetch loop that constantly clears input + mensagens.
+  // NOTE: `area` is intentionally NOT in deps — useAutoResizeTextarea returns a
+  // fresh object every render, so including it would cause an endless re-fetch
+  // loop that constantly clears input + mensagens.
   useEffect(() => {
     if (!perfil || !materia) return
     let alive = true
@@ -105,8 +107,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     }).catch(() => {})
     setInput('')
     setAttachments([])
-    emptyArea.adjustHeight(true)
-    dockArea.adjustHeight(true)
+    area.adjustHeight(true)
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatKey, perfil, isGeral, materia])
@@ -144,11 +145,11 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     const template = chipTemplate(id, materia, isGeral)
     setInput(template)
     setTimeout(() => {
-      const el = emptyArea.textareaRef.current
+      const el = area.textareaRef.current
       if (!el) return
       el.focus()
       el.setSelectionRange(template.length, template.length)
-      emptyArea.adjustHeight()
+      area.adjustHeight()
     }, 10)
   }
 
@@ -174,35 +175,30 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     setAttachments(prev => prev.filter(a => a.id !== id))
   }
 
-  /* ── Send ───────────────────────────────────────────────────── */
-  async function enviar() {
-    const texto = input.trim()
-    if ((!texto && attachments.length === 0) || carregando || !perfil) return
-
-    setInput('')
-    // TODO D.5: process attachments through multimodal API.
-    setAttachments([])
-    emptyArea.adjustHeight(true)
-    dockArea.adjustHeight(true)
+  /* ── Core send: streams one assistant turn appended to `base` ── */
+  async function sendTurn(texto, base) {
+    if (!perfil) return
+    const wasEmpty = !base.some(m => m.role === 'user')
 
     const novaMsg = {
       role: 'user',
-      content: texto || '(anexo)',
+      content: texto,
       timestamp: new Date().toISOString(),
     }
-    const novas = [...mensagens, novaMsg]
+    const novas = [...base, novaMsg]
     setMensagens(novas)
     setCarregando(true)
+
+    // On the very first user message, collapse the bento so the chat takes over.
+    if (wasEmpty) {
+      try { window.dispatchEvent(new CustomEvent('bento-collapse')) } catch {}
+    }
 
     try {
       const resp = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mensagens: novas,
-          perfil,
-          materia: chatKey,
-        }),
+        body: JSON.stringify({ mensagens: novas, perfil, materia: chatKey }),
       })
       if (!resp.ok || !resp.body) throw new Error('stream failed')
 
@@ -229,7 +225,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
       // Fire-and-forget concept extraction. Não bloqueia a UI; o card do
       // Cérebro Point escuta o evento 'cerebro-updated' pra recarregar stats.
       try {
-        const contextoAnterior = mensagens
+        const contextoAnterior = base
           .slice(-2)
           .map(m => `${m.role === 'user' ? 'Aluno' : 'IA'}: ${(m.content || '').slice(0, 200)}`)
           .join('\n')
@@ -237,7 +233,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userMessage: texto || '(anexo)',
+            userMessage: texto,
             aiResponse: fullText,
             materia: chatKey === '__geral__' ? 'geral' : chatKey,
             contextoAnterior,
@@ -246,12 +242,10 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           .then(r => r.ok ? r.json() : null)
           .then(stats => {
             if (stats) {
-              try {
-                window.dispatchEvent(new CustomEvent('cerebro-updated', { detail: stats }))
-              } catch {}
+              try { window.dispatchEvent(new CustomEvent('cerebro-updated', { detail: stats })) } catch {}
             }
           })
-          .catch(() => { /* silent */ })
+          .catch(() => {})
       } catch {}
     } catch {
       setMensagens(prev => [...prev, {
@@ -263,12 +257,25 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     setCarregando(false)
   }
 
+  /* ── Send from the input box ───────────────────────────────── */
+  async function enviar() {
+    const texto = input.trim()
+    if ((!texto && attachments.length === 0) || carregando || !perfil) return
+
+    setInput('')
+    // TODO D.5: process file attachments through multimodal API.
+    setAttachments([])
+    area.adjustHeight(true)
+
+    await sendTurn(texto || '(anexo)', mensagens)
+  }
+
   const nome = perfil?.nome?.split(' ')[0] || ''
   const placeholder = isGeral ? 'Pergunte qualquer coisa…' : `Pergunte sobre ${materia}…`
   const canSend = !!input.trim() || attachments.length > 0
 
   return (
-    <div className={`v0-chat ${className || ''}`}>
+    <div className={`v0-chat ${isEmpty ? 'is-empty' : 'is-active'} ${className || ''}`}>
       <style>{V0_CSS}</style>
 
       <input
@@ -290,23 +297,17 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
         />
       )}
 
-      <AnimatePresence mode="wait" initial={false}>
+      {/* Canvas: hero (empty) or scrolling history (active) */}
+      <div className="v0-canvas">
         {isEmpty ? (
           <motion.div
-            key="empty"
-            className="v0-empty"
-            initial={reduce ? false : { opacity: 0, y: 20 }}
+            key="hero"
+            className="v0-hero"
+            initial={reduce ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={reduce ? { opacity: 0 } : { opacity: 0, y: -10, transition: { duration: 0.25, ease: EASE } }}
-            transition={{ duration: 0.6, ease: EASE }}
+            transition={{ duration: 0.5, ease: EASE }}
           >
-            {/* Headline block */}
-            <motion.div
-              className="v0-headline-block"
-              initial={reduce ? false : { opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.4, ease: EASE }}
-            >
+            <div className="v0-headline-block">
               <p className="v0-headline-greeting">
                 Olá{nome ? <>, <strong>{nome}</strong></> : null}! 👋
               </p>
@@ -319,48 +320,63 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
                 className="v0-headline-line"
                 initial={reduce ? false : { width: 0, opacity: 0 }}
                 animate={{ width: '100%', opacity: 1 }}
-                transition={{ delay: 0.5, duration: 0.8, ease: EASE }}
+                transition={{ delay: 0.35, duration: 0.7, ease: EASE }}
               />
-            </motion.div>
-
-            <motion.p
-              className="v0-headline-subtitle"
-              initial={reduce ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.4, ease: EASE }}
-            >
+            </div>
+            <p className="v0-headline-subtitle">
               Pergunte qualquer coisa, anexe materiais ou escolha um atalho abaixo
-            </motion.p>
+            </p>
+          </motion.div>
+        ) : (
+          <div className="v0-history" role="log" aria-live="polite">
+            {mensagens.map((m, i) => (
+              <Message key={i} msg={m} reduce={reduce} />
+            ))}
+            {carregando && <ThinkingDots />}
+            <div ref={fimRef} />
+          </div>
+        )}
+      </div>
 
-            {/* Input card */}
-            <motion.div
-              className="v0-input-card"
-              initial={reduce ? false : { opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1, duration: 0.5, ease: EASE }}
-            >
-              <InputBody
-                textareaRef={emptyArea.textareaRef}
-                value={input}
-                onChange={e => { setInput(e.target.value); emptyArea.adjustHeight() }}
-                onKeyDown={onKeyDown}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-                placeholder={placeholder}
-                carregando={carregando}
-                attachments={attachments}
-                onRemoveAttach={removeAttachment}
-              />
-              <InputFooter
-                onAttachClick={openFilePicker}
-                onSubmit={enviar}
-                carregando={carregando}
-                canSend={canSend}
-                attachLocked={attachments.length >= 3}
-              />
-            </motion.div>
+      {/* Input card — single persistent element; slides center→dock via layout */}
+      <div className="v0-input-shell">
+        <motion.div
+          layout={!reduce}
+          className="v0-input-card"
+          transition={reduce ? { duration: 0 } : { layout: { duration: 0.5, ease: EASE } }}
+        >
+          <InputBody
+            textareaRef={area.textareaRef}
+            value={input}
+            onChange={e => { setInput(e.target.value); area.adjustHeight() }}
+            onKeyDown={onKeyDown}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder={placeholder}
+            carregando={carregando}
+            attachments={attachments}
+            onRemoveAttach={removeAttachment}
+          />
+          <InputFooter
+            onAttachClick={openFilePicker}
+            onSubmit={enviar}
+            carregando={carregando}
+            canSend={canSend}
+            attachLocked={attachments.length >= 3}
+          />
+        </motion.div>
+      </div>
 
-            {/* Suggestion chips */}
+      {/* Suggestion chips — empty state only */}
+      <AnimatePresence initial={false}>
+        {isEmpty && (
+          <motion.div
+            key="chips"
+            className="v0-chips-shell"
+            initial={reduce ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, transition: { duration: 0.18 } }}
+          >
             <div className="v0-chips">
               {CHIPS.map((c, i) => (
                 <motion.button
@@ -369,50 +385,13 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
                   className="v0-chip"
                   initial={reduce ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 + i * 0.08, duration: 0.3, ease: EASE }}
+                  transition={{ delay: 0.25 + i * 0.07, duration: 0.3, ease: EASE }}
                   onClick={() => aplicarChip(c.id)}
                 >
                   <c.Icon size={13} strokeWidth={1.8} />
                   <span>{c.label}</span>
                 </motion.button>
               ))}
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="msgs"
-            className="v0-msgs-state"
-            initial={reduce ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.25, ease: EASE }}
-          >
-            <div className="v0-history" role="log" aria-live="polite">
-              {mensagens.map((m, i) => <Message key={i} msg={m} />)}
-              {carregando && <ThinkingDots />}
-              <div ref={fimRef} />
-            </div>
-            <div className="v0-input-dock">
-              <div className="v0-input-card v0-input-card-compact">
-                <InputBody
-                  textareaRef={dockArea.textareaRef}
-                  value={input}
-                  onChange={e => { setInput(e.target.value); dockArea.adjustHeight() }}
-                  onKeyDown={onKeyDown}
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                  placeholder={placeholder}
-                  carregando={carregando}
-                  attachments={attachments}
-                  onRemoveAttach={removeAttachment}
-                />
-                <InputFooter
-                  onAttachClick={openFilePicker}
-                  onSubmit={enviar}
-                  carregando={carregando}
-                  canSend={canSend}
-                  attachLocked={attachments.length >= 3}
-                />
-              </div>
             </div>
           </motion.div>
         )}
@@ -487,15 +466,22 @@ function InputFooter({ onAttachClick, onSubmit, carregando, canSend, attachLocke
   )
 }
 
-function Message({ msg }) {
+function Message({ msg, reduce }) {
   const isAi = msg.role === 'assistant'
   return (
-    <div className={`v0-msg ${isAi ? 'ai' : 'user'}`}>
+    <motion.div
+      className={`v0-msg ${isAi ? 'ai' : 'user'}`}
+      initial={reduce ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE }}
+    >
       {isAi && <div className="v0-avatar">P</div>}
-      <div className={`v0-bubble ${isAi ? 'ai' : 'user'}`}>
-        {isAi ? <RichMessage content={msg.content} /> : msg.content}
+      <div className="v0-msg-col">
+        <div className={`v0-bubble ${isAi ? 'ai' : 'user'}`}>
+          {isAi ? <RichMessage content={msg.content} /> : msg.content}
+        </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -503,10 +489,12 @@ function ThinkingDots() {
   return (
     <div className="v0-msg ai">
       <div className="v0-avatar">P</div>
-      <div className="v0-bubble ai" style={{ padding: 0 }}>
-        <span className="v0-thinking" aria-label="Digitando">
-          <span /><span /><span />
-        </span>
+      <div className="v0-msg-col">
+        <div className="v0-bubble ai" style={{ padding: 0 }}>
+          <span className="v0-thinking" aria-label="Digitando">
+            <span /><span /><span />
+          </span>
+        </div>
       </div>
     </div>
   )
@@ -514,25 +502,38 @@ function ThinkingDots() {
 
 const V0_CSS = `
   .v0-chat{position:relative;width:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}
+  .v0-chat.is-empty{justify-content:center;gap:22px;overflow-y:auto}
 
   /* ── Mouse follower ── */
   .v0-mouse-orb{position:fixed;left:0;top:0;width:50rem;height:50rem;border-radius:50%;pointer-events:none;z-index:0;opacity:.025;background:radial-gradient(circle, #22c55e 0%, transparent 70%);filter:blur(96px);will-change:transform}
 
-  /* ── Empty state ── */
-  .v0-empty{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:48px 24px;overflow-y:auto}
-  .v0-empty::-webkit-scrollbar{width:6px}
-  .v0-empty::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:8px}
+  /* ── Canvas ── */
+  .v0-canvas{position:relative;z-index:1;display:flex;flex-direction:column;min-height:0}
+  .is-empty .v0-canvas{flex:0 0 auto;align-items:center;justify-content:center;padding:8px 24px 0}
+  .is-active .v0-canvas{flex:1 1 auto;overflow:hidden}
 
+  /* ── Hero (empty) ── */
+  .v0-hero{display:flex;flex-direction:column;align-items:center;gap:14px;max-width:580px;width:100%}
   .v0-headline-block{text-align:center;max-width:580px;width:100%}
   .v0-headline-greeting{font-size:14px;color:rgba(255,255,255,.5);margin-bottom:10px;font-weight:400}
   .v0-headline-greeting strong{color:#22c55e;font-weight:700}
   .v0-headline-gradient{font-size:clamp(26px, 3.4vw, 36px);font-weight:500;letter-spacing:-.025em;line-height:1.18;background:linear-gradient(to right, rgba(255,255,255,.95), rgba(255,255,255,.5));-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:8px;margin-bottom:14px}
   .v0-headline-em{color:#22c55e;background:none;-webkit-text-fill-color:#22c55e;font-weight:600}
   .v0-headline-line{height:1px;background:linear-gradient(to right, transparent, rgba(34,197,94,.45), transparent);margin:0 auto}
-  .v0-headline-subtitle{font-size:13.5px;color:rgba(255,255,255,.4);text-align:center;max-width:480px;line-height:1.55;margin-top:-8px}
+  .v0-headline-subtitle{font-size:13.5px;color:rgba(255,255,255,.4);text-align:center;max-width:480px;line-height:1.55;margin-top:-2px}
+
+  /* ── History (active) ── */
+  .v0-history{flex:1;overflow-y:auto;padding:24px 24px 8px;display:flex;flex-direction:column;gap:16px;min-height:0;max-width:880px;width:100%;margin:0 auto}
+  .v0-history::-webkit-scrollbar{width:6px}
+  .v0-history::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:8px}
 
   /* ── Input card (only delimited surface) ── */
-  .v0-input-card{position:relative;z-index:2;width:100%;max-width:580px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:16px;box-shadow:0 24px 48px rgba(0,0,0,.4);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
+  .v0-input-shell{position:relative;z-index:2;flex:0 0 auto}
+  .is-empty .v0-input-shell{padding:0 24px}
+  .is-active .v0-input-shell{padding:8px 24px calc(18px + env(safe-area-inset-bottom, 0px))}
+  .v0-input-card{position:relative;width:100%;margin:0 auto;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:16px;box-shadow:0 24px 48px rgba(0,0,0,.4);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
+  .is-empty .v0-input-card{max-width:600px}
+  .is-active .v0-input-card{max-width:820px}
   .v0-input-card:focus-within{border-color:rgba(34,197,94,.4);box-shadow:0 0 0 3px rgba(34,197,94,.06), 0 24px 48px rgba(0,0,0,.4)}
 
   .v0-textarea{width:100%;background:transparent;border:none;outline:none;resize:none;font-family:inherit;font-size:14.5px;line-height:1.55;color:rgba(255,255,255,.9);padding:14px 16px 8px}
@@ -553,27 +554,31 @@ const V0_CSS = `
   .v0-attach-chip button:hover{color:rgba(255,255,255,.9);background:rgba(255,255,255,.05)}
 
   /* ── Chips ── */
-  .v0-chips{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;max-width:580px;width:100%}
+  .v0-chips-shell{position:relative;z-index:1;flex:0 0 auto;padding:0 24px}
+  .v0-chips{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;max-width:600px;width:100%;margin:0 auto}
   .v0-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:10px;font-size:13px;color:rgba(255,255,255,.6);cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s}
   .v0-chip:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.95);border-color:rgba(34,197,94,.32)}
   .v0-chip svg{color:rgba(255,255,255,.5);transition:color .15s}
   .v0-chip:hover svg{color:#22c55e}
 
-  /* ── Messages state ── */
-  .v0-msgs-state{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;min-height:0;max-width:880px;width:100%;margin:0 auto}
-  .v0-history{flex:1;overflow-y:auto;padding:24px 24px 8px;display:flex;flex-direction:column;gap:14px;min-height:0}
-  .v0-history::-webkit-scrollbar{width:6px}
-  .v0-history::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:8px}
-  .v0-input-dock{padding:8px 24px 20px;flex-shrink:0}
-  .v0-input-card-compact{max-width:none}
-  .v0-input-card-compact .v0-textarea{padding:12px 16px 6px}
-
-  .v0-msg{display:flex;gap:10px;align-items:flex-end;max-width:100%}
+  /* ── Messages ── */
+  .v0-msg{display:flex;gap:10px;align-items:flex-start;max-width:100%}
   .v0-msg.user{flex-direction:row-reverse}
-  .v0-avatar{width:26px;height:26px;border-radius:50%;background:#1a7a4a;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .v0-bubble{padding:10px 14px;font-size:13.5px;line-height:1.6;max-width:80%;word-break:break-word}
-  .v0-bubble.ai{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);color:#e4e4e7;border-radius:14px 14px 14px 4px}
-  .v0-bubble.user{background:#1a7a4a;color:#fff;border-radius:14px 14px 4px 14px;white-space:pre-wrap}
+  .v0-msg-col{display:flex;flex-direction:column;min-width:0;flex:1}
+  .v0-msg.user .v0-msg-col{align-items:flex-end}
+  .v0-avatar{width:26px;height:26px;border-radius:50%;background:#1a7a4a;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+  .v0-bubble{padding:10px 14px;font-size:13.5px;line-height:1.6;word-break:break-word}
+  .v0-bubble.ai{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);color:#e4e4e7;border-radius:14px 14px 14px 4px;width:100%}
+  .v0-bubble.user{background:#1a7a4a;color:#fff;border-radius:14px 14px 4px 14px;white-space:pre-wrap;max-width:min(640px,82%)}
+
+  /* ── Adaptive widths: readable text column + full-bleed wide blocks ── */
+  .v0-bubble.ai > *{max-width:720px}
+  .v0-bubble.ai > .chat-code-block,
+  .v0-bubble.ai > .chat-table-wrap,
+  .v0-bubble.ai > .chat-chart-block,
+  .v0-bubble.ai > .svg-block,
+  .v0-bubble.ai > pre,
+  .v0-bubble.ai > img{max-width:100%;width:100%}
 
   /* ── Thinking + spinner ── */
   .v0-thinking{display:inline-flex;gap:4px;padding:14px;align-items:center}
@@ -584,11 +589,15 @@ const V0_CSS = `
   .v0-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:v0Spin .8s linear infinite}
   @keyframes v0Spin{to{transform:rotate(360deg)}}
 
+  /* ── Responsive: full-width messages, tighter padding ── */
+  @media (max-width: 1023px){
+    .v0-bubble.ai > *{max-width:100%}
+  }
   @media (max-width: 768px){
-    .v0-empty{gap:18px;padding:24px 16px}
+    .is-empty .v0-canvas{padding:8px 16px 0}
     .v0-headline-gradient{font-size:clamp(22px, 5vw, 28px)}
-    .v0-input-card{max-width:100%}
-    .v0-input-dock{padding:8px 12px 16px}
+    .is-empty .v0-input-shell,.v0-chips-shell{padding:0 16px}
+    .is-active .v0-input-shell{padding:8px 14px calc(14px + env(safe-area-inset-bottom, 0px))}
     .v0-history{padding:16px 16px 8px}
   }
 `
