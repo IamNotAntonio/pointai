@@ -1,11 +1,13 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
   ArrowUp, Paperclip, X,
   FileText, PenLine, Lightbulb, HelpCircle,
   Image as ImageIcon,
   Maximize2, AlignLeft, Sparkles, Copy, Check, Pencil,
+  File as FileIcon, ClipboardPaste,
 } from 'lucide-react'
 import { useProfile } from '../lib/ProfileContext'
 import * as db from '../lib/db'
@@ -90,9 +92,13 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
   const [editingIndex, setEditingIndex] = useState(null)
   const [editText, setEditText] = useState('')
+  const [importOpen, setImportOpen] = useState(false)
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
 
   const fimRef = useRef(null)
   const fileInputRef = useRef(null)
+  const attachBtnRef = useRef(null)
   const area = useAutoResizeTextarea({ minHeight: 56, maxHeight: 200 })
 
   const isEmpty = !mensagens.some(m => m.role === 'user')
@@ -156,7 +162,39 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     }, 10)
   }
 
-  function openFilePicker() { fileInputRef.current?.click() }
+  /* ── Import menu (D.5): file picker variants + paste-text ──── */
+  function pickFiles(accept) {
+    const el = fileInputRef.current
+    if (!el) return
+    el.accept = accept || ''
+    el.click()
+    setImportOpen(false)
+  }
+  function openPaste() {
+    setImportOpen(false)
+    setPasteText('')
+    setPasteOpen(true)
+  }
+  function confirmPaste() {
+    const t = pasteText.trim()
+    if (!t) { setPasteOpen(false); return }
+    setAttachments(prev => {
+      if (prev.length >= 3) return prev
+      return [...prev, { id: `${Date.now()}-texto`, name: 'Texto colado', kind: 'text', text: t }]
+    })
+    setPasteText('')
+    setPasteOpen(false)
+  }
+
+  // Close the import menu / paste modal on Escape.
+  useEffect(() => {
+    if (!importOpen && !pasteOpen) return
+    function onKey(e) {
+      if (e.key === 'Escape') { setImportOpen(false); setPasteOpen(false) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [importOpen, pasteOpen])
 
   function onFilesChosen(e) {
     const files = Array.from(e.target.files || [])
@@ -265,12 +303,16 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     const texto = input.trim()
     if ((!texto && attachments.length === 0) || carregando || !perfil) return
 
+    // Pasted-text attachments flow into the message; file/image/PDF are still
+    // UI stubs until the multimodal API lands (TODO D.5).
+    const pastes = attachments.filter(a => a.kind === 'text' && a.text).map(a => a.text)
+    const finalTexto = [texto, ...pastes].filter(Boolean).join('\n\n')
+
     setInput('')
-    // TODO D.5: process file attachments through multimodal API.
     setAttachments([])
     area.adjustHeight(true)
 
-    await sendTurn(texto || '(anexo)', mensagens)
+    await sendTurn(finalTexto || '(anexo)', mensagens)
   }
 
   /* ── Per-message quick actions (auto-send a new turn) ──────── */
@@ -381,7 +423,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
       {/* Input card — single persistent element; slides center→dock via layout */}
       <div className="v0-input-shell">
         <motion.div
-          layout={!reduce}
+          layout={reduce ? false : 'position'}
           className="v0-input-card"
           transition={reduce ? { duration: 0 } : { layout: { duration: 0.5, ease: EASE } }}
         >
@@ -398,7 +440,9 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
             onRemoveAttach={removeAttachment}
           />
           <InputFooter
-            onAttachClick={openFilePicker}
+            attachBtnRef={attachBtnRef}
+            importOpen={importOpen}
+            onToggleImport={() => setImportOpen(o => !o)}
             onSubmit={enviar}
             carregando={carregando}
             canSend={canSend}
@@ -406,6 +450,26 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           />
         </motion.div>
       </div>
+
+      {/* Import menu (portal) + paste-text modal */}
+      <ImportMenu
+        open={importOpen}
+        anchorRef={attachBtnRef}
+        reduce={reduce}
+        onClose={() => setImportOpen(false)}
+        onPickFile={() => pickFiles('')}
+        onPickImage={() => pickFiles('image/*')}
+        onPickPdf={() => pickFiles('application/pdf')}
+        onPasteText={openPaste}
+      />
+      <PasteModal
+        open={pasteOpen}
+        value={pasteText}
+        reduce={reduce}
+        onChange={e => setPasteText(e.target.value)}
+        onConfirm={confirmPaste}
+        onClose={() => setPasteOpen(false)}
+      />
 
       {/* Suggestion chips — empty state only */}
       <AnimatePresence initial={false}>
@@ -451,7 +515,9 @@ function InputBody({ textareaRef, value, onChange, onKeyDown, onFocus, onBlur, p
             <span key={a.id} className="v0-attach-chip" title={a.name}>
               {a.kind === 'image'
                 ? <ImageIcon size={12} strokeWidth={1.8} />
-                : <FileText size={12} strokeWidth={1.8} />}
+                : a.kind === 'text'
+                  ? <ClipboardPaste size={12} strokeWidth={1.8} />
+                  : <FileText size={12} strokeWidth={1.8} />}
               {truncateName(a.name)}
               <button type="button" onClick={() => onRemoveAttach(a.id)} aria-label={`Remover ${a.name}`}>
                 <X size={11} strokeWidth={2} />
@@ -477,14 +543,17 @@ function InputBody({ textareaRef, value, onChange, onKeyDown, onFocus, onBlur, p
   )
 }
 
-function InputFooter({ onAttachClick, onSubmit, carregando, canSend, attachLocked }) {
+function InputFooter({ attachBtnRef, importOpen, onToggleImport, onSubmit, carregando, canSend, attachLocked }) {
   return (
     <div className="v0-input-footer">
       <button
+        ref={attachBtnRef}
         type="button"
-        onClick={onAttachClick}
-        className="v0-attach-btn"
-        aria-label="Anexar arquivo"
+        onClick={onToggleImport}
+        className={`v0-attach-btn ${importOpen ? 'is-open' : ''}`}
+        aria-label="Adicionar conteúdo"
+        aria-haspopup="menu"
+        aria-expanded={importOpen}
         disabled={carregando || attachLocked}
       >
         <Paperclip size={18} strokeWidth={1.8} />
@@ -503,6 +572,156 @@ function InputFooter({ onAttachClick, onSubmit, carregando, canSend, attachLocke
           : <ArrowUp size={16} strokeWidth={2.4} />}
       </motion.button>
     </div>
+  )
+}
+
+/* ─── Import menu (popover ↑ desktop / bottom-sheet ↓ mobile) ──── */
+function ImportMenu({ open, anchorRef, reduce, onClose, onPickFile, onPickImage, onPickPdf, onPasteText }) {
+  const [mounted, setMounted] = useState(false)
+  // undefined ⇒ not measured yet · null ⇒ bottom-sheet · {…} ⇒ desktop popover
+  const [pos, setPos] = useState(undefined)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  useEffect(() => {
+    if (!open) { setPos(undefined); return }
+    function place() {
+      const sheet = window.innerWidth <= 767
+      const el = anchorRef?.current
+      if (sheet || !el) { setPos(null); return }
+      const r = el.getBoundingClientRect()
+      setPos({ left: r.left, bottom: window.innerHeight - r.top + 10 })
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [open, anchorRef])
+
+  if (!mounted) return null
+
+  const measured = pos !== undefined
+  const isSheet = pos === null
+  const items = [
+    { Icon: FileIcon,       label: 'Arquivo do computador', sub: 'Documentos, .txt e outros', onClick: onPickFile },
+    { Icon: ImageIcon,      label: 'Foto / Imagem',         sub: 'Galeria ou câmera',          onClick: onPickImage },
+    { Icon: FileText,       label: 'PDF',                   sub: 'Anexar um arquivo PDF',      onClick: onPickPdf },
+    { Icon: ClipboardPaste, label: 'Colar texto',           sub: 'Cole um conteúdo longo',     onClick: onPasteText },
+  ]
+
+  return createPortal(
+    <AnimatePresence>
+      {open && measured && (
+        <>
+          <motion.div
+            key="import-backdrop"
+            className={`v0-import-backdrop ${isSheet ? 'is-sheet' : ''}`}
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          />
+          <motion.div
+            key="import-menu"
+            className={`v0-import-menu ${isSheet ? 'is-sheet' : ''}`}
+            role="menu"
+            aria-label="Adicionar conteúdo"
+            style={pos ? { left: pos.left, bottom: pos.bottom } : undefined}
+            initial={reduce ? { opacity: 0 } : (isSheet ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.9, y: 8 })}
+            animate={reduce ? { opacity: 1 } : (isSheet ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 })}
+            exit={reduce ? { opacity: 0 } : (isSheet ? { opacity: 0, y: '100%', transition: { duration: 0.2 } } : { opacity: 0, scale: 0.95, y: 6, transition: { duration: 0.12 } })}
+            transition={isSheet ? { type: 'spring', stiffness: 380, damping: 36 } : { type: 'spring', stiffness: 420, damping: 30, mass: 0.6 }}
+          >
+            {isSheet && <div className="v0-import-grip" aria-hidden />}
+            {items.map((it, i) => (
+              <ImportItem key={it.label} {...it} index={i} reduce={reduce} />
+            ))}
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body,
+  )
+}
+
+function ImportItem({ Icon, label, sub, onClick, index, reduce }) {
+  return (
+    <motion.button
+      type="button"
+      role="menuitem"
+      className="v0-import-item"
+      onClick={onClick}
+      initial={reduce ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.03 + index * 0.05, duration: 0.2, ease: EASE }}
+    >
+      <span className="v0-import-icon"><Icon size={17} strokeWidth={1.8} /></span>
+      <span className="v0-import-text">
+        <span className="v0-import-label">{label}</span>
+        <span className="v0-import-sub">{sub}</span>
+      </span>
+    </motion.button>
+  )
+}
+
+/* ─── Paste-text modal ─────────────────────────────────────────── */
+function PasteModal({ open, value, reduce, onChange, onConfirm, onClose }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  if (!mounted) return null
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="paste-backdrop"
+          className="v0-paste-backdrop"
+          onClick={onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+        >
+          <motion.div
+            className="v0-paste-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Colar texto"
+            onClick={e => e.stopPropagation()}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 12 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.14 } }}
+            transition={{ type: 'spring', stiffness: 360, damping: 30, mass: 0.7 }}
+          >
+            <div className="v0-paste-head">
+              <span className="v0-paste-title"><ClipboardPaste size={15} strokeWidth={1.9} /> Colar texto</span>
+              <button type="button" className="v0-paste-close" onClick={onClose} aria-label="Fechar">
+                <X size={16} strokeWidth={2} />
+              </button>
+            </div>
+            <textarea
+              className="v0-paste-textarea"
+              value={value}
+              onChange={onChange}
+              autoFocus
+              placeholder="Cole aqui o conteúdo que quer anexar à conversa…"
+              aria-label="Conteúdo para colar"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onConfirm() }
+              }}
+            />
+            <div className="v0-paste-foot">
+              <span className="v0-paste-hint">{value.trim().length} caracteres</span>
+              <div className="v0-paste-actions">
+                <button type="button" className="v0-edit-cancel" onClick={onClose}>Cancelar</button>
+                <button type="button" className="v0-edit-save" onClick={onConfirm} disabled={!value.trim()}>Anexar</button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
   )
 }
 
@@ -729,6 +948,37 @@ const V0_CSS = `
   .v0-edit-save:hover:not(:disabled){background:#155f3a}
   .v0-edit-save:disabled{opacity:.5;cursor:not-allowed}
 
+  /* ── Attach button open state ── */
+  .v0-attach-btn.is-open{color:#22c55e;background:rgba(34,197,94,.10)}
+
+  /* ── Import menu (popover / sheet) ── */
+  .v0-import-backdrop{position:fixed;inset:0;z-index:150;background:transparent}
+  .v0-import-backdrop.is-sheet{background:rgba(0,0,0,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+  .v0-import-menu{position:fixed;z-index:160;width:268px;background:#121212;border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:6px;box-shadow:0 24px 60px rgba(0,0,0,.55);transform-origin:bottom left;display:flex;flex-direction:column;gap:2px}
+  .v0-import-menu.is-sheet{left:0 !important;right:0 !important;bottom:0 !important;width:auto;border-radius:18px 18px 0 0;padding:8px 10px calc(14px + env(safe-area-inset-bottom, 0px));box-shadow:0 -20px 60px rgba(0,0,0,.5)}
+  .v0-import-grip{width:38px;height:4px;border-radius:99px;background:rgba(255,255,255,.18);margin:4px auto 8px}
+  .v0-import-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px;background:none;border:none;border-radius:10px;cursor:pointer;text-align:left;font-family:inherit;transition:background .14s}
+  .v0-import-item:hover{background:rgba(34,197,94,.10)}
+  .v0-import-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);color:rgba(255,255,255,.6);flex-shrink:0;transition:color .14s,background .14s,border-color .14s}
+  .v0-import-item:hover .v0-import-icon{color:#22c55e;background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3)}
+  .v0-import-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .v0-import-label{font-size:13px;font-weight:600;color:#e4e4e7;letter-spacing:-.01em}
+  .v0-import-sub{font-size:11px;color:rgba(255,255,255,.4);line-height:1.3}
+
+  /* ── Paste-text modal ── */
+  .v0-paste-backdrop{position:fixed;inset:0;z-index:170;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px}
+  .v0-paste-modal{width:100%;max-width:540px;background:#101010;border:1px solid rgba(255,255,255,.1);border-radius:18px;box-shadow:0 40px 100px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden}
+  .v0-paste-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .v0-paste-title{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:#f4f4f5}
+  .v0-paste-title svg{color:#22c55e}
+  .v0-paste-close{background:none;border:none;color:rgba(255,255,255,.45);cursor:pointer;display:inline-flex;padding:4px;border-radius:7px;transition:color .15s,background .15s}
+  .v0-paste-close:hover{color:#fff;background:rgba(255,255,255,.06)}
+  .v0-paste-textarea{width:100%;min-height:200px;max-height:50vh;background:transparent;border:none;outline:none;resize:vertical;font-family:inherit;font-size:14px;line-height:1.6;color:rgba(255,255,255,.9);padding:16px}
+  .v0-paste-textarea::placeholder{color:rgba(255,255,255,.25)}
+  .v0-paste-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.06)}
+  .v0-paste-hint{font-size:11.5px;color:rgba(255,255,255,.35)}
+  .v0-paste-actions{display:flex;gap:8px}
+
   /* ── Thinking + spinner ── */
   .v0-thinking{display:inline-flex;gap:4px;padding:14px;align-items:center}
   .v0-thinking span{display:inline-block;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.4);animation:v0Dot 1.1s ease-in-out infinite both}
@@ -743,6 +993,11 @@ const V0_CSS = `
     .v0-action-btn{opacity:1;transform:none;transition:color .15s,background .15s;transition-delay:0s !important}
   }
 
+  /* ── Touch devices: no hover, so keep actions always visible ── */
+  @media (hover: none){
+    .v0-action-btn{opacity:1;transform:none;transition-delay:0s !important}
+  }
+
   /* ── Responsive: full-width messages, always-visible actions ── */
   @media (max-width: 1023px){
     .v0-bubble.ai > *{max-width:100%}
@@ -754,5 +1009,11 @@ const V0_CSS = `
     .is-empty .v0-input-shell,.v0-chips-shell{padding:0 16px}
     .is-active .v0-input-shell{padding:8px 14px calc(14px + env(safe-area-inset-bottom, 0px))}
     .v0-history{padding:16px 16px 8px}
+    .v0-import-item{padding:13px 12px}
+    .v0-import-icon{width:38px;height:38px}
+    .v0-import-label{font-size:14px}
+    .v0-paste-backdrop{padding:0;align-items:flex-end}
+    .v0-paste-modal{max-width:none;border-radius:18px 18px 0 0;border-bottom:none}
+    .v0-paste-textarea{min-height:160px}
   }
 `
