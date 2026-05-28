@@ -5,6 +5,7 @@ import {
   ArrowUp, Paperclip, X,
   FileText, PenLine, Lightbulb, HelpCircle,
   Image as ImageIcon,
+  Maximize2, AlignLeft, Sparkles, Copy, Check, Pencil,
 } from 'lucide-react'
 import { useProfile } from '../lib/ProfileContext'
 import * as db from '../lib/db'
@@ -87,6 +88,8 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const [attachments, setAttachments] = useState([])
   const [inputFocused, setInputFocused] = useState(false)
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
+  const [editingIndex, setEditingIndex] = useState(null)
+  const [editText, setEditText] = useState('')
 
   const fimRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -270,6 +273,30 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     await sendTurn(texto || '(anexo)', mensagens)
   }
 
+  /* ── Per-message quick actions (auto-send a new turn) ──────── */
+  function quickAction(prompt) {
+    if (carregando || !perfil || editingIndex != null) return
+    sendTurn(prompt, mensagens)
+  }
+
+  /* ── Edit & resend a user message (truncate + regenerate) ──── */
+  function startEdit(index, content) {
+    setEditingIndex(index)
+    setEditText(content)
+  }
+  function cancelEdit() {
+    setEditingIndex(null)
+    setEditText('')
+  }
+  async function confirmEdit(index) {
+    const texto = editText.trim()
+    if (!texto || carregando) return
+    const base = mensagens.slice(0, index)
+    setEditingIndex(null)
+    setEditText('')
+    await sendTurn(texto, base)
+  }
+
   const nome = perfil?.nome?.split(' ')[0] || ''
   const placeholder = isGeral ? 'Pergunte qualquer coisa…' : `Pergunte sobre ${materia}…`
   const canSend = !!input.trim() || attachments.length > 0
@@ -330,7 +357,20 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
         ) : (
           <div className="v0-history" role="log" aria-live="polite">
             {mensagens.map((m, i) => (
-              <Message key={i} msg={m} reduce={reduce} />
+              <Message
+                key={i}
+                msg={m}
+                index={i}
+                reduce={reduce}
+                carregando={carregando}
+                onQuick={quickAction}
+                editing={editingIndex === i}
+                editText={editText}
+                onEditChange={e => setEditText(e.target.value)}
+                onEditConfirm={() => confirmEdit(i)}
+                onEditCancel={cancelEdit}
+                onStartEdit={startEdit}
+              />
             ))}
             {carregando && <ThinkingDots />}
             <div ref={fimRef} />
@@ -466,7 +506,10 @@ function InputFooter({ onAttachClick, onSubmit, carregando, canSend, attachLocke
   )
 }
 
-function Message({ msg, reduce }) {
+function Message({
+  msg, index, reduce, carregando, onQuick,
+  editing, editText, onEditChange, onEditConfirm, onEditCancel, onStartEdit,
+}) {
   const isAi = msg.role === 'assistant'
   return (
     <motion.div
@@ -477,11 +520,92 @@ function Message({ msg, reduce }) {
     >
       {isAi && <div className="v0-avatar">P</div>}
       <div className="v0-msg-col">
-        <div className={`v0-bubble ${isAi ? 'ai' : 'user'}`}>
-          {isAi ? <RichMessage content={msg.content} /> : msg.content}
-        </div>
+        {isAi ? (
+          <>
+            <div className="v0-bubble ai">
+              <RichMessage content={msg.content} />
+            </div>
+            <div className="v0-actions" role="group" aria-label="Ações da resposta">
+              <ActionBtn Icon={Maximize2} label="Aprofundar" disabled={carregando}
+                onClick={() => onQuick('Aprofunde a resposta anterior.')} />
+              <ActionBtn Icon={AlignLeft} label="Resumir" disabled={carregando}
+                onClick={() => onQuick('Resuma a resposta anterior em tópicos.')} />
+              <ActionBtn Icon={Sparkles} label="Explicar mais simples" disabled={carregando}
+                onClick={() => onQuick('Explique de forma mais simples.')} />
+              <CopyBtn text={msg.content} />
+            </div>
+          </>
+        ) : editing ? (
+          <div className="v0-edit-box">
+            <textarea
+              className="v0-edit-textarea"
+              value={editText}
+              onChange={onEditChange}
+              autoFocus
+              rows={2}
+              aria-label="Editar mensagem"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEditConfirm() }
+                if (e.key === 'Escape') { e.preventDefault(); onEditCancel() }
+              }}
+            />
+            <div className="v0-edit-bar">
+              <button type="button" className="v0-edit-cancel" onClick={onEditCancel}>Cancelar</button>
+              <button type="button" className="v0-edit-save" onClick={onEditConfirm} disabled={!editText.trim()}>
+                Reenviar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="v0-bubble user">{msg.content}</div>
+            <div className="v0-actions" role="group" aria-label="Ações da mensagem">
+              <ActionBtn Icon={Pencil} label="Editar e reenviar" disabled={carregando}
+                onClick={() => onStartEdit(index, msg.content)} />
+            </div>
+          </>
+        )}
       </div>
     </motion.div>
+  )
+}
+
+function ActionBtn({ Icon, label, onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      className="v0-action-btn"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+    >
+      <Icon size={14} strokeWidth={1.9} />
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function CopyBtn({ text }) {
+  const [copied, setCopied] = useState(false)
+  function copiar() {
+    if (!navigator.clipboard) return
+    navigator.clipboard.writeText(text || '').then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <button
+      type="button"
+      className={`v0-action-btn ${copied ? 'is-copied' : ''}`}
+      onClick={copiar}
+      title="Copiar"
+      aria-label="Copiar resposta"
+    >
+      {copied ? <Check size={14} strokeWidth={2.4} /> : <Copy size={14} strokeWidth={1.9} />}
+      <span>{copied ? 'Copiado!' : 'Copiar'}</span>
+    </button>
   )
 }
 
@@ -580,6 +704,31 @@ const V0_CSS = `
   .v0-bubble.ai > pre,
   .v0-bubble.ai > img{max-width:100%;width:100%}
 
+  /* ── Per-message actions ── */
+  .v0-actions{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin-top:5px;min-height:26px}
+  .v0-msg.user .v0-actions{justify-content:flex-end}
+  .v0-action-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;background:none;border:none;border-radius:7px;font-family:inherit;font-size:11.5px;font-weight:500;color:rgba(255,255,255,.38);cursor:pointer;opacity:0;transform:translateY(3px);transition:opacity .22s ease,transform .22s ease,color .15s,background .15s}
+  .v0-msg:hover .v0-action-btn,.v0-msg:focus-within .v0-action-btn{opacity:1;transform:none}
+  .v0-msg:hover .v0-action-btn:nth-child(2){transition-delay:.04s}
+  .v0-msg:hover .v0-action-btn:nth-child(3){transition-delay:.08s}
+  .v0-msg:hover .v0-action-btn:nth-child(4){transition-delay:.12s}
+  .v0-action-btn:hover:not(:disabled){color:#22c55e;background:rgba(34,197,94,.08)}
+  .v0-action-btn svg{flex-shrink:0}
+  .v0-msg:hover .v0-action-btn:disabled{opacity:.4;cursor:not-allowed;color:rgba(255,255,255,.3)}
+  .v0-action-btn.is-copied{opacity:1;transform:none;color:#22c55e}
+
+  /* ── Edit & resend ── */
+  .v0-edit-box{width:min(560px,92%);display:flex;flex-direction:column;gap:8px}
+  .v0-edit-textarea{width:100%;background:rgba(26,122,74,.14);border:1px solid rgba(34,197,94,.4);border-radius:14px;color:#fff;font-family:inherit;font-size:13.5px;line-height:1.55;padding:10px 14px;resize:vertical;outline:none}
+  .v0-edit-textarea:focus{border-color:rgba(34,197,94,.7);box-shadow:0 0 0 3px rgba(34,197,94,.1)}
+  .v0-edit-bar{display:flex;gap:8px;justify-content:flex-end}
+  .v0-edit-cancel,.v0-edit-save{font-family:inherit;font-size:12px;font-weight:600;padding:6px 14px;border-radius:9px;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+  .v0-edit-cancel{background:none;border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.55)}
+  .v0-edit-cancel:hover{background:rgba(255,255,255,.05);color:rgba(255,255,255,.9)}
+  .v0-edit-save{background:#1a7a4a;border:1px solid #1a7a4a;color:#fff}
+  .v0-edit-save:hover:not(:disabled){background:#155f3a}
+  .v0-edit-save:disabled{opacity:.5;cursor:not-allowed}
+
   /* ── Thinking + spinner ── */
   .v0-thinking{display:inline-flex;gap:4px;padding:14px;align-items:center}
   .v0-thinking span{display:inline-block;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.4);animation:v0Dot 1.1s ease-in-out infinite both}
@@ -589,9 +738,15 @@ const V0_CSS = `
   .v0-spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:v0Spin .8s linear infinite}
   @keyframes v0Spin{to{transform:rotate(360deg)}}
 
-  /* ── Responsive: full-width messages, tighter padding ── */
+  /* ── Reduced motion: actions always visible, no movement ── */
+  @media (prefers-reduced-motion: reduce){
+    .v0-action-btn{opacity:1;transform:none;transition:color .15s,background .15s;transition-delay:0s !important}
+  }
+
+  /* ── Responsive: full-width messages, always-visible actions ── */
   @media (max-width: 1023px){
     .v0-bubble.ai > *{max-width:100%}
+    .v0-action-btn{opacity:1;transform:none;transition-delay:0s !important}
   }
   @media (max-width: 768px){
     .is-empty .v0-canvas{padding:8px 16px 0}
