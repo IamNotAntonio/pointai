@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { savePerfil, getUserId } from '../lib/db'
-import { cursoReconhecido, filtrarCursos } from '../lib/cursos'
-import { buscarUniversidade, filtrarUniversidades } from '../lib/universidades'
+import { cursos } from '../lib/cursos'
+import { universidades } from '../lib/universidades'
+import AutocompleteInput from '../components/AutocompleteInput'
 import { User, GraduationCap, Building2, Calendar, BookOpen, Zap, Target, TrendingUp, ClipboardList, Pencil, CheckCircle } from 'lucide-react'
 
 const SEMESTRES = ['1º','2º','3º','4º','5º','6º','7º','8º','9º','10º']
@@ -50,9 +51,6 @@ export default function Onboarding() {
   const [objetivo,     setObjetivo]     = useState('')
   const [outroTexto,   setOutroTexto]   = useState('')
 
-  const [cursoFoco,    setCursoFoco]    = useState(false)
-  const [uniFoco,      setUniFoco]      = useState(false)
-
   const [sugestoes,    setSugestoes]    = useState([])
   const [loadingSubj,  setLoadingSubj]  = useState(false)
 
@@ -88,11 +86,6 @@ export default function Onboarding() {
       .then(d => { setSugestoes(d.materias || []); setLoadingSubj(false) })
       .catch(() => setLoadingSubj(false))
   }, [etapa])
-
-  const cursoOptions = cursoFoco && curso.length >= 1 ? filtrarCursos(curso, 8) : []
-  const uniOptions   = uniFoco   && universidade.length >= 1 ? filtrarUniversidades(universidade, 8) : []
-  const cursoOk      = cursoReconhecido(curso)
-  const uniMatch     = buscarUniversidade(universidade)
 
   function next() {
     if (saving) return
@@ -233,32 +226,15 @@ export default function Onboarding() {
             {etapa === 1 && (<>
               <div className="ob-step-em"><GraduationCap size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
               <h2 className="ob-title">Qual curso você faz, {nome1}?</h2>
-              <p className="ob-sub">Digite ou escolha da lista abaixo. Aceitamos qualquer curso.</p>
-              <div style={{ position: 'relative' }}>
-                <div className={`ob-field${touched && err ? ' ob-field--err' : cursoOk ? ' ob-field--ok' : ''}`}>
-                  <input
-                    autoFocus
-                    className="ob-inp"
-                    placeholder="Ex: Medicina, Engenharia Civil, Ciência de Dados…"
-                    value={curso}
-                    onChange={e => { setCurso(e.target.value); setCursoFoco(true) }}
-                    onFocus={() => setCursoFoco(true)}
-                    onBlur={() => setTimeout(() => setCursoFoco(false), 180)}
-                    onKeyDown={e => e.key === 'Enter' && next()}
-                    autoComplete="off"
-                  />
-                  {cursoOk && <span className="ob-check" title="Curso reconhecido">✓</span>}
-                </div>
-                {cursoFoco && cursoOptions.length > 0 && (
-                  <div className="ob-dropdown">
-                    {cursoOptions.map(c => (
-                      <button key={c} className="ob-dd-item" onMouseDown={() => { setCurso(c); setCursoFoco(false) }}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <p className="ob-sub">Digite ou escolha da lista. Aceitamos qualquer curso.</p>
+              <AutocompleteInput
+                data={cursos}
+                value={curso}
+                onChange={setCurso}
+                onSubmit={next}
+                placeholder="Ex: Medicina, Engenharia Civil, Ciência de Dados…"
+                autoFocus
+              />
               {touched && err && <p className="ob-err">{err}</p>}
             </>)}
 
@@ -267,36 +243,14 @@ export default function Onboarding() {
               <div className="ob-step-em"><Building2 size={40} strokeWidth={1.3} style={{ color: '#22c55e' }} /></div>
               <h2 className="ob-title">Em qual universidade você estuda?</h2>
               <p className="ob-sub">Digite o nome ou a sigla. Aceitamos qualquer instituição.</p>
-              <div style={{ position: 'relative' }}>
-                <div className={`ob-field${touched && err ? ' ob-field--err' : uniMatch ? ' ob-field--ok' : ''}`}>
-                  <input
-                    autoFocus
-                    className="ob-inp"
-                    placeholder="Ex: USP, ESPM, FCMSCSP, PUC-SP…"
-                    value={universidade}
-                    onChange={e => { setUniversidade(e.target.value); setUniFoco(true) }}
-                    onFocus={() => setUniFoco(true)}
-                    onBlur={() => setTimeout(() => setUniFoco(false), 180)}
-                    onKeyDown={e => e.key === 'Enter' && next()}
-                    autoComplete="off"
-                  />
-                  {uniMatch && <span className="ob-check" title={uniMatch.nome}>✓</span>}
-                </div>
-                {uniFoco && uniOptions.length > 0 && (
-                  <div className="ob-dropdown">
-                    {uniOptions.map(u => (
-                      <button
-                        key={u.sigla + '|' + u.nome}
-                        className="ob-dd-item"
-                        onMouseDown={() => { setUniversidade(u.sigla); setUniFoco(false) }}
-                      >
-                        <span className="ob-dd-sigla">{u.sigla}</span>
-                        <span className="ob-dd-nome"> — {u.nome}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <AutocompleteInput
+                data={universidades}
+                value={universidade}
+                onChange={setUniversidade}
+                onSubmit={next}
+                placeholder="Ex: USP, ESPM, FCMSCSP, PUC-SP…"
+                autoFocus
+              />
               {touched && err && <p className="ob-err">{err}</p>}
             </>)}
 

@@ -324,37 +324,3 @@ export const universidades = [
   { nome: 'Etec - Escola Técnica Estadual', sigla: 'Etec', uf: 'SP', popular: false },
   { nome: 'Centro Paula Souza', sigla: 'CPS', uf: 'SP', popular: false },
 ]
-
-// ── Legacy compat (removed once onboarding migrates to AutocompleteInput) ──
-export const UNIVERSIDADES = universidades
-
-function normalize(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
-export function buscarUniversidade(input) {
-  if (!input) return null
-  const n = normalize(input)
-  if (n.length < 2) return null
-  let m = universidades.find(u => normalize(u.sigla) === n)
-  if (m) return m
-  m = universidades.find(u => normalize(u.nome) === n)
-  if (m) return m
-  const matches = universidades.filter(u =>
-    normalize(u.sigla).includes(n) || normalize(u.nome).includes(n)
-  )
-  return matches.length === 1 ? matches[0] : null
-}
-
-export function filtrarUniversidades(input, limit = 8) {
-  if (!input) return []
-  const n = normalize(input)
-  if (n.length < 1) return []
-  return universidades
-    .filter(u => normalize(u.sigla).includes(n) || normalize(u.nome).includes(n))
-    .slice(0, limit)
-}

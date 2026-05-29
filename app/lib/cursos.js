@@ -474,31 +474,3 @@ export const cursos = [
   { nome: 'Tecnólogo em Treinamento Desportivo', area: 'Tecnólogos', popular: false },
   { nome: 'Tecnólogo em Produção Cultural', area: 'Tecnólogos', popular: false },
 ]
-
-// ── Legacy compat (removed once onboarding migrates to AutocompleteInput) ──
-export const CURSOS = cursos.map(c => c.nome)
-
-function normalize(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
-export function cursoReconhecido(input) {
-  if (!input) return false
-  const n = normalize(input)
-  if (n.length < 2) return false
-  return cursos.some(c => normalize(c.nome) === n)
-}
-
-export function filtrarCursos(input, limit = 8) {
-  if (!input) return []
-  const n = normalize(input)
-  if (n.length < 1) return []
-  return cursos
-    .filter(c => normalize(c.nome).includes(n))
-    .slice(0, limit)
-    .map(c => c.nome)
-}
