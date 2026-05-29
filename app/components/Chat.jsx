@@ -99,6 +99,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const fimRef = useRef(null)
   const fileInputRef = useRef(null)
   const attachBtnRef = useRef(null)
+  const loadIdRef = useRef(0)
   const area = useAutoResizeTextarea({ minHeight: 56, maxHeight: 200 })
 
   const isEmpty = !mensagens.some(m => m.role === 'user')
@@ -109,9 +110,14 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   // loop that constantly clears input + mensagens.
   useEffect(() => {
     if (!perfil || !materia) return
+    const myLoad = ++loadIdRef.current
     let alive = true
     db.getChat(chatKey).then(historico => {
-      if (!alive) return
+      // Ignore a late resolution if a newer matéria load — or a user send —
+      // already superseded it. Without this, the async getChat on the default
+      // (geral) chat could resolve *after* the first message was sent and reset
+      // mensagens to [], snapping the UI back to the empty state mid-animation.
+      if (!alive || myLoad !== loadIdRef.current) return
       setMensagens(historico?.length ? historico : [])
     }).catch(() => {})
     setInput('')
@@ -219,6 +225,8 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   /* ── Core send: streams one assistant turn appended to `base` ── */
   async function sendTurn(texto, base) {
     if (!perfil) return
+    // Invalidate any in-flight history load so it can't clobber this turn.
+    loadIdRef.current++
     const wasEmpty = !base.some(m => m.role === 'user')
 
     const novaMsg = {
@@ -866,7 +874,7 @@ const V0_CSS = `
   .v0-headline-subtitle{font-size:13.5px;color:rgba(255,255,255,.4);text-align:center;max-width:480px;line-height:1.55;margin-top:-2px}
 
   /* ── History (active) ── */
-  .v0-history{flex:1;overflow-y:auto;padding:24px 24px 8px;display:flex;flex-direction:column;gap:16px;min-height:0;max-width:880px;width:100%;margin:0 auto}
+  .v0-history{flex:1;overflow-y:auto;padding:24px 24px 8px;display:flex;flex-direction:column;gap:16px;min-height:0;max-width:1280px;width:100%;margin:0 auto}
   .v0-history::-webkit-scrollbar{width:6px}
   .v0-history::-webkit-scrollbar-thumb{background:#1a1a1a;border-radius:8px}
 
@@ -911,17 +919,29 @@ const V0_CSS = `
   .v0-msg.user .v0-msg-col{align-items:flex-end}
   .v0-avatar{width:26px;height:26px;border-radius:50%;background:#1a7a4a;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
   .v0-bubble{padding:10px 14px;font-size:13.5px;line-height:1.6;word-break:break-word}
-  .v0-bubble.ai{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);color:#e4e4e7;border-radius:14px 14px 14px 4px;width:100%}
+  /* AI message is borderless (ChatGPT/Claude style) so wide blocks can fill the
+     whole canvas column without leaving an empty card to the right of short text. */
+  .v0-bubble.ai{background:none;border:none;border-radius:0;padding:0;color:#e4e4e7;width:100%}
   .v0-bubble.user{background:#1a7a4a;color:#fff;border-radius:14px 14px 4px 14px;white-space:pre-wrap;max-width:min(640px,82%)}
 
-  /* ── Adaptive widths: readable text column + full-bleed wide blocks ── */
+  /* ── Adaptive widths ──────────────────────────────────────────────
+     Text stays in a ~720px reading column; blocks that need room break out
+     to the full width of the conversation canvas (up to .v0-history's cap).
+     Lists are normally text-width, but a list that CONTAINS a code block
+     (e.g. programming exercises) breaks out together with its snippets. */
   .v0-bubble.ai > *{max-width:720px}
   .v0-bubble.ai > .chat-code-block,
   .v0-bubble.ai > .chat-table-wrap,
   .v0-bubble.ai > .chat-chart-block,
   .v0-bubble.ai > .svg-block,
   .v0-bubble.ai > pre,
-  .v0-bubble.ai > img{max-width:100%;width:100%}
+  .v0-bubble.ai > img,
+  .v0-bubble.ai > ul:has(.chat-code-block),
+  .v0-bubble.ai > ol:has(.chat-code-block),
+  .v0-bubble.ai > ul:has(pre),
+  .v0-bubble.ai > ol:has(pre),
+  .v0-bubble.ai > ul:has(.chat-table-wrap),
+  .v0-bubble.ai > ol:has(.chat-table-wrap){max-width:100%;width:100%}
 
   /* ── Per-message actions ── */
   .v0-actions{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin-top:5px;min-height:26px}
