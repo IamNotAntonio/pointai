@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '../components/Sidebar'
 import PortalImportModal from '../components/PortalImportModal'
+import ImportModal from '../components/ImportModal'
 import * as db from '../lib/db'
 import { Download, Calendar, Camera, ClipboardList, FileText, File, Mic, Bookmark, Upload, CheckSquare, RefreshCw, X } from 'lucide-react'
 
@@ -111,6 +112,7 @@ export default function Calendario() {
   const [moodleConfig,  setMoodleConfig]  = useState(null)
   const [syncingCanvas, setSyncingCanvas] = useState(false)
   const [syncingMoodle, setSyncingMoodle] = useState(false)
+  const [importOpen,    setImportOpen]    = useState(false)
 
   const [modal, setModal] = useState({
     aberto: false, aba: 'foto',
@@ -129,6 +131,16 @@ export default function Calendario() {
 
   const importFileRef = useRef(null)
   const icsFileRef    = useRef(null)
+
+  // Reload events after an import (from this page or the global TopBar).
+  useEffect(() => {
+    function onImport(e) {
+      if (e.detail?.kind !== 'eventos') return
+      db.getEventos().then(evs => setEventos(evs)).catch(() => {})
+    }
+    window.addEventListener('pointai-import-done', onImport)
+    return () => window.removeEventListener('pointai-import-done', onImport)
+  }, [])
 
   useEffect(() => {
     async function carregar() {
@@ -424,14 +436,13 @@ export default function Calendario() {
             >
               <Download size={13} strokeWidth={1.8} /> Importar do portal
             </button>
-            {/* ICS stays as a separate utility */}
             <input ref={icsFileRef} type="file" accept=".ics,text/calendar" onChange={handleICSFile} style={{ display: 'none' }} />
             <button
-              onClick={() => icsFileRef.current?.click()}
-              className="btn btn-ghost"
+              onClick={() => setImportOpen(true)}
+              className="btn btn-primary"
               style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              <Upload size={13} strokeWidth={1.8} /> Importar .ics
+              <Upload size={13} strokeWidth={1.8} /> Importar calendário
             </button>
           </div>
         </div>
@@ -599,6 +610,8 @@ export default function Calendario() {
         onSaveNotas={() => {}}
         onSaveEventos={handleCanvasEventos}
       />
+
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} context="calendario" />
 
       {/* ── AI Import Modal ── */}
       {modal.aberto && (

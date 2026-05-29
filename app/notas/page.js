@@ -3,8 +3,9 @@ import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import Sidebar from '../components/Sidebar'
 import PortalImportModal from '../components/PortalImportModal'
+import ImportModal from '../components/ImportModal'
 import * as db from '../lib/db'
-import { Download, Target, CheckCircle, Camera, ClipboardList, FileSpreadsheet, RefreshCw, X } from 'lucide-react'
+import { Download, Target, CheckCircle, Camera, ClipboardList, FileSpreadsheet, RefreshCw, X, Upload } from 'lucide-react'
 
 const VAZIO = { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
 
@@ -28,6 +29,7 @@ export default function Notas() {
   const [syncingCanvas, setSyncingCanvas] = useState(false)
   const [syncingMoodle, setSyncingMoodle] = useState(false)
   const [toast,         setToast]         = useState(null)
+  const [importOpen,    setImportOpen]    = useState(false)
 
   const [modal, setModal] = useState({
     aberto: false, aba: 'foto',
@@ -42,6 +44,16 @@ export default function Notas() {
     setToast(msg)
     setTimeout(() => setToast(null), 3500)
   }
+
+  // Reload grades after a boletim import (from this page or the global TopBar).
+  useEffect(() => {
+    function onImport(e) {
+      if (e.detail?.kind !== 'notas') return
+      db.getNotas().then(d => { if (d) setDados(d) }).catch(() => {})
+    }
+    window.addEventListener('pointai-import-done', onImport)
+    return () => window.removeEventListener('pointai-import-done', onImport)
+  }, [])
 
   useEffect(() => {
     async function carregar() {
@@ -326,6 +338,14 @@ export default function Notas() {
             <input ref={planilhaFileRef} type="file" accept=".xlsx,.xls,.csv"                onChange={selecionarPlanilha} style={{ display: 'none' }} />
 
             <button
+              onClick={() => setImportOpen(true)}
+              className="btn btn-primary"
+              style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Upload size={13} strokeWidth={1.8} /> Importar boletim
+            </button>
+
+            <button
               onClick={() => setPortalModal(true)}
               className="btn btn-ghost"
               style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
@@ -461,6 +481,8 @@ export default function Notas() {
         onSaveNotas={(previewMaterias) => { aplicarPreviewNotas(previewMaterias) }}
         onSaveEventos={() => {}}
       />
+
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} context="notas" />
 
       {/* ── Toast ── */}
       {toast && (

@@ -5,10 +5,11 @@ import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
-  Calendar, Bell, ChevronDown, ChevronRight, Edit, Star, Sun, Moon, LogOut, Sparkles,
+  Calendar, Bell, ChevronDown, ChevronRight, Edit, Star, Sun, Moon, LogOut, Sparkles, Upload,
 } from 'lucide-react'
 import * as db from '../lib/db'
 import { useProfile } from '../lib/ProfileContext'
+import ImportModal from './ImportModal'
 
 const PLANS = [
   { id: 'free',     name: 'Grátis',    price: 'R$0',     period: '',     desc: 'Acesso completo sem limite de uso.',           current: true,  featured: false },
@@ -43,6 +44,7 @@ export default function TopBar() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [planosOpen, setPlanosOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [formPerfil, setFormPerfil] = useState({})
   const [salvando, setSalvando] = useState(false)
   const [assinandoPlano, setAssinandoPlano] = useState(null)
@@ -268,6 +270,17 @@ export default function TopBar() {
             <button
               className="topbar-quick"
               onMouseEnter={onItemEnter}
+              onClick={() => setImportOpen(true)}
+              aria-label="Importar dados"
+              title="Importar dados"
+            >
+              <Upload size={16} strokeWidth={1.8} />
+              <span className="topbar-quick-label">Importar</span>
+            </button>
+
+            <button
+              className="topbar-quick"
+              onMouseEnter={onItemEnter}
               onClick={() => router.push('/calendario')}
               aria-label="Calendário"
               title={eventoLabel || 'Calendário'}
@@ -463,6 +476,8 @@ export default function TopBar() {
           </div>
         </div>
       )}
+
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} context="all" />
     </>
   )
 }
