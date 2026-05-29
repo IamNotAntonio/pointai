@@ -207,18 +207,29 @@ function CerebroFullscreenInner() {
     return () => window.removeEventListener('cerebro-updated', onUpdate)
   }, [loadGrafo])
 
-  // Container resize observer pra graph dims
+  // Container resize observer → graph dims + re-fit. Uses clientWidth/Height
+  // (layout box, unaffected by the fullscreen open-scale animation) and rAF to
+  // dodge the "ResizeObserver loop" warning. zoomToFit is debounced so the graph
+  // re-frames into the new area instead of shrinking into a corner after resize.
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    let raf = 0
+    let zoomTimer = 0
     function measure() {
-      const r = el.getBoundingClientRect()
-      setDims({ w: Math.max(320, r.width), h: Math.max(280, r.height) })
+      setDims({ w: Math.max(320, el.clientWidth), h: Math.max(280, el.clientHeight) })
+      clearTimeout(zoomTimer)
+      zoomTimer = setTimeout(() => {
+        try { graphRef.current?.zoomToFit?.(400, 40) } catch {}
+      }, 250)
     }
     measure()
-    const ro = new ResizeObserver(measure)
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(measure)
+    })
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); clearTimeout(zoomTimer) }
   }, [])
 
   // Carrega detalhes ao selecionar
@@ -333,6 +344,7 @@ function CerebroFullscreenInner() {
                 d3AlphaDecay={0.04}
                 d3VelocityDecay={0.4}
                 cooldownTime={5000}
+                onEngineStop={() => { try { graphRef.current?.zoomToFit?.(400, 40) } catch {} }}
                 enableNodeDrag={false}
               />
               <button onClick={centralizar} className="cerebro-recenter" type="button">
@@ -480,16 +492,17 @@ function ConceitoDetail({ conceito, mensagens, onClose, onDelete, confirmDelete,
 }
 
 const CEREBRO_FS_CSS = `
-  .cerebro-fs{padding-bottom:24px}
-  .cerebro-split{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;min-height:520px}
-  .cerebro-graph{position:relative;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;overflow:hidden;min-height:520px}
+  /* Fill the fullscreen body: header on top, split takes the rest of the height. */
+  .cerebro-fs{padding-bottom:24px;box-sizing:border-box;display:flex;flex-direction:column;height:100%;min-height:0}
+  .cerebro-split{flex:1;min-height:0;display:grid;grid-template-columns:1.4fr 1fr;grid-template-rows:minmax(0,1fr);gap:20px}
+  .cerebro-graph{position:relative;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;overflow:hidden;min-height:0}
   .cerebro-graph-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#71717a;font-size:13px}
   .cerebro-spin{animation:cerebroSpin 1s linear infinite;color:#22c55e}
   @keyframes cerebroSpin{to{transform:rotate(360deg)}}
   .cerebro-recenter{position:absolute;left:14px;bottom:14px;display:inline-flex;align-items:center;gap:6px;background:rgba(15,15,15,.85);border:1px solid rgba(255,255,255,.08);color:#d4d4d8;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;font-family:inherit;backdrop-filter:blur(8px);transition:background .15s,border-color .15s}
   .cerebro-recenter:hover{background:rgba(20,20,20,.95);border-color:rgba(34,197,94,.3);color:#22c55e}
 
-  .cerebro-panel{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;overflow-y:auto;min-height:520px;display:flex;flex-direction:column}
+  .cerebro-panel{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;overflow-y:auto;min-height:0;display:flex;flex-direction:column}
   .cerebro-paywall{background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.22);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:#fbbf24;display:flex;flex-direction:column;gap:8px}
   .cerebro-paywall p{color:#a1a1aa;line-height:1.5}
   .cerebro-paywall-btn{background:#1a7a4a;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;align-self:flex-start}
@@ -532,8 +545,10 @@ const CEREBRO_FS_CSS = `
   .cerebro-delete-btn-confirm:hover{background:#fca5a5}
 
   @media (max-width:1023px){
-    .cerebro-split{grid-template-columns:1fr;gap:14px}
-    .cerebro-graph,.cerebro-panel{min-height:auto}
-    .cerebro-graph{min-height:380px}
+    /* Stack vertically and return to normal document flow so the body scrolls. */
+    .cerebro-fs{display:block;height:auto}
+    .cerebro-split{flex:initial;min-height:auto;grid-template-columns:1fr;grid-template-rows:none;gap:14px}
+    .cerebro-panel{min-height:auto}
+    .cerebro-graph{height:380px;min-height:380px}
   }
 `
