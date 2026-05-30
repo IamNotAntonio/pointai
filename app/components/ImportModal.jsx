@@ -4,22 +4,33 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
   Upload, FileText, Calendar, X, Loader2, Check, AlertTriangle,
-  ChevronDown, Trash2, FileWarning,
+  ChevronDown, Trash2, FileWarning, Plus, HelpCircle,
+  Image as ImageIcon, FileText as FileTextIcon,
 } from 'lucide-react'
 import * as db from '../lib/db'
 
 const EASE = [0.22, 1, 0.36, 1]
+const MAX_STAGED = 10
+const MAX_BYTES = 5 * 1024 * 1024
 
 const ERROS = {
-  'too-large': 'Arquivo muito grande. Tente um PDF menor ou exporte apenas as páginas do boletim.',
-  'no-text': 'Não conseguimos ler texto neste PDF. Ele pode ser uma imagem escaneada — exporte um PDF original do portal.',
-  'pdf-read-failed': 'Não conseguimos ler este PDF. Tente exportar um PDF original do portal.',
-  'parse-failed': 'Não conseguimos extrair os dados automaticamente. Você pode tentar outro arquivo ou inserir manualmente.',
-  'ai-failed': 'Não conseguimos extrair os dados automaticamente. Você pode tentar outro arquivo ou inserir manualmente.',
+  'too-large': 'Cada arquivo precisa ter no máximo 5 MB. Tente recortar o print ou reduzir o PDF.',
+  'too-many': 'Máximo de 10 arquivos por importação. Divida em importações menores.',
+  'bad-type': 'Tipo de arquivo não suportado. Envie imagens (PNG/JPG/WEBP) ou PDF.',
+  'no-grades': 'Não encontramos notas nestas imagens. Confira se a tela de notas está visível no print, ou tente um print mais nítido.',
+  'parse-failed': 'Não conseguimos extrair os dados automaticamente. Tente prints mais nítidos ou divida em partes menores.',
+  'ai-failed': 'Não conseguimos extrair os dados automaticamente. Tente outros arquivos ou insira manualmente.',
   'ics-invalid': 'Arquivo .ics inválido. Confira se baixou o arquivo correto do portal.',
   'ics-empty': 'Não encontramos eventos neste arquivo .ics.',
   'no-file': 'Nenhum arquivo selecionado.',
   'network': 'Falha de conexão. Tente novamente.',
+}
+
+const ACCEPT_BOLETIM = 'image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf'
+function validBoletimFile(f) {
+  const t = (f.type || '').toLowerCase()
+  if (t.startsWith('image/') || t === 'application/pdf') return true
+  return /\.(png|jpe?g|webp|gif|pdf)$/i.test(f.name || '')
 }
 
 const TIPO_EVENTO = {
@@ -47,10 +58,14 @@ function formatData(d) {
 export default function ImportModal({ open, onClose, context = 'all' }) {
   const reduce = useReducedMotion()
   const [mounted, setMounted] = useState(false)
-  const [step, setStep] = useState('pick')        // pick | processing | preview | error | success
+  const [step, setStep] = useState('pick')        // pick | staging | processing | preview | error | success
   const [mode, setMode] = useState(null)          // boletim | calendario
   const [errorCode, setErrorCode] = useState(null)
   const [live, setLive] = useState('')
+
+  // Boletim only: files staged before sending (thumbnail list).
+  const [staged, setStaged] = useState([])        // [{ id, file, url? }]
+  const [helpOpen, setHelpOpen] = useState(false)
 
   // boletim preview state
   const [materias, setMaterias] = useState([])
@@ -65,22 +80,25 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
   const [saving, setSaving] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
 
-  const pdfInputRef = useRef(null)
+  const boletimInputRef = useRef(null)
   const icsInputRef = useRef(null)
   const modalRef = useRef(null)
   const triggerRef = useRef(null)
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Reset to a clean state each time the modal opens; restore focus on close.
+  // Reset to a clean state each time the modal opens; revoke URLs & restore focus on close.
   useEffect(() => {
     if (open) {
       triggerRef.current = typeof document !== 'undefined' ? document.activeElement : null
       setStep('pick'); setMode(null); setErrorCode(null)
       setMaterias([]); setResolucao({}); setExpanded({}); setExistingNotas({})
       setEventos([]); setExistingEventos([]); setSaving(false); setSuccessMsg(''); setLive('')
-    } else if (triggerRef.current?.focus) {
-      triggerRef.current.focus()
+      setStaged(prev => { prev.forEach(s => s.url && URL.revokeObjectURL(s.url)); return [] })
+      setHelpOpen(false)
+    } else {
+      setStaged(prev => { prev.forEach(s => s.url && URL.revokeObjectURL(s.url)); return [] })
+      triggerRef.current?.focus?.()
     }
   }, [open])
 
@@ -93,20 +111,51 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
     return () => { clearTimeout(t); window.removeEventListener('keydown', onKey) }
   }, [open, onClose])
 
-  // ── Upload ────────────────────────────────────────────────────
-  const enviarArquivo = useCallback(async (file, kind) => {
-    if (!file) return
-    setMode(kind)
+  // ── Staging (boletim, multi-file) ─────────────────────────────
+  const adicionarBoletimArquivos = useCallback((arquivos) => {
+    const validos = []
+    let rejeitouTipo = false, rejeitouTamanho = false
+    for (const f of arquivos) {
+      if (!validBoletimFile(f)) { rejeitouTipo = true; continue }
+      if (f.size > MAX_BYTES)   { rejeitouTamanho = true; continue }
+      validos.push(f)
+    }
+    setStaged(prev => {
+      const room = Math.max(0, MAX_STAGED - prev.length)
+      const adicionados = validos.slice(0, room).map(f => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file: f,
+        url: f.type?.startsWith('image/') ? URL.createObjectURL(f) : null,
+      }))
+      return [...prev, ...adicionados]
+    })
+    setMode('boletim')
+    setStep('staging')
+    if (rejeitouTamanho) { setErrorCode('too-large'); setStep('error') }
+    else if (rejeitouTipo && validos.length === 0) { setErrorCode('bad-type'); setStep('error') }
+  }, [])
+
+  const removerStaged = useCallback((id) => {
+    setStaged(prev => {
+      const idx = prev.findIndex(s => s.id === id)
+      if (idx < 0) return prev
+      if (prev[idx].url) URL.revokeObjectURL(prev[idx].url)
+      return prev.filter(s => s.id !== id)
+    })
+  }, [])
+
+  // ── Send (boletim N files / calendario 1 file) ────────────────
+  const analisarBoletim = useCallback(async () => {
+    if (staged.length === 0) return
     setStep('processing')
-    setLive(kind === 'boletim' ? 'Analisando o boletim' : 'Lendo o calendário')
+    setLive(`Analisando ${staged.length} ${staged.length === 1 ? 'arquivo' : 'arquivos'}`)
 
     const fd = new FormData()
-    fd.append('file', file)
-    const endpoint = kind === 'boletim' ? '/api/importar/boletim' : '/api/importar/calendario'
+    staged.forEach(s => fd.append('file', s.file))
 
     let data
     try {
-      const resp = await fetch(endpoint, { method: 'POST', body: fd })
+      const resp = await fetch('/api/importar/boletim', { method: 'POST', body: fd })
       data = await resp.json().catch(() => ({ error: 'parse-failed' }))
       if (!resp.ok || data?.error) {
         setErrorCode(data?.error || 'network'); setStep('error'); setLive('Erro ao importar')
@@ -117,32 +166,58 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
       return
     }
 
-    if (kind === 'boletim') {
-      const existing = (await db.getNotas().catch(() => null)) || {}
-      setExistingNotas(existing)
-      const res = {}
-      ;(data.materias || []).forEach(m => {
-        const key = matchExistingKey(existing, m.nome)
-        if (key && temNotas(existing[key])) res[m.nome] = 'manter'
-      })
-      setResolucao(res)
-      setMaterias((data.materias || []).map(m => ({ ...m, _removed: false })))
-    } else {
-      const existing = (await db.getEventos().catch(() => [])) || []
-      setExistingEventos(existing)
-      setEventos((data.eventos || []).map(ev => {
-        const conflito = existing.some(e => e.data === ev.data && normalize(e.titulo) === normalize(ev.titulo))
-        return { ...ev, include: !conflito, conflito }
-      }))
+    const existing = (await db.getNotas().catch(() => null)) || {}
+    setExistingNotas(existing)
+    const res = {}
+    ;(data.materias || []).forEach(m => {
+      const key = matchExistingKey(existing, m.nome)
+      if (key && temNotas(existing[key])) res[m.nome] = 'manter'
+    })
+    setResolucao(res)
+    setMaterias((data.materias || []).map(m => ({ ...m, _removed: false })))
+    setStep('preview')
+    setLive('Pronto para revisar')
+  }, [staged])
+
+  const enviarCalendario = useCallback(async (file) => {
+    if (!file) return
+    setMode('calendario')
+    setStep('processing')
+    setLive('Lendo o calendário')
+
+    const fd = new FormData()
+    fd.append('file', file)
+    let data
+    try {
+      const resp = await fetch('/api/importar/calendario', { method: 'POST', body: fd })
+      data = await resp.json().catch(() => ({ error: 'parse-failed' }))
+      if (!resp.ok || data?.error) {
+        setErrorCode(data?.error || 'network'); setStep('error'); setLive('Erro ao importar')
+        return
+      }
+    } catch {
+      setErrorCode('network'); setStep('error'); setLive('Erro de conexão')
+      return
     }
+    const existing = (await db.getEventos().catch(() => [])) || []
+    setExistingEventos(existing)
+    setEventos((data.eventos || []).map(ev => {
+      const conflito = existing.some(e => e.data === ev.data && normalize(e.titulo) === normalize(ev.titulo))
+      return { ...ev, include: !conflito, conflito }
+    }))
     setStep('preview')
     setLive('Pronto para revisar')
   }, [])
 
-  function onPick(e, kind) {
+  function onPickBoletim(e) {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (files.length) adicionarBoletimArquivos(files)
+  }
+  function onPickCalendario(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (file) enviarArquivo(file, kind)
+    if (file) enviarCalendario(file)
   }
 
   // ── Save ──────────────────────────────────────────────────────
@@ -260,8 +335,8 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
               <X size={18} strokeWidth={2} />
             </button>
 
-            <input ref={pdfInputRef} type="file" accept="application/pdf" hidden onChange={(e) => onPick(e, 'boletim')} />
-            <input ref={icsInputRef} type="file" accept="text/calendar,.ics" hidden onChange={(e) => onPick(e, 'calendario')} />
+            <input ref={boletimInputRef} type="file" accept={ACCEPT_BOLETIM} multiple hidden onChange={onPickBoletim} />
+            <input ref={icsInputRef} type="file" accept="text/calendar,.ics" hidden onChange={onPickCalendario} />
 
             <div className="im-sr" aria-live="polite" role="status">{live}</div>
 
@@ -275,13 +350,14 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
                     <UploadCard
                       Icon={FileText}
                       titulo="Boletim acadêmico"
-                      desc="PDF exportado ou impresso do seu portal. Vamos extrair notas e faltas automaticamente."
-                      botao="Escolher PDF"
+                      desc="PDF ou prints da tela de notas. Pode mandar vários prints de uma vez (ex.: uma matéria por tela)."
+                      botao="Escolher arquivos"
                       dim={dimBoletim}
-                      accept="application/pdf"
-                      onChoose={() => pdfInputRef.current?.click()}
-                      onDropFile={(f) => enviarArquivo(f, 'boletim')}
-                      validate={(f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')}
+                      multi
+                      onChoose={() => boletimInputRef.current?.click()}
+                      onDropFiles={(fs) => adicionarBoletimArquivos(fs)}
+                      validate={validBoletimFile}
+                      extra={<ComoFaco open={helpOpen} onToggle={() => setHelpOpen(v => !v)} reduce={reduce} />}
                     />
                   )}
                   {showCalendarioCard && (
@@ -291,9 +367,8 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
                       desc="Arquivo .ics do seu portal acadêmico. Eventos e prazos viram lembretes."
                       botao="Escolher .ics"
                       dim={dimCalendario}
-                      accept="text/calendar,.ics"
                       onChoose={() => icsInputRef.current?.click()}
-                      onDropFile={(f) => enviarArquivo(f, 'calendario')}
+                      onDropFiles={(fs) => fs[0] && enviarCalendario(fs[0])}
                       validate={(f) => f.name.toLowerCase().endsWith('.ics') || f.type === 'text/calendar'}
                     />
                   )}
@@ -301,12 +376,28 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
               </div>
             )}
 
+            {/* ── STAGING (boletim) ── */}
+            {step === 'staging' && mode === 'boletim' && (
+              <StagingPanel
+                staged={staged}
+                onAddMore={() => boletimInputRef.current?.click()}
+                onRemove={removerStaged}
+                onBack={() => { setStep('pick'); setStaged(prev => { prev.forEach(s => s.url && URL.revokeObjectURL(s.url)); return [] }) }}
+                onAnalisar={analisarBoletim}
+                onDropFiles={(fs) => adicionarBoletimArquivos(fs)}
+              />
+            )}
+
             {/* ── PROCESSING ── */}
             {step === 'processing' && (
               <div className="im-state">
                 <Loader2 size={34} className="im-spin" />
-                <p className="im-state-title">{mode === 'boletim' ? 'Analisando o boletim…' : 'Lendo o calendário…'}</p>
-                <p className="im-state-sub">{mode === 'boletim' ? 'A IA está extraindo notas e faltas.' : 'Organizando os eventos.'}</p>
+                <p className="im-state-title">
+                  {mode === 'boletim'
+                    ? `Analisando ${staged.length || 1} ${(staged.length || 1) === 1 ? 'arquivo' : 'arquivos'}…`
+                    : 'Lendo o calendário…'}
+                </p>
+                <p className="im-state-sub">{mode === 'boletim' ? 'A IA está lendo as imagens e consolidando as notas.' : 'Organizando os eventos.'}</p>
               </div>
             )}
 
@@ -316,7 +407,10 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
                 <div className="im-err-ico"><FileWarning size={30} strokeWidth={1.6} /></div>
                 <p className="im-state-title">Algo deu errado</p>
                 <p className="im-state-sub">{ERROS[errorCode] || ERROS.network}</p>
-                <button className="im-btn im-btn-ghost" onClick={() => { setStep('pick'); setErrorCode(null) }}>
+                <button className="im-btn im-btn-ghost" onClick={() => {
+                  setStaged(prev => { prev.forEach(s => s.url && URL.revokeObjectURL(s.url)); return [] })
+                  setStep('pick'); setErrorCode(null)
+                }}>
                   Tentar outro arquivo
                 </button>
               </div>
@@ -402,7 +496,7 @@ function matchExistingKey(existing, nome) {
 }
 
 /* ── Upload card with drag & drop ────────────────────────────── */
-function UploadCard({ Icon, titulo, desc, botao, dim, onChoose, onDropFile, validate }) {
+function UploadCard({ Icon, titulo, desc, botao, dim, multi, onChoose, onDropFiles, validate, extra }) {
   const [drag, setDrag] = useState(false)
   return (
     <div className={`im-card${dim ? ' im-card-dim' : ''}${drag ? ' im-card-drag' : ''}`}
@@ -410,19 +504,109 @@ function UploadCard({ Icon, titulo, desc, botao, dim, onChoose, onDropFile, vali
       onDragLeave={() => setDrag(false)}
       onDrop={(e) => {
         e.preventDefault(); setDrag(false)
-        const f = e.dataTransfer.files?.[0]
-        if (f && (!validate || validate(f))) onDropFile(f)
+        const arr = Array.from(e.dataTransfer.files || [])
+        const ok = arr.filter(f => !validate || validate(f))
+        if (ok.length) onDropFiles(multi ? ok : [ok[0]])
       }}
     >
       <div className="im-card-ico"><Icon size={22} strokeWidth={1.7} /></div>
       <p className="im-card-title">{titulo}</p>
       <p className="im-card-desc">{desc}</p>
       <div className="im-drop">
-        <span className="im-drop-hint">Arraste o arquivo aqui ou</span>
+        <span className="im-drop-hint">{multi ? 'Arraste os arquivos aqui ou' : 'Arraste o arquivo aqui ou'}</span>
         <button className="im-btn im-btn-soft" onClick={onChoose}>{botao}</button>
+      </div>
+      {extra}
+    </div>
+  )
+}
+
+/* ── "Como faço?" help (expandable) ──────────────────────────── */
+function ComoFaco({ open, onToggle, reduce }) {
+  return (
+    <div className="im-help">
+      <button type="button" className="im-help-toggle" onClick={onToggle} aria-expanded={open}>
+        <HelpCircle size={12} strokeWidth={2} /> Como faço?
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className="im-help-panel"
+            initial={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            style={{ overflow: 'hidden' }}
+          >
+            <ol className="im-help-list">
+              <li>Abra a tela de notas no seu portal (Canvas, TOTVS, SIGA…).</li>
+              <li>Tire um print: <strong>Cmd+Shift+4</strong> (Mac), <strong>Win+Shift+S</strong> (Windows), ou o botão de captura do celular.</li>
+              <li>Se as notas estão em telas separadas (uma por matéria), tire um print de cada e mande todos juntos.</li>
+              <li>Suba aqui — a gente lê e organiza tudo.</li>
+            </ol>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+/* ── Staged-files panel (boletim only) ───────────────────────── */
+function StagingPanel({ staged, onAddMore, onRemove, onBack, onAnalisar, onDropFiles }) {
+  const [drag, setDrag] = useState(false)
+  return (
+    <div className="im-staging">
+      <div className="im-preview-head">
+        <h2 className="im-title">Arquivos para analisar</h2>
+        <p className="im-sub">
+          {staged.length} {staged.length === 1 ? 'arquivo' : 'arquivos'} · máximo 10. Adicione mais prints ou clique em Analisar.
+        </p>
+      </div>
+      <div className={`im-stage-list${drag ? ' im-stage-list-drag' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => {
+          e.preventDefault(); setDrag(false)
+          const arr = Array.from(e.dataTransfer.files || []).filter(validBoletimFile)
+          if (arr.length) onDropFiles(arr)
+        }}
+      >
+        {staged.map(s => (
+          <div className="im-stage-row" key={s.id}>
+            <div className="im-stage-thumb">
+              {s.url
+                ? <img src={s.url} alt="" />
+                : <FileTextIcon size={20} strokeWidth={1.6} />}
+            </div>
+            <div className="im-stage-meta">
+              <span className="im-stage-name" title={s.file.name}>{s.file.name}</span>
+              <span className="im-stage-size">{fmtBytes(s.file.size)}</span>
+            </div>
+            <button className="im-stage-x" onClick={() => onRemove(s.id)} aria-label={`Remover ${s.file.name}`}>
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
+        ))}
+        {staged.length < MAX_STAGED && (
+          <button className="im-stage-add" onClick={onAddMore}>
+            <Plus size={14} strokeWidth={2} /> Adicionar mais
+          </button>
+        )}
+      </div>
+      <div className="im-footer">
+        <button className="im-btn im-btn-ghost" onClick={onBack}>Voltar</button>
+        <button className="im-btn im-btn-primary" onClick={onAnalisar} disabled={staged.length === 0}>
+          Analisar {staged.length} {staged.length === 1 ? 'arquivo' : 'arquivos'}
+        </button>
       </div>
     </div>
   )
+}
+
+function fmtBytes(b) {
+  if (b < 1024) return `${b} B`
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`
+  return `${(b / 1024 / 1024).toFixed(1)} MB`
 }
 
 /* ── Matéria card (boletim preview) ──────────────────────────── */
@@ -524,6 +708,29 @@ const IM_CSS = `
   .im-drop{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
   .im-drop-hint{font-size:11.5px;color:#52525b}
 
+  /* ── "Como faço?" help ── */
+  .im-help{margin-top:14px}
+  .im-help-toggle{display:inline-flex;align-items:center;gap:5px;font-family:inherit;font-size:11.5px;font-weight:600;color:#71717a;background:none;border:none;cursor:pointer;padding:0;transition:color .15s}
+  .im-help-toggle:hover{color:#22c55e}
+  .im-help-panel{margin-top:8px}
+  .im-help-list{margin:0;padding-left:18px;font-size:11.5px;color:#a1a1aa;line-height:1.55;display:flex;flex-direction:column;gap:5px}
+  .im-help-list strong{color:#e4e4e7;font-weight:700}
+
+  /* ── Staging list ── */
+  .im-staging{display:flex;flex-direction:column;min-height:0;max-height:88vh}
+  .im-stage-list{flex:1;overflow-y:auto;padding:0 28px 4px;display:flex;flex-direction:column;gap:8px;border-radius:0;transition:background .15s}
+  .im-stage-list-drag{background:rgba(34,197,94,.05)}
+  .im-stage-row{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:8px 10px}
+  .im-stage-thumb{width:44px;height:44px;border-radius:8px;background:#0d0d0d;border:1px solid rgba(255,255,255,.06);display:inline-flex;align-items:center;justify-content:center;color:#71717a;flex-shrink:0;overflow:hidden}
+  .im-stage-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .im-stage-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .im-stage-name{font-size:13px;color:#e4e4e7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .im-stage-size{font-size:11px;color:#71717a}
+  .im-stage-x{background:none;border:none;color:#71717a;cursor:pointer;padding:6px;border-radius:7px;display:inline-flex;transition:color .15s,background .15s}
+  .im-stage-x:hover{color:#f87171;background:rgba(248,113,113,.08)}
+  .im-stage-add{display:inline-flex;align-items:center;gap:6px;background:none;border:1px dashed rgba(255,255,255,.14);color:#a1a1aa;border-radius:11px;padding:10px 14px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;align-self:flex-start;transition:border-color .15s,color .15s,background .15s}
+  .im-stage-add:hover{border-color:rgba(34,197,94,.4);color:#86efac;background:rgba(34,197,94,.05)}
+
   .im-btn{font-family:inherit;font-size:13px;font-weight:600;border-radius:10px;cursor:pointer;border:none;transition:background .15s,color .15s,border-color .15s,opacity .15s;padding:9px 16px}
   .im-btn-soft{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#86efac}
   .im-btn-soft:hover{background:rgba(34,197,94,.2)}
@@ -593,5 +800,8 @@ const IM_CSS = `
     .im-aval-row{grid-template-columns:1fr 48px 48px;gap:5px}
     .im-aval-row .im-inp[type="date"]{grid-column:1 / -1}
     .im-aval-head{display:none}
+    .im-stage-list{padding:0 14px 4px}
+    .im-footer{padding:14px 16px}
+    .im-preview-head{padding:18px 16px 10px}
   }
 `
