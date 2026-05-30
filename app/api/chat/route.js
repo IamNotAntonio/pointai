@@ -1,12 +1,29 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { requireUser } from '../../lib/supabase-server'
 
 const cliente = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 })
 
+const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
+
 export async function POST(req) {
+  // SECURITY: perfil is loaded SERVER-SIDE from the authenticated session,
+  // never from the request body. A stale/forged body.perfil could otherwise
+  // leak another user's curso/matérias/objetivo into the system prompt
+  // (confirmed cross-account leak fixed in this commit).
+  const { supabase, user } = await requireUser()
+  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+
+  const { data: perfilDb } = await supabase
+    .from('perfis')
+    .select('nome,curso,universidade,semestre,materias,objetivo')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const perfil = perfilDb || EMPTY_PERFIL
+
   const {
-    mensagens, perfil, materia, topico,
+    mensagens, materia, topico,
     imagemBase64, imagemTipo, resumo,
     historicoMaterias,
   } = await req.json()

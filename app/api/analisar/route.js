@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { requireUser } from '../../lib/supabase-server'
 
 const cliente = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
 
 const TIPO_LABEL = {
   Prova:    'prova/avaliação',
@@ -10,7 +13,17 @@ const TIPO_LABEL = {
 }
 
 export async function POST(req) {
-  const { tipo, texto, imagemBase64, imagemTipo, materia, perfil } = await req.json()
+  // SECURITY: perfil from authenticated session — never trust body.perfil.
+  const { supabase, user } = await requireUser()
+  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const { data: perfilDb } = await supabase
+    .from('perfis')
+    .select('nome,curso,universidade,semestre,materias,objetivo')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const perfil = perfilDb || EMPTY_PERFIL
+
+  const { tipo, texto, imagemBase64, imagemTipo, materia } = await req.json()
 
   const tipoLabel = TIPO_LABEL[tipo] || tipo
 

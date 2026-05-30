@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { requireUser } from '../../lib/supabase-server';
 
 const anthropic = new Anthropic();
+
+const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
 
 function extractJSON(text) {
   let cleaned = text.replace(/```json[\s\S]*?```/g, (match) => {
@@ -17,7 +20,17 @@ function extractJSON(text) {
 
 export async function POST(request) {
   try {
-    const { perfil, materia, dificuldade, numQuestoes } = await request.json();
+    // SECURITY: perfil from authenticated session — never trust body.perfil.
+    const { supabase, user } = await requireUser()
+    if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+    const { data: perfilDb } = await supabase
+      .from('perfis')
+      .select('nome,curso,universidade,semestre,materias,objetivo')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const perfil = perfilDb || EMPTY_PERFIL
+
+    const { materia, dificuldade, numQuestoes } = await request.json();
 
     const nivelDescricao = {
       facil: 'fácil — foque em conceitos básicos e definições fundamentais',

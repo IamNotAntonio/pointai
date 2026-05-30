@@ -1,9 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { requireUser } from '../../lib/supabase-server'
 
 const cliente = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
+
 export async function POST(req) {
-  const { perfil, notas, eventos } = await req.json()
+  // SECURITY: perfil + notas + eventos from authenticated session — never trust the body.
+  const { supabase, user } = await requireUser()
+  if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+  const [perfilRes, notasRes, eventosRes] = await Promise.all([
+    supabase.from('perfis').select('nome,curso,universidade,semestre,materias,objetivo').eq('user_id', user.id).maybeSingle(),
+    supabase.from('notas').select('dados').eq('user_id', user.id).maybeSingle(),
+    supabase.from('eventos').select('id,titulo,data,tipo,materia').eq('user_id', user.id).order('data', { ascending: true }),
+  ])
+  const perfil = perfilRes.data || EMPTY_PERFIL
+  const notas = notasRes.data?.dados || {}
+  const eventos = eventosRes.data || []
+
+  // Body kept for forward-compat (currently no fields besides perfil/notas/eventos).
+  await req.json().catch(() => null)
 
   const notasStr = notas
     ? Object.entries(notas).map(([mat, d]) => {

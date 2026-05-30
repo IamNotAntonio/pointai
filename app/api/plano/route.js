@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { requireUser } from '../../lib/supabase-server';
 
 const anthropic = new Anthropic();
+
+const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
 
 function extractJSON(text) {
   let cleaned = text.replace(/```json[\s\S]*?```/g, (match) => {
@@ -17,7 +20,19 @@ function extractJSON(text) {
 
 export async function POST(request) {
   try {
-    const { perfil, notas, eventos, historicoChat, ehPro } = await request.json();
+    // SECURITY: perfil + notas + eventos from authenticated session — never trust the body.
+    const { supabase, user } = await requireUser()
+    if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+    const [perfilRes, notasRes, eventosRes] = await Promise.all([
+      supabase.from('perfis').select('nome,curso,universidade,semestre,materias,objetivo').eq('user_id', user.id).maybeSingle(),
+      supabase.from('notas').select('dados').eq('user_id', user.id).maybeSingle(),
+      supabase.from('eventos').select('id,titulo,data,tipo,materia').eq('user_id', user.id).order('data', { ascending: true }),
+    ])
+    const perfil = perfilRes.data || EMPTY_PERFIL
+    const notas = notasRes.data?.dados || {}
+    const eventos = eventosRes.data || []
+
+    const { historicoChat, ehPro } = await request.json();
 
     const dataAtual = new Date().toLocaleDateString('pt-BR', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',

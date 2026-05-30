@@ -1,6 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { requireUser } from '../../lib/supabase-server'
 
 const cliente = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
 
 const PROMPT_NOTAS = (materias) => `Você é um sistema de extração de dados acadêmicos. Analise o conteúdo fornecido (imagem ou texto de um portal universitário) e extraia as informações de notas e frequência.
 
@@ -49,7 +52,17 @@ Tipos válidos: "prova", "trabalho", "apresentacao", "outro"
 
 export async function POST(req) {
   try {
-    const { imagemBase64, imagemTipo, texto, tipo, perfil } = await req.json()
+    // SECURITY: perfil from authenticated session — never trust body.perfil.
+    const { supabase, user } = await requireUser()
+    if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+    const { data: perfilDb } = await supabase
+      .from('perfis')
+      .select('nome,curso,universidade,semestre,materias,objetivo')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const perfil = perfilDb || EMPTY_PERFIL
+
+    const { imagemBase64, imagemTipo, texto, tipo } = await req.json()
 
     if (!imagemBase64 && !texto?.trim()) {
       return Response.json({ erro: 'Envie uma imagem ou cole um texto para importar.' }, { status: 400 })
