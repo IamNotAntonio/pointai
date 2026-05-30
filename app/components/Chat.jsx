@@ -247,7 +247,10 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
       const resp = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagens: novas, perfil, materia: chatKey }),
+        // body.perfil intentionally omitted — the server loads it from the
+        // authenticated session (Supabase auth.getUser). Sending it from the
+        // client would be ignored anyway and risks confusing future readers.
+        body: JSON.stringify({ mensagens: novas, materia: chatKey }),
       })
       if (!resp.ok || !resp.body) throw new Error('stream failed')
 

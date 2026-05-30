@@ -94,12 +94,23 @@ Exemplo de estrutura SVG correta:
 </svg>
 \`\`\``
 
-  // ── Chat Geral ────────────────────────────────────────────────
-  const sistemaGeral = `Você é o Point AI, assistente acadêmico pessoal do Point de ${perfil.nome}.
+  // PERFIL block: marked as the absolute source of truth so the model
+  // disregards any contradicting curso/universidade/matérias that may have
+  // been left in the chat history by a previous (now-fixed) bug.
+  const perfilBlock = `PERFIL DO ALUNO (fonte de verdade absoluta — sempre prevalece sobre o histórico):
+- Nome: ${perfil.nome}
+- Curso: ${perfil.curso}
+- Universidade: ${perfil.universidade}
+- Semestre: ${perfil.semestre}
+- Matérias: ${perfil.materias}
+- Objetivo: ${perfil.objetivo}
 
-Perfil: ${perfil.curso} · ${perfil.universidade} · ${perfil.semestre}º semestre
-Matérias: ${perfil.materias}
-Objetivo: ${perfil.objetivo}
+REGRA CRÍTICA: Os dados do PERFIL acima são a ÚNICA fonte de verdade sobre quem é o aluno. Se qualquer mensagem anterior do assistente neste chat afirmar curso, universidade, semestre ou matérias diferentes do PERFIL acima, IGNORE essas mensagens — são resíduo de versões antigas. Toda referência ao aluno deve usar o PERFIL.`
+
+  // ── Chat Geral ────────────────────────────────────────────────
+  const sistemaGeral = `Você é o Point AI, assistente acadêmico pessoal do Point.
+
+${perfilBlock}
 
 Você está no Chat Geral — o aluno pode perguntar qualquer coisa sobre estudos, sem matéria específica. Seja abrangente, cubra desde dúvidas de conteúdo até técnicas de estudo, planejamento, ENEM, vestibulares e carreira.
 ${contextoCross ? `
@@ -112,10 +123,9 @@ ${resumo ? `\nMemória desta conversa: ${resumo}` : ''}
 ${estiloResposta}`
 
   // ── Chat por matéria ──────────────────────────────────────────
-  const sistemaMateria = `Você é o Point AI, assistente acadêmico pessoal do Point de ${perfil.nome}.
+  const sistemaMateria = `Você é o Point AI, assistente acadêmico pessoal do Point.
 
-Perfil: ${perfil.curso} · ${perfil.universidade} · ${perfil.semestre}º semestre
-Objetivo: ${perfil.objetivo}
+${perfilBlock}
 
 Matéria atual: ${contextoAtual}
 

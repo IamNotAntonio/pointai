@@ -25,13 +25,18 @@ export function getUserId() {
   return id
 }
 
-// Returns the authenticated user's ID; falls back to the local UUID
+// SECURITY: returns the authenticated user's ID, or null. The previous
+// fallback to a legacy localStorage UUID (`pointai_user_id`) was removed
+// because it could resolve to a stale id from a prior browser session and
+// quietly read another account's rows when auth.getUser() returned null.
+// Callers tolerate null: the Supabase query then yields no row and the read
+// falls back to localStorage scoped to this browser.
 async function resolveUserId() {
   try {
     const { data: { user } } = await getClient().auth.getUser()
     if (user?.id) return user.id
   } catch {}
-  return getUserId()
+  return null
 }
 
 // ── Auth helpers ───────────────────────────────────────────────
