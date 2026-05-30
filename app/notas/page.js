@@ -45,11 +45,25 @@ export default function Notas() {
     setTimeout(() => setToast(null), 3500)
   }
 
-  // Reload grades after a boletim import (from this page or the global TopBar).
+  // Reload grades + matérias after a boletim import (from this page or the
+  // global TopBar). Reads localStorage directly — saveNotas/savePerfil write
+  // there synchronously, so this avoids any Supabase round-trip race that
+  // could overwrite the fresh data with the previous row.
   useEffect(() => {
     function onImport(e) {
       if (e.detail?.kind !== 'notas') return
-      db.getNotas().then(d => { if (d) setDados(d) }).catch(() => {})
+      try {
+        const d = JSON.parse(localStorage.getItem('pointai_notas') || 'null')
+        if (d && typeof d === 'object') setDados(d)
+        const p = JSON.parse(localStorage.getItem('pointai_perfil') || 'null')
+        if (p?.materias) {
+          const lista = p.materias.split(',').map(s => s.trim()).filter(Boolean)
+          setMaterias(lista)
+        }
+        mostrarToast('✓ Notas importadas')
+      } catch (err) {
+        console.error('[notas] reload after import failed', err)
+      }
     }
     window.addEventListener('pointai-import-done', onImport)
     return () => window.removeEventListener('pointai-import-done', onImport)

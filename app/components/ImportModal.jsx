@@ -8,6 +8,7 @@ import {
   Image as ImageIcon, FileText as FileTextIcon,
 } from 'lucide-react'
 import * as db from '../lib/db'
+import { useProfile } from '../lib/ProfileContext'
 
 const EASE = [0.22, 1, 0.36, 1]
 const MAX_STAGED = 10
@@ -43,6 +44,42 @@ function normalize(s) {
   return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 }
 
+// Tokens used for fuzzy matching ("Banco de Dados" vs "Banco de Dados e SQL",
+// "Cálculo" vs "Cálculo Diferencial e Integral I"). Stopwords stripped so e.g.
+// "Cálculo I" and "Física I" don't false-match on the "I".
+const STOPWORDS = new Set(['de','da','do','das','dos','e','ou','com','em','a','o','i','ii','iii','iv','v','vi'])
+function tokens(s) {
+  return normalize(s).split(/\s+/).filter(t => t && !STOPWORDS.has(t))
+}
+
+function bestMatch(impName, cadastradas) {
+  if (!impName || !cadastradas?.length) return null
+  const n = normalize(impName)
+  const impTokens = tokens(impName)
+  let best = null
+  for (const cad of cadastradas) {
+    const c = normalize(cad)
+    if (c === n) return { nome: cad, confianca: 'alta', score: 1 }
+    if (c.includes(n) || n.includes(c)) {
+      if (!best || best.score < 0.95) best = { nome: cad, confianca: 'alta', score: 0.95 }
+      continue
+    }
+    const cadTokens = tokens(cad)
+    if (impTokens.length === 0 || cadTokens.length === 0) continue
+    const shorter = impTokens.length <= cadTokens.length ? impTokens : cadTokens
+    const longer  = shorter === impTokens ? cadTokens : impTokens
+    const longerSet = new Set(longer)
+    const common = shorter.filter(t => longerSet.has(t)).length
+    const ratio  = common / shorter.length
+    if (ratio >= 1) {
+      if (!best || best.score < 0.9) best = { nome: cad, confianca: 'alta', score: 0.9 }
+    } else if (ratio >= 0.6) {
+      if (!best || best.score < ratio) best = { nome: cad, confianca: 'media', score: ratio }
+    }
+  }
+  return best
+}
+
 function formatData(d) {
   if (!d) return ''
   try {
@@ -57,6 +94,7 @@ function formatData(d) {
  */
 export default function ImportModal({ open, onClose, context = 'all' }) {
   const reduce = useReducedMotion()
+  const { perfil, updatePerfil } = useProfile()
   const [mounted, setMounted] = useState(false)
   const [step, setStep] = useState('pick')        // pick | staging | processing | preview | error | success
   const [mode, setMode] = useState(null)          // boletim | calendario
@@ -72,6 +110,9 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
   const [resolucao, setResolucao] = useState({})  // chave -> manter|substituir|adicionar
   const [expanded, setExpanded] = useState({})
   const [existingNotas, setExistingNotas] = useState({})
+  const [vinculos, setVinculos] = useState({})    // impNome -> targetMateria | '__new__'
+  const [autoMatches, setAutoMatches] = useState({}) // impNome -> {nome, confianca} | null
+  const [cadastradas, setCadastradas] = useState([])
 
   // calendario preview state
   const [eventos, setEventos] = useState([])      // [{...ev, include}]
@@ -93,6 +134,7 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
       triggerRef.current = typeof document !== 'undefined' ? document.activeElement : null
       setStep('pick'); setMode(null); setErrorCode(null)
       setMaterias([]); setResolucao({}); setExpanded({}); setExistingNotas({})
+      setVinculos({}); setAutoMatches({}); setCadastradas([])
       setEventos([]); setExistingEventos([]); setSaving(false); setSuccessMsg(''); setLive('')
       setStaged(prev => { prev.forEach(s => s.url && URL.revokeObjectURL(s.url)); return [] })
       setHelpOpen(false)
@@ -168,16 +210,38 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
 
     const existing = (await db.getNotas().catch(() => null)) || {}
     setExistingNotas(existing)
+
+    // Authoritative list of cadastradas matérias = perfil.materias (+ qualquer
+    // chave de existingNotas que não esteja no perfil, por segurança).
+    const fromPerfil = (perfil?.materias || '').split(',').map(s => s.trim()).filter(Boolean)
+    const fromNotas = Object.keys(existing)
+    const cadSet = new Map()
+    for (const m of fromPerfil) cadSet.set(normalize(m), m)
+    for (const m of fromNotas) if (!cadSet.has(normalize(m))) cadSet.set(normalize(m), m)
+    const cad = [...cadSet.values()]
+    setCadastradas(cad)
+
+    const vincIniciais = {}
+    const autosIniciais = {}
     const res = {}
     ;(data.materias || []).forEach(m => {
-      const key = matchExistingKey(existing, m.nome)
-      if (key && temNotas(existing[key])) res[m.nome] = 'manter'
+      const bm = bestMatch(m.nome, cad)
+      autosIniciais[m.nome] = bm
+      // Pre-link when we have any plausible match (alta OR media). User can
+      // always override in the preview — saves a click when we're right.
+      const target = bm ? bm.nome : '__new__'
+      vincIniciais[m.nome] = target
+      if (target !== '__new__' && existing[target] && temNotas(existing[target])) {
+        res[m.nome] = 'manter'
+      }
     })
+    setVinculos(vincIniciais)
+    setAutoMatches(autosIniciais)
     setResolucao(res)
     setMaterias((data.materias || []).map(m => ({ ...m, _removed: false })))
     setStep('preview')
     setLive('Pronto para revisar')
-  }, [staged])
+  }, [staged, perfil])
 
   const enviarCalendario = useCallback(async (file) => {
     if (!file) return
@@ -227,11 +291,18 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
     try {
       if (mode === 'boletim') {
         const dados = { ...existingNotas }
+        const novasMaterias = []
         let nNotas = 0, nFaltas = 0
         for (const m of materias) {
           if (m._removed) continue
-          const key = matchExistingKey(existingNotas, m.nome) || m.nome
-          const conflito = !!matchExistingKey(existingNotas, m.nome) && temNotas(existingNotas[matchExistingKey(existingNotas, m.nome)])
+          const targetVal = vinculos[m.nome] || '__new__'
+          const target = targetVal === '__new__' ? m.nome : targetVal
+
+          if (targetVal === '__new__' && !cadastradas.some(c => normalize(c) === normalize(target))) {
+            novasMaterias.push(target)
+          }
+
+          const conflito = !!existingNotas[target] && temNotas(existingNotas[target])
           const res = resolucao[m.nome] || 'manter'
           if (conflito && res === 'manter') continue
 
@@ -241,24 +312,35 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
           const faltas = Number(m.faltas) || 0
 
           if (conflito && res === 'adicionar') {
-            const atual = existingNotas[key] || { notas: [], faltas: 0, totalAulas: 60 }
+            const atual = existingNotas[target] || { notas: [], faltas: 0, totalAulas: 60 }
             const merged = [...(atual.notas || []).filter(Boolean), ...importadas].slice(0, 3)
-            dados[key] = {
+            dados[target] = {
               notas: [...merged, '', '', ''].slice(0, 3),
               faltas: atual.faltas || faltas,
               totalAulas: atual.totalAulas || 60,
             }
           } else {
-            dados[key] = {
+            dados[target] = {
               notas: [...importadas, '', '', ''].slice(0, 3),
               faltas,
-              totalAulas: existingNotas[key]?.totalAulas || 60,
+              totalAulas: existingNotas[target]?.totalAulas || 60,
             }
           }
           nNotas += importadas.length
           nFaltas += faltas
         }
         await db.saveNotas(dados)
+
+        // Sync new matérias into perfil so they show up in /notas and the sidebar.
+        if (novasMaterias.length > 0 && perfil) {
+          const atual = (perfil.materias || '').split(',').map(s => s.trim()).filter(Boolean)
+          const merged = [...atual]
+          for (const nm of novasMaterias) {
+            if (!merged.some(m => normalize(m) === normalize(nm))) merged.push(nm)
+          }
+          try { updatePerfil({ materias: merged.join(', ') }) } catch (e) { console.error('[import] failed to sync perfil', e) }
+        }
+
         try { window.dispatchEvent(new CustomEvent('pointai-import-done', { detail: { kind: 'notas' } })) } catch {}
         setSuccessMsg(`${nNotas} ${nNotas === 1 ? 'nota' : 'notas'} e ${nFaltas} ${nFaltas === 1 ? 'falta' : 'faltas'} importadas`)
       } else {
@@ -272,7 +354,8 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
       setStep('success')
       setLive('Importado com sucesso')
       setTimeout(() => onClose?.(), 1600)
-    } catch {
+    } catch (e) {
+      console.error('[import] failed to save', e)
       setErrorCode('network'); setStep('error')
     }
     setSaving(false)
@@ -290,13 +373,14 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
     if (mode === 'boletim') {
       return materias.filter(m => {
         if (m._removed) return false
-        const key = matchExistingKey(existingNotas, m.nome)
-        const conflito = key && temNotas(existingNotas[key])
+        const targetVal = vinculos[m.nome] || '__new__'
+        const target = targetVal === '__new__' ? m.nome : targetVal
+        const conflito = !!existingNotas[target] && temNotas(existingNotas[target])
         return !(conflito && (resolucao[m.nome] || 'manter') === 'manter')
       }).length
     }
     return eventos.filter(e => e.include).length
-  }, [mode, materias, eventos, resolucao, existingNotas])
+  }, [mode, materias, eventos, resolucao, existingNotas, vinculos])
 
   if (!mounted) return null
 
@@ -448,6 +532,9 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
                         <MateriaCard
                           key={i} idx={i} materia={m}
                           existing={existingNotas}
+                          cadastradas={cadastradas}
+                          vinculo={vinculos[m.nome] || '__new__'}
+                          autoMatch={autoMatches[m.nome]}
                           expanded={!!expanded[i]}
                           resolucao={resolucao[m.nome] || 'manter'}
                           onToggle={() => setExpanded(s => ({ ...s, [i]: !s[i] }))}
@@ -458,6 +545,7 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
                             ? { ...x, avaliacoes: x.avaliacoes.filter((_, ai) => ai !== k) } : x))}
                           onRemove={() => setMaterias(ms => ms.map((x, j) => j === i ? { ...x, _removed: !x._removed } : x))}
                           onResolucao={(v) => setResolucao(r => ({ ...r, [m.nome]: v }))}
+                          onVinculo={(v) => setVinculos(vs => ({ ...vs, [m.nome]: v }))}
                         />
                       ))
                     : eventos.map((ev, i) => (
@@ -485,14 +573,6 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
 /* ── Helpers ─────────────────────────────────────────────────── */
 function temNotas(entry) {
   return !!entry && Array.isArray(entry.notas) && entry.notas.some(n => n !== '' && n != null)
-}
-function matchExistingKey(existing, nome) {
-  if (!existing || !nome) return null
-  const n = normalize(nome)
-  const keys = Object.keys(existing)
-  return keys.find(k => normalize(k) === n)
-    || keys.find(k => normalize(k).includes(n) || n.includes(normalize(k)))
-    || null
 }
 
 /* ── Upload card with drag & drop ────────────────────────────── */
@@ -610,11 +690,16 @@ function fmtBytes(b) {
 }
 
 /* ── Matéria card (boletim preview) ──────────────────────────── */
-function MateriaCard({ materia, existing, expanded, resolucao, onToggle, onChange, onChangeAval, onRemoveAval, onRemove, onResolucao }) {
-  const key = matchExistingKey(existing, materia.nome)
-  const conflito = key && temNotas(existing[key])
-  const qtdAtual = conflito ? existing[key].notas.filter(n => n !== '' && n != null).length : 0
+function MateriaCard({
+  materia, existing, cadastradas, vinculo, autoMatch,
+  expanded, resolucao, onToggle, onChange, onChangeAval, onRemoveAval, onRemove, onResolucao, onVinculo,
+}) {
+  const target = vinculo === '__new__' ? materia.nome : vinculo
+  const conflito = !!existing[target] && temNotas(existing[target])
+  const qtdAtual = conflito ? existing[target].notas.filter(n => n !== '' && n != null).length : 0
   const nAval = materia.avaliacoes?.length || 0
+  const isNew = vinculo === '__new__'
+  const isAuto = !isNew && autoMatch?.nome === vinculo
 
   return (
     <div className={`im-mat${materia._removed ? ' im-mat-removed' : ''}`}>
@@ -629,9 +714,27 @@ function MateriaCard({ materia, existing, expanded, resolucao, onToggle, onChang
         </button>
       </div>
 
+      {!materia._removed && (
+        <div className="im-vinculo">
+          <span className="im-vinc-label">Vincular a:</span>
+          <select
+            className="im-select im-vinc-select"
+            value={vinculo}
+            onChange={(e) => onVinculo(e.target.value)}
+            aria-label={`Vincular ${materia.nome} a uma matéria existente ou criar nova`}
+          >
+            {cadastradas.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="__new__">{`+ Criar nova: "${materia.nome}"`}</option>
+          </select>
+          {isNew && <span className="im-vinc-tag im-vinc-new"><Plus size={10} strokeWidth={2.4} /> Nova</span>}
+          {isAuto && autoMatch.confianca === 'alta'  && <span className="im-vinc-tag im-vinc-auto"><Check size={10} strokeWidth={2.6} /> Auto-detectado</span>}
+          {isAuto && autoMatch.confianca === 'media' && <span className="im-vinc-tag im-vinc-sug"><AlertTriangle size={10} strokeWidth={2.4} /> Sugerido — confira</span>}
+        </div>
+      )}
+
       {conflito && !materia._removed && (
         <div className="im-conflito">
-          <span className="im-badge"><AlertTriangle size={11} strokeWidth={2} /> Já existe — você tem {qtdAtual} {qtdAtual === 1 ? 'nota' : 'notas'}</span>
+          <span className="im-badge"><AlertTriangle size={11} strokeWidth={2} /> Já existe — você tem {qtdAtual} {qtdAtual === 1 ? 'nota' : 'notas'} em {target}</span>
           <select className="im-select" value={resolucao} onChange={(e) => onResolucao(e.target.value)}>
             <option value="manter">Manter atual</option>
             <option value="substituir">Substituir pela importada</option>
@@ -764,6 +867,14 @@ const IM_CSS = `
   .im-mat-resumo{font-size:11.5px;color:#71717a;white-space:nowrap;flex-shrink:0}
   .im-mat-x{background:none;border:none;color:#71717a;cursor:pointer;padding:5px;border-radius:7px;display:inline-flex;transition:color .15s,background .15s}
   .im-mat-x:hover{color:#f87171;background:rgba(248,113,113,.08)}
+
+  .im-vinculo{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 14px 10px}
+  .im-vinc-label{font-size:11px;font-weight:600;color:#71717a;letter-spacing:.02em}
+  .im-vinc-select{flex:1;min-width:160px}
+  .im-vinc-tag{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;letter-spacing:.02em;padding:3px 8px;border-radius:99px}
+  .im-vinc-auto{color:#22c55e;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.28)}
+  .im-vinc-sug{color:#fbbf24;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)}
+  .im-vinc-new{color:#a1a1aa;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10)}
 
   .im-conflito{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 14px 12px}
   .im-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.28);padding:3px 8px;border-radius:99px}
