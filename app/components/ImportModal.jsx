@@ -8,6 +8,7 @@ import {
   Image as ImageIcon, FileText as FileTextIcon,
 } from 'lucide-react'
 import * as db from '../lib/db'
+import { getSupabaseBrowser } from '../lib/supabase-browser'
 import { useProfile } from '../lib/ProfileContext'
 
 const EASE = [0.22, 1, 0.36, 1]
@@ -25,6 +26,8 @@ const ERROS = {
   'ics-empty': 'Não encontramos eventos neste arquivo .ics.',
   'no-file': 'Nenhum arquivo selecionado.',
   'network': 'Falha de conexão. Tente novamente.',
+  'no-session': 'Sua sessão expirou. Faça login novamente e tente importar de novo.',
+  'save-failed': 'Não conseguimos salvar agora. Tente novamente em alguns segundos.',
 }
 
 const ACCEPT_BOLETIM = 'image/png,image/jpeg,image/jpg,image/webp,image/gif,application/pdf'
@@ -285,10 +288,39 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
   }
 
   // ── Save ──────────────────────────────────────────────────────
+  // We do the auth check + Supabase write EXPLICITLY here instead of going
+  // through db.saveNotas/db.saveEvento. Those helpers fall back to console.warn
+  // and swallow errors silently, which would let the user see "Importado!" even
+  // when the upsert failed (NOT NULL on user_id when auth.getUser returns null
+  // post-f3ff171, or RLS rejection). Surface all failures with a visible code
+  // and console.error so future regressions don't disappear into the void.
   async function confirmar() {
     if (saving) return
     setSaving(true)
     try {
+      const supabase = getSupabaseBrowser()
+      if (!supabase) {
+        console.error('[import] supabase client unavailable (SSR or env missing)')
+        setErrorCode('no-session'); setStep('error'); setSaving(false); return
+      }
+      // Resolve user explicitly: try getUser (network-validated) then fall back
+      // to getSession (cookie-local) before declaring no session.
+      let userId = null
+      try {
+        const { data } = await supabase.auth.getUser()
+        userId = data?.user?.id || null
+      } catch (e) { console.error('[import] auth.getUser threw', e) }
+      if (!userId) {
+        try {
+          const { data } = await supabase.auth.getSession()
+          userId = data?.session?.user?.id || null
+        } catch (e) { console.error('[import] auth.getSession threw', e) }
+      }
+      if (!userId) {
+        console.error('[import] no auth session — cannot save')
+        setErrorCode('no-session'); setStep('error'); setSaving(false); return
+      }
+
       if (mode === 'boletim') {
         const dados = { ...existingNotas }
         const novasMaterias = []
@@ -329,7 +361,23 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
           nNotas += importadas.length
           nFaltas += faltas
         }
-        await db.saveNotas(dados)
+
+        // Persist to Supabase FIRST so we don't lie to the user with a success
+        // toast when only localStorage caught the data. Only write localStorage
+        // after the upsert returns ok.
+        const { error: upsertErr } = await supabase
+          .from('notas')
+          .upsert(
+            { user_id: userId, dados, atualizado_em: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          )
+        if (upsertErr) {
+          console.error('[import] saveNotas upsert failed:', upsertErr)
+          setErrorCode('save-failed'); setStep('error'); setSaving(false); return
+        }
+        try { localStorage.setItem('pointai_notas', JSON.stringify(dados)) } catch (e) {
+          console.error('[import] localStorage write failed (Supabase ok)', e)
+        }
 
         // Sync new matérias into perfil so they show up in /notas and the sidebar.
         if (novasMaterias.length > 0 && perfil) {
@@ -345,8 +393,19 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
         setSuccessMsg(`${nNotas} ${nNotas === 1 ? 'nota' : 'notas'} e ${nFaltas} ${nFaltas === 1 ? 'falta' : 'faltas'} importadas`)
       } else {
         const marcados = eventos.filter(e => e.include)
-        for (const ev of marcados) {
-          await db.saveEvento({ titulo: ev.titulo, data: ev.data, tipo: ev.tipo, materia: '' })
+        if (marcados.length > 0) {
+          const rows = marcados.map(ev => ({
+            user_id: userId,
+            titulo: ev.titulo,
+            data: ev.data,
+            tipo: ev.tipo,
+            materia: '',
+          }))
+          const { error: insertErr } = await supabase.from('eventos').insert(rows)
+          if (insertErr) {
+            console.error('[import] saveEventos insert failed:', insertErr)
+            setErrorCode('save-failed'); setStep('error'); setSaving(false); return
+          }
         }
         try { window.dispatchEvent(new CustomEvent('pointai-import-done', { detail: { kind: 'eventos' } })) } catch {}
         setSuccessMsg(`${marcados.length} ${marcados.length === 1 ? 'evento importado' : 'eventos importados'}`)
@@ -356,7 +415,7 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
       setTimeout(() => onClose?.(), 1600)
     } catch (e) {
       console.error('[import] failed to save', e)
-      setErrorCode('network'); setStep('error')
+      setErrorCode('save-failed'); setStep('error')
     }
     setSaving(false)
   }
