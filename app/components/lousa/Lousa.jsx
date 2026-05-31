@@ -53,6 +53,26 @@ function LousaInner() {
     return () => { alive = false }
   }, [])
 
+  // Refresh notas/eventos when an import lands so the Bento cards update
+  // without a manual reload. Reads localStorage directly to avoid a Supabase
+  // round-trip that could lose the race against the just-finished upsert.
+  useEffect(() => {
+    function onImport(e) {
+      const kind = e.detail?.kind
+      try {
+        if (kind === 'notas') {
+          const d = JSON.parse(localStorage.getItem('pointai_notas') || 'null')
+          if (d && typeof d === 'object') setNotas(d)
+        } else if (kind === 'eventos') {
+          // Eventos é per-row no Supabase — vale uma releitura completa.
+          db.getEventos().then(evs => setEventos(evs || [])).catch(() => {})
+        }
+      } catch {}
+    }
+    window.addEventListener('pointai-import-done', onImport)
+    return () => window.removeEventListener('pointai-import-done', onImport)
+  }, [])
+
   return (
     <div className="lousa-canvas">
       <style>{`

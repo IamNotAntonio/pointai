@@ -11,8 +11,57 @@ export function useCurrentMateria() {
 }
 
 /* ─── Notas helpers ─────────────────────────────────────────────── */
+// Storage model gravado por /notas e pelo import é:
+//   { [materia]: { notas: ['','',''], faltas, totalAulas } }
+// As views da Bento (NotasCard/Fullscreen, EvolucaoCard) esperam uma lista
+// achatada de avaliações { materia, titulo, nota, peso, data, faltas, maxFaltas }.
+// Esta função traduz do storage pra essa lista, ignorando notas vazias.
+//
+// Tolerante a whitespace/acento na comparação da chave: perfil.materias é
+// split-trim de uma string, e a chave do dados foi gravada com a mesma
+// origem — mas se algum import deixou caractere invisível, ainda casamos.
+function normalizeKey(s) {
+  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+function recordsFromEntry(materia, entry) {
+  if (!entry || !Array.isArray(entry.notas)) return []
+  const total = Number(entry.totalAulas) || 60
+  const faltas = Number(entry.faltas) || 0
+  const maxFaltas = Math.floor(total * 0.25)
+  const out = []
+  entry.notas.forEach((raw, i) => {
+    if (raw === '' || raw == null) return
+    const n = parseFloat(raw)
+    if (Number.isNaN(n)) return
+    out.push({
+      materia,
+      titulo: `Avaliação ${i + 1}`,
+      nota: n,
+      peso: 1,
+      data: null,
+      faltas,
+      maxFaltas,
+    })
+  })
+  return out
+}
+
 export function notasDaMateria(notas, materia) {
-  if (!Array.isArray(notas) || !materia) return []
+  if (!notas || !materia) return []
+
+  // New (current) object model: { [materia]: { notas:[...], faltas, totalAulas } }
+  if (!Array.isArray(notas) && typeof notas === 'object') {
+    if (materia === 'geral') {
+      return Object.entries(notas).flatMap(([mat, entry]) => recordsFromEntry(mat, entry))
+    }
+    const target = normalizeKey(materia)
+    const matched = Object.keys(notas).find(k => normalizeKey(k) === target)
+    return recordsFromEntry(matched || materia, matched ? notas[matched] : null)
+  }
+
+  // Legacy flat-array model — kept for safety if any caller still passes one.
+  if (!Array.isArray(notas)) return []
   if (materia === 'geral') return notas
   return notas.filter(n => n.materia === materia || n.disciplina === materia)
 }
