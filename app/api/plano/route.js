@@ -77,15 +77,14 @@ export async function POST(request) {
       ? `\nDificuldades relatadas pelo aluno:\n${historicoChat}`
       : '';
 
-    const instrucoesPro = ehPro
-      ? `Inclui campo "alerta" (string ou null) com alertas críticos sobre notas baixas ou faltas excessivas.
-Cada sessão de estudo deve ter o campo "motivo" explicando por que aquela matéria foi priorizada naquele dia.
-Adicione motivações personalizadas baseadas no objetivo do aluno.`
-      : `O campo "alerta" deve ser null.
-Não inclua o campo "motivo" nas sessões.
-Mantenha o plano objetivo e direto.`;
+    const nomesMaterias = materias.map((m) => m.nome).filter(Boolean);
+    const listaMateriasTxt = nomesMaterias.join(', ') || 'nenhuma cadastrada';
 
-    const prompt = `Você é um assistente de planejamento acadêmico para estudantes universitários brasileiros.
+    const instrucoesPro = ehPro
+      ? `Inclua o campo "alerta": uma frase com o risco mais crítico (nota muito abaixo da meta ou faltas perto do limite). Se não houver risco real, use null.`
+      : `O campo "alerta" deve ser sempre null.`;
+
+    const prompt = `Você é um planejador de estudos para universitários brasileiros. Gere um plano semanal ACIONÁVEL e motivacional.
 
 Perfil do aluno:
 - Nome: ${perfil.nome}
@@ -94,21 +93,37 @@ Perfil do aluno:
 - Semestre: ${perfil.semestre}
 - Objetivo: ${perfil.objetivo}
 
-Situação acadêmica atual:
+Matérias do aluno (use EXATAMENTE estes nomes nos campos "materia" e "materia_alvo"): ${listaMateriasTxt}
+
+Situação acadêmica (média ponderada, meta de aprovação e faltas por matéria):
 ${notasFormatadas || 'Nenhuma nota registrada ainda.'}
 
-Próximos eventos (até 8):
+Próximos eventos (provas, trabalhos, apresentações):
 ${eventosFormatados || 'Nenhum evento cadastrado.'}
 ${historico}
 
 Data atual: ${dataAtual}
 
-Gere um plano de estudos semanal personalizado cobrindo todos os 7 dias (Segunda a Domingo). Finais de semana devem ter carga horária menor. Distribua as matérias com base nas notas e nos eventos próximos.
+PRIORIDADE de cada sessão:
+- "alta": matéria ABAIXO DA META, ou com prova/trabalho nos próximos 7 dias.
+- "media": matéria na meta com avaliação se aproximando, ou conteúdo acumulando.
+- "baixa": matéria estável, sem urgência.
+No campo "porque" de cada sessão, explique em 1 frase curta a razão, citando a nota/meta ou o evento próximo quando fizer sentido (ex.: "Sua média está abaixo da meta nesta matéria" ou "Prova em 4 dias").
+
+RECOMENDAÇÕES (campo "recomendacoes", 3 a 4 itens): cada uma deve puxar o aluno para uma FERRAMENTA do Point — evite conselhos genéricos. Escolha "ferramenta" entre:
+- "chat": tirar dúvida ou estudar um assunto com o Point AI (nota baixa, dúvida conceitual). Use "assunto".
+- "simulado": treinar com questões (prova chegando ou nota baixa).
+- "resumo": consolidar/resumir um conteúdo no chat (antes de prova). Use "assunto".
+- "cerebro": visualizar conexões entre conceitos da matéria (matéria com lacunas).
+- "trabalhos": corrigir um trabalho/redação (quando há entrega prevista).
+Cada recomendação: {"texto": frase explicando por que ajuda AGORA, "ferramenta": uma das acima, "materia_alvo": nome exato da matéria ou "geral", "assunto": tópico específico ou "", "rotulo_acao": texto curto do botão}.
 
 ${instrucoesPro}
 
+Cubra os 7 dias (Segunda a Domingo); fim de semana com carga menor; pode haver dia de descanso ("sessoes": []). O campo "resumo" é 1 frase motivacional sobre a semana.
+
 Responda APENAS com JSON puro, sem markdown, neste formato exato:
-{"semana":"19–25 de maio","resumo":"...","alerta":"..." ,"dias":[{"dia":"Segunda-feira","data":"19/05","sessoes":[{"materia":"...","horas":2,"topicos":["..."],"prioridade":"alta","motivo":"..."}]}],"sugestoes":["dica 1","dica 2","dica 3"]}`;
+{"semana":"2–8 de junho","resumo":"...","alerta":null,"dias":[{"dia":"Segunda-feira","data":"02/06","sessoes":[{"materia":"...","horario":"14:00","duracao":"2h","prioridade":"alta","o_que_estudar":"...","porque":"..."}]}],"recomendacoes":[{"texto":"...","ferramenta":"simulado","materia_alvo":"...","assunto":"...","rotulo_acao":"..."}]}`;
 
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
@@ -116,8 +131,47 @@ Responda APENAS com JSON puro, sem markdown, neste formato exato:
       messages: [{ role: 'user', content: prompt }],
     });
 
+    // Parse defensivo: extractJSON lança se não houver JSON; normalizamos a
+    // saída para o shape exato que a tela renderiza (a IA pode variar campos).
     const data = extractJSON(message.content[0].text);
-    return Response.json(data);
+
+    const FERRAMENTAS = ['chat', 'simulado', 'resumo', 'cerebro', 'trabalhos'];
+    const PRIORIDADES = ['alta', 'media', 'baixa'];
+    const nomeCanonical = new Map(nomesMaterias.map((n) => [n.toLowerCase().trim(), n]));
+
+    const plano = {
+      semana: typeof data.semana === 'string' ? data.semana : '',
+      resumo: typeof data.resumo === 'string' ? data.resumo : '',
+      alerta: ehPro && typeof data.alerta === 'string' && data.alerta.trim() ? data.alerta : null,
+      dias: Array.isArray(data.dias) ? data.dias.map((d) => ({
+        dia: String(d?.dia || ''),
+        data: String(d?.data || ''),
+        sessoes: Array.isArray(d?.sessoes) ? d.sessoes.map((s) => ({
+          materia: String(s?.materia || ''),
+          horario: String(s?.horario || ''),
+          duracao: String(s?.duracao || ''),
+          prioridade: PRIORIDADES.includes(s?.prioridade) ? s.prioridade : 'media',
+          o_que_estudar: String(s?.o_que_estudar || ''),
+          porque: String(s?.porque || ''),
+        })) : [],
+      })) : [],
+      recomendacoes: Array.isArray(data.recomendacoes) ? data.recomendacoes.slice(0, 6).map((r) => {
+        const ferramenta = FERRAMENTAS.includes(r?.ferramenta) ? r.ferramenta : 'chat';
+        const alvoRaw = String(r?.materia_alvo || '').toLowerCase().trim();
+        const materia_alvo = nomeCanonical.get(alvoRaw) || 'geral';
+        return {
+          texto: String(r?.texto || ''),
+          ferramenta,
+          materia_alvo,
+          assunto: String(r?.assunto || ''),
+          rotulo_acao: String(r?.rotulo_acao || 'Abrir no Point'),
+        };
+      }) : [],
+    };
+
+    if (!plano.dias.length) throw new Error('A IA não retornou os dias do plano. Tente novamente.');
+
+    return Response.json(plano);
   } catch (error) {
     return Response.json({ erro: error.message || 'Erro ao gerar plano de estudos' }, { status: 500 });
   }

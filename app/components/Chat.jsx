@@ -146,6 +146,29 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     setInput('')
     setAttachments([])
     area.adjustHeight(true)
+    // Prefill one-shot vindo de outra tela (ex.: recomendação do /plano).
+    // Só preenche o input — NÃO envia — e limpa a chave para não repetir.
+    try {
+      const raw = localStorage.getItem('pointai_chat_prefill')
+      if (raw) {
+        const pf = JSON.parse(raw)
+        const alvo = !pf?.materia || pf.materia === 'geral' ? 'geral' : pf.materia
+        const casa = (alvo === 'geral' && isGeral) || alvo === materia
+        if (casa) {
+          localStorage.removeItem('pointai_chat_prefill')
+          if (pf.texto) {
+            setInput(pf.texto)
+            setTimeout(() => {
+              const el = area.textareaRef.current
+              if (!el) return
+              el.focus()
+              el.setSelectionRange(pf.texto.length, pf.texto.length)
+              area.adjustHeight()
+            }, 60)
+          }
+        }
+      }
+    } catch {}
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatKey, perfil, isGeral, materia])

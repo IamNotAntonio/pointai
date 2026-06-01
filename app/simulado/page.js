@@ -92,7 +92,13 @@ export default function Simulado() {
         setPerfil(p)
         const lista = p.materias.split(',').map(m => m.trim()).filter(Boolean)
         setMaterias(lista)
-        setConfig(c => ({ ...c, materia: lista[0] || '' }))
+        // Matéria pré-selecionada one-shot (ex.: recomendação do /plano).
+        let inicial = lista[0] || ''
+        try {
+          const pref = localStorage.getItem('pointai_simulado_materia')
+          if (pref && lista.includes(pref)) { inicial = pref; localStorage.removeItem('pointai_simulado_materia') }
+        } catch {}
+        setConfig(c => ({ ...c, materia: inicial }))
       }
       fetchPlano().then(pl => setEhPro(pl === 'pro'))
       try {
