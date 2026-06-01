@@ -100,6 +100,16 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   const fileInputRef = useRef(null)
   const attachBtnRef = useRef(null)
   const loadIdRef = useRef(0)
+  // Which chatKey is currently on screen. Updated synchronously whenever the
+  // matéria changes (see load effect) so an in-flight turn can tell, when its
+  // response arrives, whether the user has since switched away.
+  const activeChatKeyRef = useRef(chatKey)
+  // In-flight turns keyed by their ORIGIN chatKey. The value is the latest
+  // optimistic message array for that chat (user msg now, full thread once the
+  // answer lands). Presence in the map === "that chat is still loading", which
+  // lets us show the spinner only in the chat that actually launched the turn
+  // and restore its pending messages if the user switches back mid-stream.
+  const inflightRef = useRef(new Map())
   const area = useAutoResizeTextarea({ minHeight: 56, maxHeight: 200 })
 
   const isEmpty = !mensagens.some(m => m.role === 'user')
@@ -110,16 +120,29 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
   // loop that constantly clears input + mensagens.
   useEffect(() => {
     if (!perfil || !materia) return
+    // Mark this chat as the one on screen *before* any await, so an in-flight
+    // turn launched from another matéria knows it must not render here.
+    activeChatKeyRef.current = chatKey
     const myLoad = ++loadIdRef.current
     let alive = true
-    db.getChat(chatKey).then(historico => {
-      // Ignore a late resolution if a newer matéria load — or a user send —
-      // already superseded it. Without this, the async getChat on the default
-      // (geral) chat could resolve *after* the first message was sent and reset
-      // mensagens to [], snapping the UI back to the empty state mid-animation.
-      if (!alive || myLoad !== loadIdRef.current) return
-      setMensagens(historico?.length ? historico : [])
-    }).catch(() => {})
+    // If THIS chat has a turn in flight, its optimistic thread (and spinner)
+    // win over whatever is in storage — the answer isn't saved there yet.
+    const pendente = inflightRef.current.get(chatKey)
+    setCarregando(inflightRef.current.has(chatKey))
+    if (pendente) {
+      setMensagens(pendente)
+    } else {
+      db.getChat(chatKey).then(historico => {
+        // Ignore a late resolution if a newer matéria load — or a user send —
+        // already superseded it. Without this, the async getChat on the default
+        // (geral) chat could resolve *after* the first message was sent and reset
+        // mensagens to [], snapping the UI back to the empty state mid-animation.
+        if (!alive || myLoad !== loadIdRef.current) return
+        // A turn for this chat may have started while getChat was resolving.
+        const p = inflightRef.current.get(chatKey)
+        setMensagens(p || (historico?.length ? historico : []))
+      }).catch(() => {})
+    }
     setInput('')
     setAttachments([])
     area.adjustHeight(true)
@@ -222,9 +245,20 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
     setAttachments(prev => prev.filter(a => a.id !== id))
   }
 
-  /* ── Core send: streams one assistant turn appended to `base` ── */
+  /* ── Core send: streams one assistant turn appended to `base` ──────
+     A turn is bound to the chatKey it was launched from (`originKey`). The
+     user message and the AI answer are written ONLY to that chat — its React
+     state if it's still on screen, otherwise just its storage + the in-flight
+     map. This is what stops a turn from leaking into whatever chat happens to
+     be active when its response arrives (the bug this hotfix targets). */
   async function sendTurn(texto, base) {
     if (!perfil) return
+    // Origin chat: captured now, before any await, so a later matéria switch
+    // can't move this turn to a different chat.
+    const originKey = chatKey
+    const renderIfActive = (msgs) => {
+      if (activeChatKeyRef.current === originKey) setMensagens(msgs)
+    }
     // Invalidate any in-flight history load so it can't clobber this turn.
     loadIdRef.current++
     const wasEmpty = !base.some(m => m.role === 'user')
@@ -235,11 +269,14 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
       timestamp: new Date().toISOString(),
     }
     const novas = [...base, novaMsg]
-    setMensagens(novas)
-    setCarregando(true)
+    inflightRef.current.set(originKey, novas)
+    renderIfActive(novas)
+    if (activeChatKeyRef.current === originKey) setCarregando(true)
 
     // On the very first user message, collapse the bento so the chat takes over.
-    if (wasEmpty) {
+    // Only when the origin chat is the one on screen — otherwise we'd collapse
+    // the bento of a chat the user is currently looking at.
+    if (wasEmpty && activeChatKeyRef.current === originKey) {
       try { window.dispatchEvent(new CustomEvent('bento-collapse')) } catch {}
     }
 
@@ -250,7 +287,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
         // body.perfil intentionally omitted — the server loads it from the
         // authenticated session (Supabase auth.getUser). Sending it from the
         // client would be ignored anyway and risks confusing future readers.
-        body: JSON.stringify({ mensagens: novas, materia: chatKey }),
+        body: JSON.stringify({ mensagens: novas, materia: originKey }),
       })
       if (!resp.ok || !resp.body) throw new Error('stream failed')
 
@@ -264,13 +301,15 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
       }
       const final = { role: 'assistant', content: fullText, timestamp: new Date().toISOString() }
       const finais = [...novas, final]
-      setMensagens(finais)
-      db.saveChat(chatKey, finais).catch(() => {})
+      // Always persist to the origin chat; render only if it's still on screen.
+      inflightRef.current.set(originKey, finais)
+      db.saveChat(originKey, finais).catch(() => {})
+      renderIfActive(finais)
 
       try {
         const preview = fullText.replace(/[#*`_>\-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120)
         localStorage.setItem('pointai_last_chat', JSON.stringify({
-          materia: chatKey, ultimaMensagem: preview, timestamp: Date.now(),
+          materia: originKey, ultimaMensagem: preview, timestamp: Date.now(),
         }))
       } catch {}
 
@@ -287,7 +326,7 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           body: JSON.stringify({
             userMessage: texto,
             aiResponse: fullText,
-            materia: chatKey === '__geral__' ? 'geral' : chatKey,
+            materia: originKey === '__geral__' ? 'geral' : originKey,
             contextoAnterior,
           }),
         })
@@ -300,13 +339,20 @@ export default function Chat({ materia = 'geral', className, onFocusChange }) {
           .catch(() => {})
       } catch {}
     } catch {
-      setMensagens(prev => [...prev, {
+      const erro = {
         role: 'assistant',
         content: 'Desculpa, deu um erro ao responder. Tenta de novo em alguns segundos?',
         timestamp: new Date().toISOString(),
-      }])
+      }
+      const comErro = [...novas, erro]
+      inflightRef.current.set(originKey, comErro)
+      renderIfActive(comErro)
+    } finally {
+      // Turn finished: drop the loading marker for the origin chat and clear
+      // the spinner only if that chat is the one currently on screen.
+      inflightRef.current.delete(originKey)
+      if (activeChatKeyRef.current === originKey) setCarregando(false)
     }
-    setCarregando(false)
   }
 
   /* ── Send from the input box ───────────────────────────────── */
