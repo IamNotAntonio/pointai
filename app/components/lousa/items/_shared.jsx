@@ -299,6 +299,21 @@ export const fullscreenCss = `
   .lousa-fs-evento-icon{flex-shrink:0;width:32px;height:32px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center}
   .lousa-fs-evento-title{font-size:13.5px;font-weight:600;color:#e4e4e7;margin-bottom:3px}
   .lousa-fs-evento-meta{font-size:11.5px;color:#71717a}
+  .lousa-acc-list{display:flex;flex-direction:column;gap:8px}
+  .lousa-acc-item{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:12px;overflow:hidden}
+  .lousa-acc-head{width:100%;display:grid;grid-template-columns:18px 1fr auto auto;align-items:center;gap:12px;padding:14px 16px;background:none;border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .15s}
+  .lousa-acc-head:hover:not(:disabled){background:rgba(255,255,255,.02)}
+  .lousa-acc-head:disabled{cursor:default}
+  .lousa-acc-chev{display:inline-flex;align-items:center;justify-content:center;color:#71717a;transition:transform .25s ease,color .15s}
+  .lousa-acc-chev[data-open="true"]{transform:rotate(180deg);color:#22c55e}
+  .lousa-acc-head:disabled .lousa-acc-chev{opacity:.25}
+  .lousa-acc-nome{font-size:14px;font-weight:600;color:#e4e4e7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .lousa-acc-meta-info{font-size:11.5px;color:#71717a;white-space:nowrap}
+  .lousa-acc-media{font-size:17px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;min-width:36px;text-align:right}
+  .lousa-acc-body{padding:4px 16px 16px}
+  .lousa-acc-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;padding:10px 0;font-size:13.5px;border-top:1px solid rgba(255,255,255,.04)}
+  .lousa-acc-row-head{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#71717a;border-top:none;padding-top:6px}
+  .lousa-acc-foot{font-size:11.5px;color:#71717a;margin-top:12px;line-height:1.5}
   @media (max-width:1023px){
     .lousa-fs-container{padding:18px 16px 32px}
     .lousa-fs-stats-grid{grid-template-columns:repeat(2, 1fr)}

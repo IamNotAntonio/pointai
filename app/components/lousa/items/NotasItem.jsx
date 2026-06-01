@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import {
-  FileText, FileX, Plus, TrendingUp, AlertCircle, CalendarDays,
+  FileText, FileX, Plus, TrendingUp, AlertCircle, CalendarDays, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine,
@@ -33,8 +33,51 @@ function formatDate(iso) {
   } catch { return iso }
 }
 
+/* ─── Consolidação (visão geral do semestre) ────────────────────── */
+// A partir das linhas do modelo novo (db.getMaterias()), produz um resumo
+// por matéria: média ponderada (via db.calcularMedia, ignorando avaliações
+// sem nota), meta de aprovação e contagem. Imutável: não altera as linhas.
+function resumoMaterias(notas) {
+  if (!Array.isArray(notas)) return []
+  return notas
+    .filter(m => m && Array.isArray(m.avaliacoes))
+    .map(m => {
+      const avaliacoes = m.avaliacoes
+      const comNota = avaliacoes.filter(
+        a => a && a.nota !== null && a.nota !== undefined && a.nota !== '' && !Number.isNaN(Number(a.nota)),
+      )
+      return {
+        id: m.id ?? m.nome,
+        nome: m.nome,
+        media: db.calcularMedia(avaliacoes),
+        meta: Number(m.media_aprovacao) || 7,
+        countComNota: comNota.length,
+        totalAval: avaliacoes.length,
+        faltas: Number(m.faltas) || 0,
+        maxFaltas: Math.floor((Number(m.total_aulas) || 60) * 0.25),
+        avaliacoes,
+      }
+    })
+    .sort((a, b) => String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR'))
+}
+
+// Média geral do semestre = média SIMPLES das médias das matérias que têm
+// pelo menos uma nota. Retorna null se nenhuma matéria tem nota.
+function mediaGeralSemestre(resumos) {
+  const comMedia = resumos.filter(r => r.media != null)
+  if (!comMedia.length) return null
+  return comMedia.reduce((acc, r) => acc + r.media, 0) / comMedia.length
+}
+
 /* ─── Bento card ────────────────────────────────────────────────── */
+// No contexto GERAL, mostra a visão consolidada do semestre; numa matéria
+// específica, mantém o card de sempre (não alterar esse comportamento).
 export function NotasCard({ materia, notas, onClick }) {
+  if (materia === 'geral') return <NotasCardGeral notas={notas} onClick={onClick} />
+  return <NotasCardMateria materia={materia} notas={notas} onClick={onClick} />
+}
+
+function NotasCardMateria({ materia, notas, onClick }) {
   const lista = notasDaMateria(notas, materia)
   const media = mediaPonderada(lista)
   const ultima = sortByDate(lista, 'desc')[0]
@@ -47,9 +90,8 @@ export function NotasCard({ materia, notas, onClick }) {
     return asc.map((n, i) => ({ name: i.toString(), nota: Number(n.nota) }))
   }, [lista])
 
-  // Cor pela regra da /notas (verde >= meta, vermelho <). 'geral' agrega
-  // várias matérias → usa meta padrão 7; matéria específica usa sua meta.
-  const meta = materia === 'geral' ? 7 : (lista[0]?.meta ?? 7)
+  // Cor pela regra da /notas (verde >= meta da matéria, vermelho <).
+  const meta = lista[0]?.meta ?? 7
   const mediaColor = corNotaMeta(media, meta)
 
   return (
@@ -104,6 +146,93 @@ export function NotasCard({ materia, notas, onClick }) {
   )
 }
 
+// Card do contexto GERAL: média geral do semestre + lista compacta das
+// matérias (cada linha colorida pela meta da própria matéria).
+function NotasCardGeral({ notas, onClick }) {
+  const reduce = useReducedMotion()
+  const resumos = useMemo(() => resumoMaterias(notas), [notas])
+  const mediaGeral = useMemo(() => mediaGeralSemestre(resumos), [resumos])
+
+  const comMedia = resumos.filter(r => r.media != null).length
+  const mediaColor = mediaGeral != null ? corNota(mediaGeral) : '#71717a'
+
+  // Card compacto: no máximo 3 matérias na lista pra não crescer e empurrar
+  // os vizinhos do Bento. O resto vira "ver todas (N)" → abre o fullscreen
+  // (que já mostra todas com detalhe). N = total de matérias.
+  const MAX_LINHAS = 3
+  const visiveis = resumos.slice(0, MAX_LINHAS)
+  const temMais = resumos.length > MAX_LINHAS
+
+  return (
+    <motion.button
+      type="button"
+      layoutId="panel-notas"
+      onClick={onClick}
+      className="bento-card bento-card-large"
+      whileHover={{ scale: 1.005 }}
+      whileTap={{ scale: 0.99 }}
+      aria-label="Abrir Notas e Faltas — visão geral do semestre"
+    >
+      <div className="bento-card-icon-wrap">
+        <FileText size={22} strokeWidth={1.7} />
+      </div>
+      <p className="bento-card-title">Notas e Faltas</p>
+      <p className="bento-card-mega" style={{ color: mediaColor }}>
+        {mediaGeral != null ? mediaGeral.toFixed(1) : '—'}
+      </p>
+      <p className="bento-card-stat" style={{ color: '#71717a' }}>
+        média geral do semestre
+        {resumos.length > 0 && <> · {comMedia}/{resumos.length} {resumos.length === 1 ? 'matéria' : 'matérias'} com nota</>}
+      </p>
+
+      {resumos.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: '#71717a', marginTop: 12, lineHeight: 1.5 }}>
+          Nenhuma matéria com notas ainda. Adicione em /notas.
+        </p>
+      ) : (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {visiveis.map((r, i) => {
+            const cor = r.media != null ? corNotaMeta(r.media, r.meta) : '#71717a'
+            return (
+              <motion.div
+                key={r.id}
+                initial={reduce ? false : { opacity: 0, x: -4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.04 * i, duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 10, padding: '4px 0', borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,.04)',
+                }}
+              >
+                <span style={{
+                  fontSize: 13, color: '#d4d4d8', whiteSpace: 'nowrap',
+                  overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+                }}>
+                  {r.nome}
+                </span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: cor, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                  {r.media != null ? r.media.toFixed(1) : '—'}
+                </span>
+              </motion.div>
+            )
+          })}
+          {temMais && (
+            // Afordância visual (o card inteiro já é o botão que abre o
+            // fullscreen) — span, não <button>, pra não aninhar botões.
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              fontSize: 12, fontWeight: 600, color: '#22c55e', marginTop: 6,
+            }}>
+              ver todas ({resumos.length})
+              <ChevronRight size={13} strokeWidth={2.2} />
+            </span>
+          )}
+        </div>
+      )}
+    </motion.button>
+  )
+}
+
 /* ─── Fullscreen ────────────────────────────────────────────────── */
 export function NotasFullscreen() {
   return (
@@ -117,12 +246,15 @@ function NotasFullscreenInner() {
   const materia = useCurrentMateria()
   const reduce = useReducedMotion()
   const [notas, setNotas] = useState([])
+  const [erro, setErro] = useState(null)
   const [activeTab, setActiveTab] = useState('avaliacoes')
 
   useEffect(() => {
     let alive = true
     // Modelo NOVO (Parte 3): fonte de verdade é db.getMaterias().
-    db.getMaterias().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
+    db.getMaterias()
+      .then(d => { if (alive) { setNotas(d || []); setErro(null) } })
+      .catch(e => { if (alive) setErro(e?.message || 'Não foi possível carregar suas notas.') })
     return () => { alive = false }
   }, [])
 
@@ -157,7 +289,21 @@ function NotasFullscreenInner() {
         </p>
       </header>
 
-      {isGeral || lista.length === 0 ? (
+      {erro && (
+        <div role="alert" style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.28)',
+          borderRadius: 12, padding: '12px 14px', marginBottom: 20,
+          fontSize: 13, color: '#fca5a5', lineHeight: 1.5,
+        }}>
+          <AlertCircle size={16} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{erro}</span>
+        </div>
+      )}
+
+      {isGeral ? (
+        <NotasGeralFullscreen notas={notas} reduce={reduce} />
+      ) : lista.length === 0 ? (
         <NotasEmpty isGeral={isGeral} materia={materia} />
       ) : (
         <>
@@ -379,6 +525,125 @@ function FaltasTab({ faltas, maxFaltas, pct, cor }) {
         <p className="lousa-fs-empty-sub">Histórico individual por data chega na próxima onda.</p>
       </div>
     </div>
+  )
+}
+
+/* ─── Fullscreen: visão geral consolidada ───────────────────────── */
+function NotasGeralFullscreen({ notas, reduce }) {
+  const resumos = useMemo(() => resumoMaterias(notas), [notas])
+  const mediaGeral = useMemo(() => mediaGeralSemestre(resumos), [resumos])
+  const comMedia = resumos.filter(r => r.media != null).length
+
+  if (resumos.length === 0) {
+    return (
+      <div className="lousa-fs-empty" style={{ paddingTop: 64 }}>
+        <FileX className="lousa-fs-empty-icon" />
+        <p className="lousa-fs-empty-title">Nenhuma matéria com notas ainda</p>
+        <p className="lousa-fs-empty-sub">
+          Cadastre suas matérias e avaliações na tela de Notas pra ver o panorama do semestre aqui.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="lousa-fs-stats-grid">
+        <div className="lousa-fs-stat-card">
+          <p className="lousa-fs-stat-value" style={{ color: mediaGeral != null ? corNota(mediaGeral) : '#71717a' }}>
+            {mediaGeral != null ? mediaGeral.toFixed(1) : '—'}
+          </p>
+          <p className="lousa-fs-stat-label">Média geral do semestre</p>
+          <p className="lousa-fs-stat-sub">Média das médias — panorama, não nota oficial.</p>
+        </div>
+        <div className="lousa-fs-stat-card">
+          <p className="lousa-fs-stat-value neutral">{resumos.length}</p>
+          <p className="lousa-fs-stat-label">Matérias</p>
+        </div>
+        <div className="lousa-fs-stat-card">
+          <p className="lousa-fs-stat-value neutral">{comMedia}</p>
+          <p className="lousa-fs-stat-label">Com nota lançada</p>
+        </div>
+      </div>
+
+      <div className="lousa-acc-list">
+        {resumos.map((r, i) => (
+          <MateriaAccordion key={r.id} resumo={r} reduce={reduce} index={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MateriaAccordion({ resumo, reduce, index }) {
+  const [open, setOpen] = useState(false)
+  const cor = resumo.media != null ? corNotaMeta(resumo.media, resumo.meta) : '#71717a'
+  const temNota = resumo.totalAval > 0
+
+  return (
+    <motion.div
+      className="lousa-acc-item"
+      initial={reduce ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: reduce ? 0 : 0.03 * index, duration: 0.25 }}
+    >
+      <button
+        type="button"
+        className="lousa-acc-head"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        disabled={!temNota}
+      >
+        <span className="lousa-acc-chev" data-open={open} aria-hidden>
+          <ChevronDown size={16} strokeWidth={2} />
+        </span>
+        <span className="lousa-acc-nome">{resumo.nome}</span>
+        <span className="lousa-acc-meta-info">
+          {temNota
+            ? `${resumo.countComNota}/${resumo.totalAval} ${resumo.totalAval === 1 ? 'avaliação' : 'avaliações'}`
+            : 'sem avaliações'}
+        </span>
+        <span className="lousa-acc-media" style={{ color: cor }}>
+          {resumo.media != null ? resumo.media.toFixed(1) : '—'}
+        </span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && temNota && (
+          <motion.div
+            key="body"
+            initial={reduce ? { opacity: 1 } : { height: 0, opacity: 0 }}
+            animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
+            exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="lousa-acc-body">
+              <div className="lousa-acc-row lousa-acc-row-head">
+                <span>Avaliação</span>
+                <span>Peso</span>
+                <span>Nota</span>
+              </div>
+              {resumo.avaliacoes.map((a, j) => {
+                const semNota = a.nota === null || a.nota === undefined || a.nota === '' || Number.isNaN(Number(a.nota))
+                return (
+                  <div className="lousa-acc-row" key={a.id ?? j}>
+                    <span style={{ color: '#e4e4e7', fontWeight: 600 }}>{(a.nome && String(a.nome).trim()) || 'Avaliação'}</span>
+                    <span style={{ color: '#a1a1aa' }}>×{a.peso ?? 1}</span>
+                    <span style={{ color: semNota ? '#71717a' : corNota(a.nota), fontWeight: 700 }}>
+                      {semNota ? '—' : Number(a.nota).toFixed(1)}
+                    </span>
+                  </div>
+                )
+              })}
+              <p className="lousa-acc-foot">
+                Meta de aprovação: {resumo.meta} · {resumo.faltas}/{resumo.maxFaltas} faltas · edite em /notas
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   )
 }
 

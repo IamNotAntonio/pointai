@@ -28,6 +28,19 @@ const ITEMS = [
   { id: 'simulado',   Card: SimuladoCard,   Fullscreen: SimuladoFullscreen,   span: 1, isPro: true },
 ]
 
+// No contexto GERAL, Notas vira o card-herói (panorama do semestre) e sobe
+// pro topo-esquerdo. Reorganiza os 6 cards em 2 linhas balanceadas de 4 cols
+// (span2 + 1 + 1 em cada), garantindo que TODOS continuem visíveis sem
+// empurrar nada pra fora. Spans vêm do próprio ITEMS (não mudam).
+//   Linha 1: notas(2) · calendário(1) · evolução(1)
+//   Linha 2: cérebro(2) · análise(1) · simulado(1)
+const GERAL_ORDER = ['notas', 'calendario', 'evolucao', 'cerebro', 'analise', 'simulado']
+
+function orderItemsFor(materia) {
+  if (materia !== 'geral') return ITEMS
+  return GERAL_ORDER.map(id => ITEMS.find(i => i.id === id)).filter(Boolean)
+}
+
 export default function BentoGrid({ materia, notas, eventos, isProUser }) {
   const bento = useBento()
   const reduce = useReducedMotion()
@@ -66,6 +79,8 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
     })
   }
 
+  const isGeral = materia === 'geral'
+  const orderedItems = orderItemsFor(materia)
   const activeItem = ITEMS.find(i => i.id === bento.activeItem)
 
   return (
@@ -101,8 +116,8 @@ export default function BentoGrid({ materia, notas, eventos, isProUser }) {
           transition={reduce ? { duration: 0 } : { duration: 0.3, ease: EASE }}
           style={{ overflow: 'hidden' }}
         >
-          <div className="bento-grid">
-            {ITEMS.map((item, i) => (
+          <div className={`bento-grid${isGeral ? ' bento-grid-geral' : ''}`}>
+            {orderedItems.map((item, i) => (
               <motion.div
                 key={item.id}
                 className={`bento-cell bento-cell-span-${item.span}`}
@@ -209,6 +224,10 @@ const BENTO_CSS = `
   .bento-card.bento-card-locked{opacity:.72}
   .bento-card.bento-card-locked:hover{opacity:.9}
   .bento-card-large{min-height:120px;padding:16px}
+  /* Geral: linha-herói (Notas + Cérebro) ganha um respiro a mais sem
+     estourar — o conteúdo de Notas é capado em 3 matérias, então a altura
+     fica limitada e nada vaza da área visível. */
+  .bento-grid-geral .bento-card-large{min-height:150px}
   .bento-card-icon-wrap{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:rgba(34,197,94,.10);color:#22c55e;border:1px solid rgba(34,197,94,.18);margin-bottom:6px}
   .bento-card-title{font-size:14px;font-weight:700;color:#f4f4f5;letter-spacing:-.01em;margin:0 0 4px}
   .bento-card-mega{font-size:29px;font-weight:800;letter-spacing:-.025em;line-height:1;margin:2px 0 4px}
