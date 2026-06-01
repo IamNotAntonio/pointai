@@ -344,6 +344,148 @@ export function getResumoAluno() {
   } catch { return null }
 }
 
+// ── Notas v2 (N avaliações por matéria — Supabase) ─────────────
+// Novo modelo: materias_aluno (1 linha por matéria) + avaliacoes
+// (N linhas por matéria, cada uma nome/nota/peso). Substitui o modelo
+// antigo de 3 slots fixos em pointai_notas (saveNotas/getNotas acima),
+// que segue coexistindo até a migração das telas em partes futuras.
+//
+// Diferente das funções legadas: aqui não há fallback para localStorage
+// e os erros de escrita são PROPAGADOS (throw), não engolidos — assim a
+// UI consegue avisar o usuário quando um salvamento falha.
+
+const DEFAULT_PESO = 1
+
+// SECURITY: id sempre da sessão, nunca do cliente. Lança se não há sessão
+// válida — operações de notas exigem usuário autenticado.
+async function requireUserId() {
+  const userId = await resolveUserId()
+  if (!userId) throw new Error('Sessão não encontrada. Faça login novamente.')
+  return userId
+}
+
+// Lista as matérias do usuário com suas avaliações embutidas (join via FK
+// materia_id → materias_aluno). Retorna [] se não houver matérias.
+export async function getMaterias() {
+  const userId = await requireUserId()
+  const { data, error } = await getClient()
+    .from('materias_aluno')
+    .select('id,nome,faltas,total_aulas,media_aprovacao,avaliacoes(id,nome,nota,peso)')
+    .eq('user_id', userId)
+    .order('nome', { ascending: true })
+  if (error) throw new Error(`Erro ao carregar matérias: ${error.message}`)
+  return (data || []).map(m => ({
+    id: m.id,
+    nome: m.nome,
+    faltas: m.faltas,
+    total_aulas: m.total_aulas,
+    media_aprovacao: m.media_aprovacao,
+    avaliacoes: m.avaliacoes || [],
+  }))
+}
+
+// Cria ou atualiza uma matéria (match por user_id + nome). Campos não
+// informados ficam a cargo dos defaults da tabela no insert; no update,
+// só sobrescreve o que vier definido.
+export async function upsertMateria({ nome, faltas, total_aulas, media_aprovacao } = {}) {
+  const userId = await requireUserId()
+  if (!nome || !nome.trim()) throw new Error('Nome da matéria é obrigatório.')
+
+  const row = { user_id: userId, nome: nome.trim() }
+  if (faltas !== undefined) row.faltas = faltas
+  if (total_aulas !== undefined) row.total_aulas = total_aulas
+  if (media_aprovacao !== undefined) row.media_aprovacao = media_aprovacao
+
+  const { data, error } = await getClient()
+    .from('materias_aluno')
+    .upsert(row, { onConflict: 'user_id,nome' })
+    .select('id,nome,faltas,total_aulas,media_aprovacao')
+    .single()
+  if (error) throw new Error(`Erro ao salvar matéria: ${error.message}`)
+  return data
+}
+
+// Insere uma avaliação na matéria. nota pode ser null (ainda não avaliada);
+// peso default 1 quando não informado.
+export async function addAvaliacao(materia_id, { nome, nota = null, peso } = {}) {
+  const userId = await requireUserId()
+  if (!materia_id) throw new Error('materia_id é obrigatório.')
+  if (!nome || !nome.trim()) throw new Error('Nome da avaliação é obrigatório.')
+
+  const { data, error } = await getClient()
+    .from('avaliacoes')
+    .insert({
+      user_id: userId,
+      materia_id,
+      nome: nome.trim(),
+      nota: nota === '' ? null : nota,
+      peso: peso === undefined || peso === null || peso === '' ? DEFAULT_PESO : peso,
+    })
+    .select('id,nome,nota,peso')
+    .single()
+  if (error) throw new Error(`Erro ao adicionar avaliação: ${error.message}`)
+  return data
+}
+
+// Atualiza uma avaliação. Só altera os campos informados.
+export async function updateAvaliacao(id, { nome, nota, peso } = {}) {
+  const userId = await requireUserId()
+  if (!id) throw new Error('id da avaliação é obrigatório.')
+
+  const patch = {}
+  if (nome !== undefined) patch.nome = nome?.trim()
+  if (nota !== undefined) patch.nota = nota === '' ? null : nota
+  if (peso !== undefined) patch.peso = peso === '' || peso === null ? DEFAULT_PESO : peso
+  patch.updated_at = new Date().toISOString()
+
+  const { data, error } = await getClient()
+    .from('avaliacoes')
+    .update(patch)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id,nome,nota,peso')
+    .single()
+  if (error) throw new Error(`Erro ao atualizar avaliação: ${error.message}`)
+  return data
+}
+
+// Remove uma avaliação.
+export async function deleteAvaliacao(id) {
+  const userId = await requireUserId()
+  if (!id) throw new Error('id da avaliação é obrigatório.')
+
+  const { error } = await getClient()
+    .from('avaliacoes')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId)
+  if (error) throw new Error(`Erro ao remover avaliação: ${error.message}`)
+}
+
+// Helper puro (sem DB): média ponderada Σ(nota×peso)/Σ(peso), considerando
+// SÓ avaliações com nota definida (null = ainda não avaliada → ignora).
+// Retorna número, ou null se nenhuma avaliação tem nota.
+export function calcularMedia(avaliacoes) {
+  if (!Array.isArray(avaliacoes)) return null
+
+  let somaPonderada = 0
+  let somaPesos = 0
+  for (const a of avaliacoes) {
+    if (!a || a.nota === null || a.nota === undefined || a.nota === '') continue
+    const nota = Number(a.nota)
+    if (Number.isNaN(nota)) continue
+    const pesoRaw = a.peso
+    const peso = pesoRaw === null || pesoRaw === undefined || pesoRaw === ''
+      ? DEFAULT_PESO
+      : Number(pesoRaw)
+    if (Number.isNaN(peso) || peso <= 0) continue
+    somaPonderada += nota * peso
+    somaPesos += peso
+  }
+  if (somaPesos === 0) return null
+  return somaPonderada / somaPesos
+}
+
 // ── Resumo (long memory) ────────────────────────────────────────
 export async function saveResumo(chatKey, resumo) {
   localStorage.setItem(`resumo_${chatKey}`, resumo)

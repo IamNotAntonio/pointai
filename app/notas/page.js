@@ -1,13 +1,17 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
+import { motion, AnimatePresence } from 'motion/react'
 import Sidebar from '../components/Sidebar'
 import PortalImportModal from '../components/PortalImportModal'
 import ImportModal from '../components/ImportModal'
 import * as db from '../lib/db'
-import { Download, Target, CheckCircle, Camera, ClipboardList, FileSpreadsheet, RefreshCw, X, Upload } from 'lucide-react'
+import MateriaCard from './MateriaCard'
+import { Download, Camera, ClipboardList, FileSpreadsheet, RefreshCw, X, Upload, Loader2 } from 'lucide-react'
 
-const VAZIO = { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
+// Defaults ao criar uma matéria sob demanda no modelo novo.
+const TOTAL_AULAS_PADRAO = 60
+const MEDIA_APROVACAO_PADRAO = 7.0
 
 function matchMateria(lista, nome) {
   const n = nome.toLowerCase()
@@ -20,9 +24,10 @@ function matchMateria(lista, nome) {
 
 export default function Notas() {
   const [perfil,        setPerfil]        = useState(null)
-  const [materias,      setMaterias]      = useState([])
-  const [dados,         setDados]         = useState({})
-  const [materiaAtiva,  setMateriaAtiva]  = useState(null)
+  const [materias,      setMaterias]      = useState([])    // nomes do perfil
+  const [rows,          setRows]          = useState([])    // modelo novo (materias_aluno + avaliacoes)
+  const [carregandoRows, setCarregandoRows] = useState(true)
+  const [dados,         setDados]         = useState({})    // modelo ANTIGO — usado só pela importação (coexiste até a Parte 3)
   const [portalModal,   setPortalModal]   = useState(false)
   const [canvasConfig,  setCanvasConfig]  = useState(null)
   const [moodleConfig,  setMoodleConfig]  = useState(null)
@@ -45,10 +50,20 @@ export default function Notas() {
     setTimeout(() => setToast(null), 3500)
   }
 
-  // Reload grades + matérias after a boletim import (from this page or the
-  // global TopBar). Reads localStorage directly — saveNotas/savePerfil write
-  // there synchronously, so this avoids any Supabase round-trip race that
-  // could overwrite the fresh data with the previous row.
+  // Recarrega as notas do modelo novo a partir do Supabase.
+  async function recarregarRows() {
+    try {
+      const lista = await db.getMaterias()
+      setRows(lista)
+    } catch (e) {
+      mostrarToast(e.message || 'Erro ao carregar notas')
+    } finally {
+      setCarregandoRows(false)
+    }
+  }
+
+  // Reload (modelo ANTIGO) após import de boletim. A importação ainda grava
+  // no modelo antigo — migração para o modelo novo é Parte 3.
   useEffect(() => {
     function onImport(e) {
       if (e.detail?.kind !== 'notas') return
@@ -60,7 +75,7 @@ export default function Notas() {
           const lista = p.materias.split(',').map(s => s.trim()).filter(Boolean)
           setMaterias(lista)
         }
-        mostrarToast('✓ Notas importadas')
+        mostrarToast('✓ Notas importadas (boletim)')
       } catch (err) {
         console.error('[notas] reload after import failed', err)
       }
@@ -74,17 +89,13 @@ export default function Notas() {
       const p = await db.getPerfil()
       if (!p) return
       setPerfil(p)
-      const lista = p.materias.split(',').map(m => m.trim())
+      const lista = (p.materias || '').split(',').map(m => m.trim()).filter(Boolean)
       setMaterias(lista)
-      setMateriaAtiva(lista[0])
+      // Modelo antigo (só para a importação coexistir)
       const salvo = await db.getNotas()
-      if (salvo) {
-        setDados(salvo)
-      } else {
-        const inicial = {}
-        lista.forEach(m => { inicial[m] = { ...VAZIO, notas: ['', '', ''] } })
-        setDados(inicial)
-      }
+      setDados(salvo || {})
+      // Modelo novo (fonte de verdade das notas nesta tela)
+      await recarregarRows()
     }
     carregar()
 
@@ -105,7 +116,6 @@ export default function Notas() {
       }
     }
 
-    // Read saved integration configs
     try {
       const cv = JSON.parse(localStorage.getItem('pointai_canvas') || 'null')
       if (cv?.dominio) setCanvasConfig(cv)
@@ -114,7 +124,75 @@ export default function Notas() {
       const md = JSON.parse(localStorage.getItem('pointai_moodle') || 'null')
       if (md?.dominio) setMoodleConfig(md)
     } catch {}
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Modelo novo: handlers (todos propagam erro p/ a UI; toast + rethrow) ──
+
+  // Garante que a matéria existe em materias_aluno; cria sob demanda.
+  async function ensureMateria(nome) {
+    const existente = rows.find(r => r.nome.toLowerCase() === nome.toLowerCase())
+    if (existente) return existente
+    const nova = await db.upsertMateria({
+      nome, faltas: 0, total_aulas: TOTAL_AULAS_PADRAO, media_aprovacao: MEDIA_APROVACAO_PADRAO,
+    })
+    const comAv = { ...nova, avaliacoes: [] }
+    setRows(prev => [...prev, comAv].sort((a, b) => a.nome.localeCompare(b.nome)))
+    return comAv
+  }
+
+  async function handleAddAvaliacao(nome) {
+    try {
+      const m = await ensureMateria(nome)
+      const n = (m.avaliacoes?.length || 0) + 1
+      const av = await db.addAvaliacao(m.id, { nome: `Avaliação ${n}`, nota: null, peso: 1 })
+      setRows(prev => prev.map(r => r.id === m.id ? { ...r, avaliacoes: [...(r.avaliacoes || []), av] } : r))
+    } catch (e) { mostrarToast(e.message); throw e }
+  }
+
+  async function handleUpdateAvaliacao(avId, patch) {
+    try {
+      const upd = await db.updateAvaliacao(avId, patch)
+      setRows(prev => prev.map(r => ({
+        ...r,
+        avaliacoes: (r.avaliacoes || []).map(a => a.id === avId ? { ...a, ...upd } : a),
+      })))
+    } catch (e) { mostrarToast(e.message); throw e }
+  }
+
+  async function handleDeleteAvaliacao(avId) {
+    try {
+      await db.deleteAvaliacao(avId)
+      setRows(prev => prev.map(r => ({
+        ...r,
+        avaliacoes: (r.avaliacoes || []).filter(a => a.id !== avId),
+      })))
+    } catch (e) { mostrarToast(e.message); throw e }
+  }
+
+  async function handleUpdateMateria(nome, patch) {
+    try {
+      const upd = await db.upsertMateria({ nome, ...patch })
+      setRows(prev => {
+        const existe = prev.some(r => r.id === upd.id)
+        if (existe) return prev.map(r => r.id === upd.id ? { ...r, ...upd } : r)
+        return [...prev, { ...upd, avaliacoes: [] }].sort((a, b) => a.nome.localeCompare(b.nome))
+      })
+    } catch (e) { mostrarToast(e.message); throw e }
+  }
+
+  // Une matérias do perfil (mesmo sem linha ainda) com as do modelo novo.
+  const cards = useMemo(() => {
+    const map = new Map()
+    materias.forEach(n => map.set(n.toLowerCase(), { nome: n, row: null }))
+    rows.forEach(r => {
+      const k = r.nome.toLowerCase()
+      if (map.has(k)) map.get(k).row = r
+      else map.set(k, { nome: r.nome, row: r })
+    })
+    return [...map.values()]
+  }, [materias, rows])
+
+  // ── Importação (modelo ANTIGO — preservada; migração na Parte 3) ──────────
 
   async function quickSyncCanvas() {
     if (!canvasConfig) return
@@ -173,49 +251,6 @@ export default function Notas() {
     setMoodleConfig(null)
   }
 
-  function salvar(novo) {
-    setDados(novo)
-    db.saveNotas(novo)
-  }
-
-  function update(materia, field, value) {
-    const novo = { ...dados }
-    if (!novo[materia]) novo[materia] = { ...VAZIO, notas: ['', '', ''] }
-    novo[materia] = { ...novo[materia], [field]: value }
-    salvar(novo)
-  }
-
-  function atualizarNota(materia, i, v) {
-    const novo = { ...dados }
-    if (!novo[materia]) novo[materia] = { ...VAZIO, notas: ['', '', ''] }
-    const notas = [...(novo[materia].notas || ['', '', ''])]
-    notas[i] = v
-    novo[materia] = { ...novo[materia], notas }
-    salvar(novo)
-  }
-
-  function calcularMedia(notas) {
-    const v = notas.filter(n => n !== '' && !isNaN(parseFloat(n)))
-    if (!v.length) return null
-    return (v.reduce((a, n) => a + parseFloat(n), 0) / v.length).toFixed(1)
-  }
-
-  function mediaStatus(media) {
-    if (media === null) return null
-    if (media >= 7) return { label: 'Aprovado',    cls: 'badge badge-green' }
-    if (media >= 5) return { label: 'Recuperação', cls: 'badge badge-yellow' }
-    return             { label: 'Reprovado',   cls: 'badge badge-red' }
-  }
-
-  function faltaStatus(materia) {
-    const d   = dados[materia] || VAZIO
-    const max = Math.floor(d.totalAulas * 0.25)
-    const r   = max - d.faltas
-    if (r > 5) return { label: `${r} faltas restantes`,    cor: 'var(--brand)' }
-    if (r > 0) return { label: `Só ${r} faltas restantes!`, cor: '#d97706' }
-    return             { label: 'Limite atingido!',         cor: '#dc2626' }
-  }
-
   // ── AI Import modal (foto / texto / planilha) ────────────────────
   function abrirModal(aba = 'foto') {
     setModal({ aberto: true, aba, imagem: null, texto: '', carregando: false, preview: null, erro: null })
@@ -241,8 +276,8 @@ export default function Notas() {
         const wb   = XLSX.read(ev.target.result, { type: 'array' })
         const ws   = wb.Sheets[wb.SheetNames[0]]
         const csv  = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
-        const rows = csv.split('\n').filter(r => r.trim().replace(/,/g, '').trim())
-        await enviarTexto(rows.slice(0, 120).join('\n'))
+        const rows2 = csv.split('\n').filter(r => r.trim().replace(/,/g, '').trim())
+        await enviarTexto(rows2.slice(0, 120).join('\n'))
       } catch {
         setModal(p => ({ ...p, carregando: false, erro: 'Erro ao ler o arquivo. Verifique se é .xlsx, .xls ou .csv válido.' }))
       }
@@ -292,7 +327,7 @@ export default function Notas() {
     }
   }
 
-  // ── Merge and save helper (used by both AI modal and Canvas) ──────
+  // Merge e save (modelo ANTIGO) — usado pela importação (IA + Canvas/Moodle).
   function aplicarPreviewNotas(previewMaterias) {
     const novo = { ...dados }
     previewMaterias.forEach(m => {
@@ -304,7 +339,8 @@ export default function Notas() {
         totalAulas: m.totalAulas ?? 60,
       }
     })
-    salvar(novo)
+    setDados(novo)
+    db.saveNotas(novo)
   }
 
   function confirmarImport() {
@@ -319,16 +355,6 @@ export default function Notas() {
       <p style={{ color: 'var(--text-4)' }}>Carregando...</p>
     </div>
   )
-
-  const dm      = dados[materiaAtiva] || { ...VAZIO, notas: ['', '', ''] }
-  const media   = calcularMedia(dm.notas)
-  const mStatus = mediaStatus(media)
-  const fStatus = materiaAtiva ? faltaStatus(materiaAtiva) : null
-  const maxF    = Math.floor(dm.totalAulas * 0.25)
-  const notasV  = dm.notas.filter(n => n !== '')
-  const notaFalta = notasV.length > 0 && media !== null && parseFloat(media) < 7
-    ? Math.max(0, (7 * dm.notas.length - notasV.reduce((a, b) => a + parseFloat(b || 0), 0))).toFixed(1)
-    : null
 
   return (
     <div className="app-shell">
@@ -347,7 +373,6 @@ export default function Notas() {
             <p className="page-subtitle">Acompanhe seu desempenho em cada matéria</p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {/* Hidden file refs for sub-flows */}
             <input ref={importFileRef}   type="file" accept="image/jpeg,image/jpg,image/png" onChange={selecionarImagem}   style={{ display: 'none' }} />
             <input ref={planilhaFileRef} type="file" accept=".xlsx,.xls,.csv"                onChange={selecionarPlanilha} style={{ display: 'none' }} />
 
@@ -366,10 +391,6 @@ export default function Notas() {
             >
               <Download size={13} strokeWidth={1.8} /> Importar do portal
             </button>
-
-            <select value={materiaAtiva || ''} onChange={e => setMateriaAtiva(e.target.value)} className="input" style={{ width: 'auto', minWidth: 180 }}>
-              {materias.map((m, i) => <option key={i} value={m}>{m}</option>)}
-            </select>
           </div>
         </div>
 
@@ -414,73 +435,38 @@ export default function Notas() {
         )}
 
         <div className="page-scroll">
-          <div className="grid-3" style={{ marginBottom: 20 }}>
-            <div className="stat-card">
-              <p className="stat-value" style={{ color: 'var(--brand)' }}>{media ?? '—'}</p>
-              <p className="stat-label">Média atual</p>
-              {mStatus && <div style={{ marginTop: 8, display: 'flex', justifyContent: 'center' }}><span className={mStatus.cls}>{mStatus.label}</span></div>}
+          {carregandoRows ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '60px 0', color: 'var(--text-4)' }}>
+              <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Carregando notas…
             </div>
-            <div className="stat-card">
-              <p className="stat-value" style={{ color: dm.faltas >= maxF ? '#dc2626' : 'var(--brand)' }}>{dm.faltas}</p>
-              <p className="stat-label">Faltas usadas</p>
-              {fStatus && <p style={{ fontSize: 12, fontWeight: 600, marginTop: 6, color: fStatus.cor }}>{fStatus.label}</p>}
+          ) : cards.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-3)' }}>
+              Nenhuma matéria ainda. Adicione matérias no seu perfil para começar.
             </div>
-            <div className="stat-card">
-              <p className="stat-value" style={{ color: 'var(--brand)' }}>{maxF}</p>
-              <p className="stat-label">Máximo de faltas</p>
-              <p style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>25% de {dm.totalAulas} aulas</p>
-            </div>
-          </div>
-
-          {dm.totalAulas > 0 && (
-            <div className="card" style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <p className="card-title" style={{ margin: 0 }}>Frequência</p>
-                <span style={{ fontSize: 13, fontWeight: 600, color: dm.faltas >= maxF ? '#dc2626' : 'var(--brand)' }}>{dm.faltas}/{maxF} faltas</span>
-              </div>
-              <div className="progress-bar">
-                <div className={`progress-fill ${dm.faltas >= maxF ? 'progress-red' : dm.faltas >= maxF - 3 ? 'progress-yellow' : 'progress-green'}`} style={{ width: `${Math.min(100, (dm.faltas / Math.max(maxF, 1)) * 100)}%` }} />
-              </div>
-            </div>
-          )}
-
-          <div className="card" style={{ marginBottom: 16 }}>
-            <p className="card-title">Avaliações</p>
-            <div className="grid-3">
-              {dm.notas.map((nota, i) => (
-                <div key={i}>
-                  <label className="label">Avaliação {i + 1}</label>
-                  <input type="number" min="0" max="10" step="0.1" value={nota} onChange={e => atualizarNota(materiaAtiva, i, e.target.value)} placeholder="—" className="input" style={{ textAlign: 'center', fontSize: 20, fontWeight: 700 }} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="card" style={{ marginBottom: 16 }}>
-            <p className="card-title">Controle de Faltas</p>
-            <div className="grid-2">
-              <div>
-                <label className="label">Total de aulas no semestre</label>
-                <input type="number" value={dm.totalAulas} onChange={e => update(materiaAtiva, 'totalAulas', parseInt(e.target.value) || 60)} className="input" />
-              </div>
-              <div>
-                <label className="label">Faltas até agora</label>
-                <input type="number" value={dm.faltas} onChange={e => update(materiaAtiva, 'faltas', parseInt(e.target.value) || 0)} className="input" />
-              </div>
-            </div>
-          </div>
-
-          {notaFalta !== null && (
-            <div className="alert alert-yellow">
-              <Target size={18} strokeWidth={1.8} style={{ color: '#d97706', flexShrink: 0 }} />
-              <p>Para atingir média <strong>7.0</strong>, você precisa tirar pelo menos <strong>{notaFalta}</strong> na próxima avaliação.</p>
-            </div>
-          )}
-          {media !== null && parseFloat(media) >= 7 && (
-            <div className="alert" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
-              <CheckCircle size={18} strokeWidth={1.8} style={{ color: '#166534', flexShrink: 0 }} />
-              <p>Ótimo trabalho! Você está <strong>aprovado</strong> em {materiaAtiva} com média {media}.</p>
-            </div>
+          ) : (
+            <motion.div
+              layout
+              style={{
+                display: 'grid', gap: 16,
+                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                alignItems: 'start',
+              }}
+            >
+              <AnimatePresence>
+                {cards.map(({ nome, row }, i) => (
+                  <MateriaCard
+                    key={nome}
+                    nome={nome}
+                    row={row}
+                    index={i}
+                    onAddAvaliacao={handleAddAvaliacao}
+                    onUpdateAvaliacao={handleUpdateAvaliacao}
+                    onDeleteAvaliacao={handleDeleteAvaliacao}
+                    onUpdateMateria={handleUpdateMateria}
+                  />
+                ))}
+              </AnimatePresence>
+            </motion.div>
           )}
         </div>
       </div>
