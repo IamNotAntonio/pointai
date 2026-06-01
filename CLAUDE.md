@@ -50,6 +50,8 @@ Most feature data (notas, eventos, chats, etc.) is **localStorage-only** at the 
 
 `pointai_perfil`, `pointai_tema`, `pointai_plano`, `pointai_user_id`, `pointai_sidebar_collapsed`, `pointai_notas`, `pointai_eventos`, `pointai_topicos`, `pointai_analises`, `pointai_simulados_hist`, `pointai_simulados_semana`, `pointai_plano_estudos`, `pointai_canvas`, `pointai_moodle`, `pointai_notifs_lidas`, `pointai_last_access`, `pointai_tutorial_done`, `pointai_dev_pro`. Plus dynamic per-chat: `chat_<materia>`, `resumo_<chatKey>`.
 
+**Current `pointai_notas` model (to be refactored soon):** an object keyed by matéria, shaped `{materia: {notas: ['', '', ''], faltas, totalAulas}}` — 3 fixed grade slots per subject. NOTE: this model will be evolved to support N avaliações with `nome` + `nota` + `peso` per assessment.
+
 `signOut()` in `lib/db.js` wipes all localStorage keys on logout.
 
 #### Cérebro Point — Supabase-backed graph (D.4)
@@ -176,6 +178,18 @@ Tailwind CSS v4 (PostCSS plugin). Design tokens:
 
 There is no shared layout wrapper. Each of the 9 interior pages imports `Sidebar` directly. The sidebar pattern is a 264px column; when collapsed (`pointai_sidebar_collapsed`) it shrinks to 60px and shows only the logo + icons.
 
+## Regras Críticas de Segurança
+
+These rules document what has already been implemented and what to keep enforcing. Treat them as non-negotiable when touching auth, AI routes, or payments.
+
+- **Autenticação:** SEMPRE validar o usuário via `auth.getUser()` (valida o JWT do cookie no servidor), NUNCA confiar em `getSession()` sozinho (lê o cookie sem verificar). O helper `requireUser()` em `app/lib/supabase-server.js` faz essa validação — use-o nas rotas.
+- **Rotas de IA que leem dados do usuário** (`chat`, `assistant`, `corrigir`, `analisar`, `resumo`, `simulado`, `importar`, `plano`, `relatorio`, etc.) DEVEM ler o perfil do Supabase filtrado pelo `user_id` da sessão. NUNCA confiar no perfil/dados vindos do body do cliente (risco de spoofing). Corrigido no commit `3fd04d0`.
+- **Chat:** o PERFIL do Supabase é a fonte de verdade absoluta. Ignorar qualquer perfil contraditório que apareça no histórico da conversa.
+- **`SUPABASE_SERVICE_ROLE_KEY`:** server-only, NUNCA expor ao cliente (não usar em código client-side, não prefixar com `NEXT_PUBLIC_`).
+- **Pagamentos (Mercado Pago):** NUNCA confiar em preço/plano vindo do cliente — validar server-side. O status da assinatura é sincronizado via webhook (`/api/webhook-mp`).
+- **Queries Supabase:** usar colunas explícitas no `select()`, evitar `select('*')`. Adicionar `.limit()` em queries que podem crescer.
+- **Validar input** nas rotas de API antes de usar (fail fast com mensagem clara).
+
 ## Roadmap (current — May 2026)
 
 - [x] Logo installed across app (commit `cd4c1ca`)
@@ -189,7 +203,8 @@ There is no shared layout wrapper. Each of the 9 interior pages imports `Sidebar
 
 ## Notes for Future Sessions
 
-- Project root: `/Users/antonioinglesi/Desktop/pointai`
+- Project root: `/Users/antonioinglesi/dev/pointai` (moved out of iCloud)
+- Also developed on Windows PC at `C:\dev\pointai` — sync via GitHub (`git pull` antes de começar, `git push` ao terminar; nunca trabalhar nas duas máquinas sem sincronizar).
 - GitHub: `https://github.com/IamNotAntonio/pointai.git`
 - Vercel preview: `pointai-two.vercel.app`
 - Production: `pointedu.com.br` (DNS in propagation)
@@ -197,3 +212,11 @@ There is no shared layout wrapper. Each of the 9 interior pages imports `Sidebar
 - No test suite configured
 - Imports use relative paths (no `jsconfig` alias)
 - macOS, zsh, Node 20+
+
+## ECC (ferramenta de dev)
+
+This project uses the **ECC** plugin (`ecc@ecc`) inside Claude Code, with its `rules/common` and `rules/typescript` rule sets installed under `~/.claude/rules/ecc/`.
+
+- **MCPs do ECC:** desativados de propósito (economia de contexto).
+- **Agentes úteis:** `database-reviewer` (revisar mudanças no Supabase — queries, schema, RLS, migrations) e `build-error-resolver` (resolver erros de build).
+- **Skill:** `/security-scan`.
