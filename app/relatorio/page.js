@@ -175,13 +175,15 @@ export default function Relatorio() {
     setCarregando(true)
     setRelatorio(null)
     try {
-      const notas   = JSON.parse(localStorage.getItem('pointai_notas')  || 'null')
-      const eventos = JSON.parse(localStorage.getItem('pointai_eventos') || '[]')
+      // Notas (modelo novo: materias_aluno + avaliacoes), faltas e eventos
+      // são lidos do Supabase pela sessão DENTRO da rota (fonte de verdade
+      // server-side, anti-spoof) — o cliente não envia esses dados.
       const resp = await fetch('/api/relatorio', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body:   JSON.stringify({ perfil, notas, eventos }),
+        body:   JSON.stringify({}),
       })
       const dados = await resp.json()
+      if (dados.error || dados.erro) throw new Error(dados.erro || dados.error)
       setRelatorio(dados.relatorio)
       setDataGeracao(new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }))
     } catch (e) { console.error(e) }

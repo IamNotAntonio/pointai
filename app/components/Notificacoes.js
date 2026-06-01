@@ -1,6 +1,7 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import * as db from '../lib/db'
 import { Bell, Calendar, AlertTriangle, BarChart2, BookOpen, CheckCircle } from 'lucide-react'
 
 /* ── Icons ───────────────────────────────────────────────────── */
@@ -14,7 +15,9 @@ function NotifIcon({ tipo }) {
 }
 
 /* ── Notification data ───────────────────────────────────────── */
-function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
+// `materias` é o modelo NOVO (db.getMaterias): array de
+// {nome, faltas, total_aulas, media_aprovacao, avaliacoes:[{nota,peso}]}.
+function gerarNotificacoes(perfil, materias, eventos, lastAccess) {
   const notifs = []
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
@@ -40,40 +43,41 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
     })
   }
 
-  // 2. Limite de faltas (≤ 3 restantes)
-  if (notas && typeof notas === 'object') {
-    Object.entries(notas).forEach(([materia, dados]) => {
-      if (!dados) return
-      const totalAulas = Number(dados.totalAulas) || 0
-      const faltas    = Number(dados.faltas)      || 0
+  // 2. Limite de faltas (≤ 3 restantes) — modelo novo: faltas/total_aulas
+  if (Array.isArray(materias)) {
+    materias.forEach(m => {
+      if (!m) return
+      const totalAulas = Number(m.total_aulas) || 0
+      const faltas     = Number(m.faltas)      || 0
       if (totalAulas <= 0) return
       const limite    = Math.floor(totalAulas * 0.25)
       const restantes = limite - faltas
       if (restantes < 0 || restantes > 3) return
       notifs.push({
-        id: `faltas_${materia}`,
+        id: `faltas_${m.nome}`,
         tipo: 'falta',
         titulo: restantes === 0 ? 'Limite de faltas atingido!' : `${restantes} falta${restantes !== 1 ? 's' : ''} restante${restantes !== 1 ? 's' : ''}`,
-        mensagem: materia,
+        mensagem: m.nome,
         urgencia: restantes === 0 ? 'alta' : 'media',
         link: '/notas',
       })
     })
   }
 
-  // 3. Média baixa (< 7.0)
-  if (notas && typeof notas === 'object') {
-    Object.entries(notas).forEach(([materia, dados]) => {
-      const vals = (dados?.notas || []).filter(n => n !== '' && n !== null && n !== undefined)
-      if (!vals.length) return
-      const media = vals.reduce((s, n) => s + Number(n), 0) / vals.length
-      if (media >= 7) return
+  // 3. Média abaixo da meta — média ponderada (calcularMedia) vs meta da matéria
+  if (Array.isArray(materias)) {
+    materias.forEach(m => {
+      if (!m) return
+      const media = db.calcularMedia(m.avaliacoes)
+      if (media == null) return
+      const meta = Number(m.media_aprovacao) || 7
+      if (media >= meta) return
       notifs.push({
-        id: `media_${materia}`,
+        id: `media_${m.nome}`,
         tipo: 'media',
-        titulo: `Média ${media.toFixed(1)} em ${materia}`,
-        mensagem: 'Abaixo do mínimo de aprovação (7,0)',
-        urgencia: media < 5 ? 'alta' : 'baixa',
+        titulo: `Média ${media.toFixed(1)} em ${m.nome}`,
+        mensagem: `Abaixo da meta de aprovação (${meta.toFixed(1).replace('.', ',')})`,
+        urgencia: media < meta - 2 ? 'alta' : 'baixa',
         link: '/notas',
       })
     })
@@ -100,16 +104,17 @@ function gerarNotificacoes(perfil, notas, eventos, lastAccess) {
   return notifs
 }
 
-function lerDados() {
+// Espelhos locais (perfil/eventos/lastAccess/lidas). Notas NÃO estão mais
+// aqui: vêm do Supabase via db.getMaterias() (modelo novo), carregado async.
+function lerLocal() {
   try {
     const perfil     = JSON.parse(localStorage.getItem('pointai_perfil')         || 'null')
-    const notas      = JSON.parse(localStorage.getItem('pointai_notas')          || 'null')
     const eventos    = JSON.parse(localStorage.getItem('pointai_eventos')        || '[]')
     const lastAccess = JSON.parse(localStorage.getItem('pointai_last_access')    || '{}')
     const lidas      = JSON.parse(localStorage.getItem('pointai_notifs_lidas')   || '[]')
-    return { perfil, notas, eventos, lastAccess, lidas }
+    return { perfil, eventos, lastAccess, lidas }
   } catch {
-    return { perfil: null, notas: null, eventos: [], lastAccess: {}, lidas: [] }
+    return { perfil: null, eventos: [], lastAccess: {}, lidas: [] }
   }
 }
 
@@ -118,14 +123,30 @@ export default function Notificacoes() {
   const router = useRouter()
   const [aberto, setAberto] = useState(false)
   const [notifs, setNotifs] = useState([])
-  const [lidas,  setLidas]  = useState([])
+  const [lidas,  setLidas]  = useState(() => {
+    try { return JSON.parse(localStorage.getItem('pointai_notifs_lidas') || '[]') } catch { return [] }
+  })
 
-  const abrir = useCallback(() => {
-    const { perfil, notas, eventos, lastAccess, lidas: lidasSalvas } = lerDados()
-    setLidas(lidasSalvas)
-    setNotifs(gerarNotificacoes(perfil, notas, eventos, lastAccess))
-    setAberto(true)
+  // Carrega matérias (modelo novo) uma vez e recalcula as notificações.
+  // getMaterias PROPAGA erro / exige sessão — se falhar (deslogado/offline),
+  // seguimos sem os alertas de nota/falta (apenas provas/estudo).
+  useEffect(() => {
+    let vivo = true
+    db.getMaterias()
+      .then(ms => {
+        if (!vivo) return
+        const { perfil, eventos, lastAccess } = lerLocal()
+        setNotifs(gerarNotificacoes(perfil, ms || [], eventos, lastAccess))
+      })
+      .catch(() => {
+        if (!vivo) return
+        const { perfil, eventos, lastAccess } = lerLocal()
+        setNotifs(gerarNotificacoes(perfil, [], eventos, lastAccess))
+      })
+    return () => { vivo = false }
   }, [])
+
+  const abrir = useCallback(() => setAberto(true), [])
 
   function marcarLida(id) {
     const novas = [...lidas, id]
@@ -145,17 +166,10 @@ export default function Notificacoes() {
     router.push(notif.link)
   }
 
-  // Count using persisted lidas (from localStorage) to avoid stale count before panel opens
-  const [lidasCache] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('pointai_notifs_lidas') || '[]') } catch { return [] }
-  })
-  const [notifsCache] = useState(() => {
-    const { perfil, notas, eventos, lastAccess } = lerDados()
-    return gerarNotificacoes(perfil, notas, eventos, lastAccess)
-  })
-  const badge = notifsCache.filter(n => !lidasCache.includes(n.id)).length
-
+  // Badge e contador de não lidas derivam do mesmo estado (notifs carrega
+  // async via getMaterias; provas/estudo não dependem de rede).
   const naoLidas = notifs.filter(n => !lidas.includes(n.id)).length
+  const badge = naoLidas
 
   return (
     <>

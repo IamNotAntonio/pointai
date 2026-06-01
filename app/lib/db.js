@@ -201,42 +201,6 @@ export async function getChat(materia) {
   return local ? JSON.parse(local) : null
 }
 
-// ── Notas ──────────────────────────────────────────────────────
-export async function saveNotas(dados) {
-  localStorage.setItem('pointai_notas', JSON.stringify(dados))
-  try {
-    const userId = await resolveUserId()
-    const { error } = await getClient()
-      .from('notas')
-      .upsert(
-        { user_id: userId, dados, atualizado_em: new Date().toISOString() },
-        { onConflict: 'user_id' }
-      )
-    if (error) console.warn('[db] saveNotas:', error.message)
-  } catch (e) {
-    console.warn('[db] saveNotas offline:', e.message)
-  }
-}
-
-export async function getNotas() {
-  try {
-    const userId = await resolveUserId()
-    const { data, error } = await getClient()
-      .from('notas')
-      .select('dados')
-      .eq('user_id', userId)
-      .maybeSingle()
-    if (!error && data?.dados) {
-      localStorage.setItem('pointai_notas', JSON.stringify(data.dados))
-      return data.dados
-    }
-  } catch (e) {
-    console.warn('[db] getNotas offline:', e.message)
-  }
-  const local = localStorage.getItem('pointai_notas')
-  return local ? JSON.parse(local) : null
-}
-
 // ── Eventos ────────────────────────────────────────────────────
 export async function saveEvento(evento) {
   try {
@@ -384,10 +348,10 @@ export function getResumoAluno() {
 }
 
 // ── Notas v2 (N avaliações por matéria — Supabase) ─────────────
-// Novo modelo: materias_aluno (1 linha por matéria) + avaliacoes
-// (N linhas por matéria, cada uma nome/nota/peso). Substitui o modelo
-// antigo de 3 slots fixos em pointai_notas (saveNotas/getNotas acima),
-// que segue coexistindo até a migração das telas em partes futuras.
+// Modelo atual: materias_aluno (1 linha por matéria) + avaliacoes
+// (N linhas por matéria, cada uma nome/nota/peso). Substituiu o modelo
+// antigo de 3 slots fixos em pointai_notas (saveNotas/getNotas + tabela
+// 'notas'), removido na migração de notas (Parte 5).
 //
 // Diferente das funções legadas: aqui não há fallback para localStorage
 // e os erros de escrita são PROPAGADOS (throw), não engolidos — assim a

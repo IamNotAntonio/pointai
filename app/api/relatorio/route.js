@@ -5,27 +5,52 @@ const cliente = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
 
+// Média ponderada Σ(nota×peso)/Σ(peso), ignorando avaliações sem nota.
+// Mesma regra de db.calcularMedia, inline aqui para não acoplar a rota de
+// servidor ao módulo do cliente Supabase (supabase-browser). Retorna número
+// ou null se nenhuma avaliação tem nota.
+function mediaPonderada(avaliacoes) {
+  if (!Array.isArray(avaliacoes)) return null
+  let soma = 0
+  let pesoTotal = 0
+  for (const a of avaliacoes) {
+    if (!a || a.nota === null || a.nota === undefined || a.nota === '') continue
+    const nota = Number(a.nota)
+    if (Number.isNaN(nota)) continue
+    const peso = a.peso === null || a.peso === undefined || a.peso === '' ? 1 : Number(a.peso)
+    if (Number.isNaN(peso) || peso <= 0) continue
+    soma += nota * peso
+    pesoTotal += peso
+  }
+  return pesoTotal > 0 ? soma / pesoTotal : null
+}
+
 export async function POST(req) {
-  // SECURITY: perfil + notas + eventos from authenticated session — never trust the body.
+  // SECURITY: perfil + matérias + eventos from authenticated session — never trust the body.
   const { supabase, user } = await requireUser()
   if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-  const [perfilRes, notasRes, eventosRes] = await Promise.all([
+  const [perfilRes, materiasRes, eventosRes] = await Promise.all([
     supabase.from('perfis').select('nome,curso,universidade,semestre,materias,objetivo').eq('user_id', user.id).maybeSingle(),
-    supabase.from('notas').select('dados').eq('user_id', user.id).maybeSingle(),
+    // Modelo NOVO (N avaliações): materias_aluno + avaliacoes embutidas.
+    supabase.from('materias_aluno').select('nome,faltas,total_aulas,media_aprovacao,avaliacoes(nota,peso)').eq('user_id', user.id).order('nome', { ascending: true }),
     supabase.from('eventos').select('id,titulo,data,tipo,materia').eq('user_id', user.id).order('data', { ascending: true }),
   ])
   const perfil = perfilRes.data || EMPTY_PERFIL
-  const notas = notasRes.data?.dados || {}
+  const materias = materiasRes.data || []
   const eventos = eventosRes.data || []
 
-  // Body kept for forward-compat (currently no fields besides perfil/notas/eventos).
+  // Body kept for forward-compat. Dados vêm da sessão (anti-spoof), não do body.
   await req.json().catch(() => null)
 
-  const notasStr = notas
-    ? Object.entries(notas).map(([mat, d]) => {
-        const vals = (d?.notas || []).filter(n => n !== '' && n !== null)
-        const media = vals.length ? (vals.reduce((a, b) => a + Number(b), 0) / vals.length).toFixed(1) : '—'
-        return `${mat}: média ${media}, faltas ${d?.faltas || 0}/${Math.floor((d?.totalAulas || 60) * 0.25)} permitidas`
+  const notasStr = materias.length
+    ? materias.map((m) => {
+        const media = mediaPonderada(m.avaliacoes)
+        const meta = Number(m.media_aprovacao) || 7
+        const mediaTxt = media != null ? media.toFixed(1) : '—'
+        const totalAulas = Number(m.total_aulas) || 60
+        const limiteFaltas = Math.floor(totalAulas * 0.25)
+        const aviso = media != null && media < meta ? ' ⚠ abaixo da meta' : ''
+        return `${m.nome}: média ${mediaTxt} (meta ${meta}), faltas ${m.faltas || 0}/${limiteFaltas} permitidas${aviso}`
       }).join('\n')
     : 'Sem dados de notas cadastrados'
 

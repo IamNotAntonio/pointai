@@ -294,12 +294,13 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
   }
 
   // ── Save ──────────────────────────────────────────────────────
-  // We do the auth check + Supabase write EXPLICITLY here instead of going
-  // through db.saveNotas/db.saveEvento. Those helpers fall back to console.warn
-  // and swallow errors silently, which would let the user see "Importado!" even
-  // when the upsert failed (NOT NULL on user_id when auth.getUser returns null
-  // post-f3ff171, or RLS rejection). Surface all failures with a visible code
-  // and console.error so future regressions don't disappear into the void.
+  // We do the auth check EXPLICITLY here instead of relying on db.saveEvento,
+  // which falls back to console.warn and swallows errors silently — that would
+  // let the user see "Importado!" even when the upsert failed (NOT NULL on
+  // user_id when auth.getUser returns null post-f3ff171, or RLS rejection).
+  // The notas path uses db.upsertMateria/addAvaliacao (modelo novo), which
+  // PROPAGATE errors. Surface all failures with a visible code and console.error
+  // so future regressions don't disappear into the void.
   async function confirmar() {
     if (saving) return
     setSaving(true)
