@@ -23,7 +23,6 @@ const PRIOR_COR = { alta: '#ef4444', media: '#f59e0b', baixa: '#22c55e' }
 export default function PlanoEstudos() {
   const [tela, setTela] = useState('carregando')
   const [perfil, setPerfil] = useState(null)
-  const [notas, setNotas] = useState(null)
   const [eventos, setEventos] = useState([])
   const [plano, setPlano] = useState(null)
   const [ehPro, setEhPro] = useState(false)
@@ -33,14 +32,14 @@ export default function PlanoEstudos() {
 
   useEffect(() => {
     async function init() {
-      const [p, n, evs, pl] = await Promise.all([
+      // Notas NÃO são lidas aqui: a rota /api/plano lê matérias/avaliações do
+      // Supabase pela sessão (fonte de verdade) e ignora qualquer nota do body.
+      const [p, evs, pl] = await Promise.all([
         db.getPerfil(),
-        db.getNotas(),
         db.getEventos(),
         fetchPlano(),
       ])
       setPerfil(p)
-      setNotas(n)
       setEventos(evs)
       const isPro = pl === 'pro'
       setEhPro(isPro)
@@ -54,13 +53,13 @@ export default function PlanoEstudos() {
         }
       } catch {}
 
-      if (p) await gerarPlano(p, n, evs, isPro)
+      if (p) await gerarPlano(p, evs, isPro)
       else setTela('erro')
     }
     init()
   }, [])
 
-  async function gerarPlano(p, n, evs, isPro) {
+  async function gerarPlano(p, evs, isPro) {
     setGerando(true)
     setErro(null)
     setTela('carregando')
@@ -86,7 +85,7 @@ export default function PlanoEstudos() {
       const resp = await fetch('/api/plano', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ perfil: p, notas: n, eventos: eventosFuturos, historicoChat, ehPro: isPro }),
+        body: JSON.stringify({ perfil: p, eventos: eventosFuturos, historicoChat, ehPro: isPro }),
       })
       const data = await resp.json()
       if (data.erro || !data.dias) throw new Error(data.erro || 'Resposta inválida')
@@ -103,7 +102,7 @@ export default function PlanoEstudos() {
 
   function atualizarPlano() {
     localStorage.removeItem('pointai_plano_estudos')
-    gerarPlano(perfil, notas, eventos, ehPro)
+    gerarPlano(perfil, eventos, ehPro)
   }
 
   function exportarPDF() {
@@ -153,7 +152,7 @@ export default function PlanoEstudos() {
             </div>
             <button
               className="btn btn-primary"
-              onClick={() => gerarPlano(perfil, notas, eventos, ehPro)}
+              onClick={() => gerarPlano(perfil, eventos, ehPro)}
               disabled={gerando}
             >
               <RefreshCw size={14} />

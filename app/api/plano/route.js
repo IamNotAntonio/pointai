@@ -5,6 +5,26 @@ const anthropic = new Anthropic();
 
 const EMPTY_PERFIL = { nome: '', curso: '', universidade: '', semestre: '', materias: '', objetivo: '' }
 
+// Média ponderada Σ(nota×peso)/Σ(peso), ignorando avaliações sem nota.
+// Mesma regra de db.calcularMedia, inline aqui para não acoplar a rota de
+// servidor ao módulo do cliente Supabase (supabase-browser). Retorna número
+// ou null se nenhuma avaliação tem nota.
+function mediaPonderada(avaliacoes) {
+  if (!Array.isArray(avaliacoes)) return null
+  let soma = 0
+  let pesoTotal = 0
+  for (const a of avaliacoes) {
+    if (!a || a.nota === null || a.nota === undefined || a.nota === '') continue
+    const nota = Number(a.nota)
+    if (Number.isNaN(nota)) continue
+    const peso = a.peso === null || a.peso === undefined || a.peso === '' ? 1 : Number(a.peso)
+    if (Number.isNaN(peso) || peso <= 0) continue
+    soma += nota * peso
+    pesoTotal += peso
+  }
+  return pesoTotal > 0 ? soma / pesoTotal : null
+}
+
 function extractJSON(text) {
   let cleaned = text.replace(/```json[\s\S]*?```/g, (match) => {
     return match.replace(/```json\s*/, '').replace(/\s*```$/, '');
@@ -20,16 +40,17 @@ function extractJSON(text) {
 
 export async function POST(request) {
   try {
-    // SECURITY: perfil + notas + eventos from authenticated session — never trust the body.
+    // SECURITY: perfil + matérias + eventos from authenticated session — never trust the body.
     const { supabase, user } = await requireUser()
     if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
-    const [perfilRes, notasRes, eventosRes] = await Promise.all([
+    const [perfilRes, materiasRes, eventosRes] = await Promise.all([
       supabase.from('perfis').select('nome,curso,universidade,semestre,materias,objetivo').eq('user_id', user.id).maybeSingle(),
-      supabase.from('notas').select('dados').eq('user_id', user.id).maybeSingle(),
+      // Modelo NOVO (N avaliações): materias_aluno + avaliacoes embutidas.
+      supabase.from('materias_aluno').select('nome,faltas,total_aulas,media_aprovacao,avaliacoes(nota,peso)').eq('user_id', user.id).order('nome', { ascending: true }),
       supabase.from('eventos').select('id,titulo,data,tipo,materia').eq('user_id', user.id).order('data', { ascending: true }),
     ])
     const perfil = perfilRes.data || EMPTY_PERFIL
-    const notas = notasRes.data?.dados || {}
+    const materias = materiasRes.data || []
     const eventos = eventosRes.data || []
 
     const { historicoChat, ehPro } = await request.json();
@@ -38,12 +59,13 @@ export async function POST(request) {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
 
-    const notasFormatadas = Object.entries(notas || {}).map(([materia, dados]) => {
-      const listaNotas = dados.notas || [];
-      const media = listaNotas.length > 0
-        ? (listaNotas.reduce((acc, n) => acc + parseFloat(n || 0), 0) / listaNotas.length).toFixed(1)
-        : 'sem notas';
-      return `- ${materia}: média ${media}, faltas ${dados.faltas || 0}/${dados.totalAulas || 0}`;
+    const notasFormatadas = materias.map((m) => {
+      const media = mediaPonderada(m.avaliacoes);
+      const meta = Number(m.media_aprovacao) || 7;
+      const mediaTxt = media != null ? media.toFixed(1) : 'sem notas';
+      // Sinaliza para a IA priorizar matérias abaixo da meta de aprovação.
+      const aviso = media != null && media < meta ? ' ⚠ ABAIXO DA META — priorizar' : '';
+      return `- ${m.nome}: média ${mediaTxt} (meta ${meta}), faltas ${m.faltas || 0}/${m.total_aulas || 0}${aviso}`;
     }).join('\n');
 
     const eventosFormatados = (eventos || [])

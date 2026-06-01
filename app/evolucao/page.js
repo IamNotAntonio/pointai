@@ -8,36 +8,46 @@ import {
 } from 'recharts'
 import { AlertTriangle, TrendingUp } from 'lucide-react'
 
-function calcularMedia(notas) {
-  const v = notas.filter(n => n !== '' && !isNaN(parseFloat(n)))
-  if (!v.length) return null
-  return (v.reduce((a, b) => a + parseFloat(b), 0) / v.length).toFixed(1)
+// Modelo NOVO (N avaliações): as médias vêm de db.calcularMedia (ponderada,
+// ignora avaliações sem nota) e cada matéria tem sua própria meta de
+// aprovação (media_aprovacao). Aqui `media` é SEMPRE número ou null — nunca
+// string — e os limiares de status são relativos à meta da matéria.
+function normalizeKey(s) {
+  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 }
 
-function mediaStatus(media) {
-  if (!media) return { label: '—', cls: 'badge badge-gray', cor: 'var(--text-4)' }
-  const v = parseFloat(media)
-  if (v >= 7) return { label: 'Aprovado',    cls: 'badge badge-green',  cor: '#1a7a4a' }
-  if (v >= 5) return { label: 'Recuperação', cls: 'badge badge-yellow', cor: '#d97706' }
-  return           { label: 'Reprovado',     cls: 'badge badge-red',    cor: '#dc2626' }
+// Quão abaixo da meta ainda conta como "recuperação" (padrão BR: meta − 2).
+const RECUPERACAO_OFFSET = 2
+
+function mediaStatus(media, meta = 7) {
+  if (media == null) return { label: '—', cls: 'badge badge-gray', cor: 'var(--text-4)' }
+  if (media >= meta) return { label: 'Aprovado',    cls: 'badge badge-green',  cor: '#1a7a4a' }
+  if (media >= meta - RECUPERACAO_OFFSET) return { label: 'Recuperação', cls: 'badge badge-yellow', cor: '#d97706' }
+  return { label: 'Reprovado', cls: 'badge badge-red', cor: '#dc2626' }
 }
 
-function progressClass(media) {
-  if (!media) return 'progress-gray'
-  const v = parseFloat(media)
-  if (v >= 7) return 'progress-green'
-  if (v >= 5) return 'progress-yellow'
+function progressClass(media, meta = 7) {
+  if (media == null) return 'progress-gray'
+  if (media >= meta) return 'progress-green'
+  if (media >= meta - RECUPERACAO_OFFSET) return 'progress-yellow'
   return 'progress-red'
+}
+
+function corBarra(media, meta = 7) {
+  if (media == null) return '#9ca3af'
+  if (media >= meta) return '#1a7a4a'
+  if (media >= meta - RECUPERACAO_OFFSET) return '#d97706'
+  return '#dc2626'
 }
 
 function MediaTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
-  const { fullName, media } = payload[0].payload
-  const st = mediaStatus(media ? String(media) : null)
+  const { fullName, media, hasMedia, meta } = payload[0].payload
+  const st = mediaStatus(hasMedia ? media : null, meta)
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', boxShadow: 'var(--shadow)', fontSize: 12 }}>
       <p style={{ color: 'var(--text-3)', marginBottom: 4, maxWidth: 160 }}>{fullName}</p>
-      <p style={{ fontWeight: 700, color: st.cor, fontSize: 15 }}>{media ?? '—'}</p>
+      <p style={{ fontWeight: 700, color: st.cor, fontSize: 15 }}>{hasMedia ? media.toFixed(1) : '—'}</p>
     </div>
   )
 }
@@ -54,32 +64,45 @@ function FaltaTooltip({ active, payload }) {
 
 export default function Evolucao() {
   const [perfil, setPerfil]   = useState(null)
-  const [dados, setDados]     = useState({})
-  const [materias, setMaterias] = useState([])
+  const [materiasData, setMateriasData] = useState([]) // linhas do modelo novo (db.getMaterias)
+  const [materias, setMaterias] = useState([])         // nomes oficiais (perfil.materias)
   const [eventos, setEventos] = useState([])
+  const [erro, setErro]       = useState(null)
 
   useEffect(() => {
     async function carregar() {
-      const [p, n, evs] = await Promise.all([db.getPerfil(), db.getNotas(), db.getEventos()])
+      const p = await db.getPerfil()
       if (p) {
         setPerfil(p)
-        setMaterias(p.materias.split(',').map(m => m.trim()))
+        setMaterias((p.materias || '').split(',').map(m => m.trim()).filter(Boolean))
       }
-      if (n) setDados(n)
-      setEventos(evs)
+      // getEventos tem fallback offline próprio — não derruba a tela.
+      try { setEventos((await db.getEventos()) || []) } catch { setEventos([]) }
+      // getMaterias PROPAGA erro (sem fallback localStorage). Surface, não engole.
+      try {
+        setMateriasData((await db.getMaterias()) || [])
+      } catch (e) {
+        setErro(e.message || 'Não foi possível carregar suas matérias.')
+      }
     }
     carregar()
   }, [])
 
+  // Casa o nome oficial (perfil) com a linha do modelo novo, tolerante a
+  // acento/caixa/espaço. Modelo novo: faltas/total_aulas/media_aprovacao.
+  const rowByNome = new Map(materiasData.map(r => [normalizeKey(r.nome), r]))
+  const getRow    = (m) => rowByNome.get(normalizeKey(m)) || null
+  const mediaDe   = (m) => { const r = getRow(m); return r ? db.calcularMedia(r.avaliacoes) : null }
+  const metaDe    = (m) => { const r = getRow(m); return Number(r?.media_aprovacao) || 7 }
+
   function faltasRestantes(materia) {
-    const d = dados[materia]
-    if (!d) return null
-    return Math.floor(d.totalAulas * 0.25) - d.faltas
+    const r = getRow(materia)
+    if (!r) return null
+    const total = Number(r.total_aulas) || 60
+    return Math.floor(total * 0.25) - (Number(r.faltas) || 0)
   }
 
-  const mediasValidas = materias
-    .map(m => dados[m] ? calcularMedia(dados[m].notas) : null)
-    .filter(Boolean).map(Number)
+  const mediasValidas = materias.map(mediaDe).filter(v => v != null)
 
   const mediaGeral = mediasValidas.length
     ? (mediasValidas.reduce((a, b) => a + b, 0) / mediasValidas.length).toFixed(1)
@@ -95,28 +118,31 @@ export default function Evolucao() {
     .sort((a, b) => new Date(a.data) - new Date(b.data))
 
   const emRisco = materias.filter(m => { const r = faltasRestantes(m); return r !== null && r <= 3 })
+  // Risco de média: abaixo da META da matéria (media_aprovacao), não de um fixo.
   const abaixoDaMedia = materias.filter(m => {
-    const med = dados[m] ? calcularMedia(dados[m].notas) : null
-    return med && parseFloat(med) < 7
+    const med = mediaDe(m)
+    return med != null && med < metaDe(m)
   })
 
   // Bar chart data
   const barData = materias.map(m => {
-    const media = dados[m] ? calcularMedia(dados[m].notas) : null
-    const v = media ? parseFloat(media) : 0
+    const media = mediaDe(m)
+    const meta = metaDe(m)
     return {
       name: m.length > 11 ? m.substring(0, 11) + '…' : m,
       fullName: m,
-      media: v,
-      cor: !media ? '#9ca3af' : v >= 7 ? '#1a7a4a' : v >= 5 ? '#d97706' : '#dc2626',
+      media: media != null ? media : 0,
+      hasMedia: media != null,
+      meta,
+      cor: corBarra(media, meta),
     }
   })
 
   // Donut chart — aggregate absences
-  const totalUsadas = materias.reduce((sum, m) => sum + (dados[m]?.faltas || 0), 0)
+  const totalUsadas = materias.reduce((sum, m) => sum + (Number(getRow(m)?.faltas) || 0), 0)
   const totalMax    = materias.reduce((sum, m) => {
-    const d = dados[m] || { totalAulas: 60 }
-    return sum + Math.floor(d.totalAulas * 0.25)
+    const total = Number(getRow(m)?.total_aulas) || 60
+    return sum + Math.floor(total * 0.25)
   }, 0)
   const totalRestantes = Math.max(0, totalMax - totalUsadas)
   const corDonut = totalUsadas >= totalMax ? '#dc2626'
@@ -130,7 +156,7 @@ export default function Evolucao() {
         { name: 'Restantes', value: totalRestantes },
       ]
 
-  const semDados = materias.every(m => !dados[m] || calcularMedia(dados[m].notas) === null)
+  const semDados = materias.every(m => mediaDe(m) == null)
 
   if (!perfil) return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -152,6 +178,13 @@ export default function Evolucao() {
         </div>
 
         <div className="page-scroll">
+
+          {erro && (
+            <div className="alert alert-red" style={{ marginBottom: 16 }}>
+              <AlertTriangle size={18} strokeWidth={1.8} style={{ color: '#dc2626', flexShrink: 0 }} />
+              <p>{erro}</p>
+            </div>
+          )}
 
           {/* Resumo geral */}
           <div className="grid-3" style={{ marginBottom: 20 }}>
@@ -183,7 +216,7 @@ export default function Evolucao() {
               {abaixoDaMedia.map(m => (
                 <div key={m} className="alert alert-yellow">
                   <AlertTriangle size={18} strokeWidth={1.8} style={{ color: '#d97706', flexShrink: 0 }} />
-                  <p><strong>{m}</strong> — Média <strong>{calcularMedia(dados[m].notas)}</strong> abaixo de 7.0. Foque!</p>
+                  <p><strong>{m}</strong> — Média <strong>{mediaDe(m).toFixed(1)}</strong> abaixo da meta ({metaDe(m)}). Foque!</p>
                 </div>
               ))}
             </div>
@@ -221,7 +254,7 @@ export default function Evolucao() {
                   </BarChart>
                 </ResponsiveContainer>
                 <div style={{ display: 'flex', gap: 14, justifyContent: 'center', marginTop: 8 }}>
-                  {[['#1a7a4a', 'Aprovado ≥7'], ['#d97706', 'Recuperação ≥5'], ['#dc2626', 'Reprovado']].map(([cor, label]) => (
+                  {[['#1a7a4a', 'Na meta'], ['#d97706', 'Recuperação'], ['#dc2626', 'Abaixo da meta']].map(([cor, label]) => (
                     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: cor, display: 'inline-block' }} />
                       <span style={{ fontSize: 11, color: 'var(--text-4)' }}>{label}</span>
@@ -281,10 +314,11 @@ export default function Evolucao() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {materias.map((m, i) => {
-                  const d = dados[m] || { notas: ['', '', ''], faltas: 0, totalAulas: 60 }
-                  const media = calcularMedia(d.notas)
-                  const status = mediaStatus(media)
-                  const pct = media ? Math.min(100, (parseFloat(media) / 10) * 100) : 0
+                  const media = mediaDe(m)
+                  const meta = metaDe(m)
+                  const faltas = Number(getRow(m)?.faltas) || 0
+                  const status = mediaStatus(media, meta)
+                  const pct = media != null ? Math.min(100, (media / 10) * 100) : 0
                   const fr = faltasRestantes(m)
 
                   return (
@@ -300,15 +334,15 @@ export default function Evolucao() {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           {fr !== null && fr > 3 && (
-                            <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{d.faltas} faltas</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{faltas} faltas</span>
                           )}
                           <span className={status.cls}>
-                            {media ? `${media} · ${status.label}` : 'Sem notas'}
+                            {media != null ? `${media.toFixed(1)} · ${status.label}` : 'Sem notas'}
                           </span>
                         </div>
                       </div>
                       <div className="progress-bar">
-                        <div className={`progress-fill ${progressClass(media)}`} style={{ width: `${pct}%` }} />
+                        <div className={`progress-fill ${progressClass(media, meta)}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )
