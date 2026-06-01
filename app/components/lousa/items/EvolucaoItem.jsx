@@ -118,7 +118,8 @@ function EvolucaoFullscreenInner() {
 
   useEffect(() => {
     let alive = true
-    db.getNotas().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
+    // Modelo NOVO (Parte 3): fonte de verdade é db.getMaterias().
+    db.getMaterias().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
     db.getEventos().then(d => { if (alive) setEventos(d || []) }).catch(() => {})
     setChatStats(readChatStats(materia))
     return () => { alive = false }

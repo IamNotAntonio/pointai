@@ -14,6 +14,9 @@ import { useProfile } from '../lib/ProfileContext'
 const EASE = [0.22, 1, 0.36, 1]
 const MAX_STAGED = 10
 const MAX_BYTES = 5 * 1024 * 1024
+// Defaults ao criar uma matéria nova via import (modelo novo).
+const TOTAL_AULAS_PADRAO = 60
+const MEDIA_APROVACAO_PADRAO = 7
 
 const ERROS = {
   'too-large': 'Cada arquivo precisa ter no máximo 5 MB. Tente recortar o print ou reduzir o PDF.',
@@ -97,7 +100,7 @@ function formatData(d) {
  */
 export default function ImportModal({ open, onClose, context = 'all' }) {
   const reduce = useReducedMotion()
-  const { perfil, updatePerfil } = useProfile()
+  const { perfil, refreshPerfil } = useProfile()
   const [mounted, setMounted] = useState(false)
   const [step, setStep] = useState('pick')        // pick | staging | processing | preview | error | success
   const [mode, setMode] = useState(null)          // boletim | calendario
@@ -211,13 +214,16 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
       return
     }
 
-    const existing = (await db.getNotas().catch(() => null)) || {}
+    // Modelo NOVO: matérias existentes (com avaliações embutidas) por nome.
+    const existingMaterias = (await db.getMaterias().catch(() => [])) || []
+    const existing = {}
+    for (const m of existingMaterias) existing[m.nome] = m
     setExistingNotas(existing)
 
     // Authoritative list of cadastradas matérias = perfil.materias (+ qualquer
-    // chave de existingNotas que não esteja no perfil, por segurança).
+    // matéria já existente no modelo novo que não esteja no perfil, por segurança).
     const fromPerfil = (perfil?.materias || '').split(',').map(s => s.trim()).filter(Boolean)
-    const fromNotas = Object.keys(existing)
+    const fromNotas = existingMaterias.map(m => m.nome)
     const cadSet = new Map()
     for (const m of fromPerfil) cadSet.set(normalize(m), m)
     for (const m of fromNotas) if (!cadSet.has(normalize(m))) cadSet.set(normalize(m), m)
@@ -322,72 +328,70 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
       }
 
       if (mode === 'boletim') {
-        const dados = { ...existingNotas }
-        const novasMaterias = []
+        // MODELO NOVO (Parte 3): pra cada matéria, upsertMateria() + uma
+        // addAvaliacao() por avaliação lida. Conflito por matéria:
+        //   manter     → não mexe nas existentes (pula a matéria)
+        //   substituir → apaga as avaliações atuais e insere as importadas
+        //   adicionar  → mantém as existentes e acrescenta as importadas
+        // Erros das chamadas de db propagam (throw) → caem no catch externo
+        // e viram 'save-failed' visível (nada é engolido).
+        //
+        // A sincronização de matéria nova → perfil.materias acontece DENTRO de
+        // db.upsertMateria (matéria oficial), então não precisa ser feita aqui.
         let nNotas = 0, nFaltas = 0
+
         for (const m of materias) {
           if (m._removed) continue
           const targetVal = vinculos[m.nome] || '__new__'
           const target = targetVal === '__new__' ? m.nome : targetVal
 
-          if (targetVal === '__new__' && !cadastradas.some(c => normalize(c) === normalize(target))) {
-            novasMaterias.push(target)
-          }
-
-          const conflito = !!existingNotas[target] && temNotas(existingNotas[target])
+          const existingRow = existingNotas[target]
+          const conflito = !!existingRow && temNotas(existingRow)
           const res = resolucao[m.nome] || 'manter'
           if (conflito && res === 'manter') continue
 
-          const importadas = (m.avaliacoes || [])
-            .map(a => a.nota).filter(v => v != null && v !== '' && !Number.isNaN(Number(v)))
-            .map(v => String(v))
           const faltas = Number(m.faltas) || 0
 
-          if (conflito && res === 'adicionar') {
-            const atual = existingNotas[target] || { notas: [], faltas: 0, totalAulas: 60 }
-            const merged = [...(atual.notas || []).filter(Boolean), ...importadas].slice(0, 3)
-            dados[target] = {
-              notas: [...merged, '', '', ''].slice(0, 3),
-              faltas: atual.faltas || faltas,
-              totalAulas: atual.totalAulas || 60,
+          // 1) Garante a linha da matéria. Em matéria nova, semeia defaults;
+          //    em substituir, atualiza faltas; em adicionar, preserva o que já existe.
+          const matPatch = { nome: target }
+          if (!existingRow) {
+            matPatch.faltas = faltas
+            matPatch.total_aulas = TOTAL_AULAS_PADRAO
+            matPatch.media_aprovacao = MEDIA_APROVACAO_PADRAO
+          } else if (res === 'substituir') {
+            matPatch.faltas = faltas
+          }
+          const matRow = await db.upsertMateria(matPatch)
+
+          // 2) Substituir: remove as avaliações atuais antes de inserir.
+          if (conflito && res === 'substituir' && Array.isArray(existingRow.avaliacoes)) {
+            for (const a of existingRow.avaliacoes) {
+              if (a?.id) await db.deleteAvaliacao(a.id)
             }
-          } else {
-            dados[target] = {
-              notas: [...importadas, '', '', ''].slice(0, 3),
-              faltas,
-              totalAulas: existingNotas[target]?.totalAulas || 60,
-            }
+          }
+
+          // 3) Insere as avaliações importadas (só as com nota válida).
+          const importadas = (m.avaliacoes || [])
+            .filter(a => a && a.nota != null && a.nota !== '' && !Number.isNaN(Number(a.nota)))
+          let idx = 0
+          for (const a of importadas) {
+            idx++
+            await db.addAvaliacao(matRow.id, {
+              nome: (a.nome && String(a.nome).trim()) || `Avaliação ${idx}`,
+              nota: Number(a.nota),
+              peso: a.peso != null && a.peso !== '' && !Number.isNaN(Number(a.peso)) ? Number(a.peso) : 1,
+            })
           }
           nNotas += importadas.length
           nFaltas += faltas
         }
 
-        // Persist to Supabase FIRST so we don't lie to the user with a success
-        // toast when only localStorage caught the data. Only write localStorage
-        // after the upsert returns ok.
-        const { error: upsertErr } = await supabase
-          .from('notas')
-          .upsert(
-            { user_id: userId, dados, atualizado_em: new Date().toISOString() },
-            { onConflict: 'user_id' }
-          )
-        if (upsertErr) {
-          console.error('[import] saveNotas upsert failed:', upsertErr)
-          setErrorCode('save-failed'); setStep('error'); setSaving(false); return
-        }
-        try { localStorage.setItem('pointai_notas', JSON.stringify(dados)) } catch (e) {
-          console.error('[import] localStorage write failed (Supabase ok)', e)
-        }
-
-        // Sync new matérias into perfil so they show up in /notas and the sidebar.
-        if (novasMaterias.length > 0 && perfil) {
-          const atual = (perfil.materias || '').split(',').map(s => s.trim()).filter(Boolean)
-          const merged = [...atual]
-          for (const nm of novasMaterias) {
-            if (!merged.some(m => normalize(m) === normalize(nm))) merged.push(nm)
-          }
-          try { updatePerfil({ materias: merged.join(', ') }) } catch (e) { console.error('[import] failed to sync perfil', e) }
-        }
+        // db.upsertMateria já sincronizou matérias novas em perfil.materias
+        // (Supabase + espelho local). Recarrega o contexto de perfil pra
+        // dashboard/sidebar refletirem na hora (no-op fora do ProfileProvider,
+        // ex.: /notas, que se atualiza pelo evento pointai-import-done).
+        try { await refreshPerfil?.() } catch {}
 
         try { window.dispatchEvent(new CustomEvent('pointai-import-done', { detail: { kind: 'notas' } })) } catch {}
         setSuccessMsg(`${nNotas} ${nNotas === 1 ? 'nota' : 'notas'} e ${nFaltas} ${nFaltas === 1 ? 'falta' : 'faltas'} importadas`)
@@ -630,8 +634,12 @@ export default function ImportModal({ open, onClose, context = 'all' }) {
 }
 
 /* ── Helpers ─────────────────────────────────────────────────── */
+// `entry` é uma linha de matéria do modelo novo (db.getMaterias): tem
+// avaliações embutidas. Há conflito quando já existe ao menos uma avaliação
+// com nota lançada.
 function temNotas(entry) {
-  return !!entry && Array.isArray(entry.notas) && entry.notas.some(n => n !== '' && n != null)
+  return !!entry && Array.isArray(entry.avaliacoes) &&
+    entry.avaliacoes.some(a => a && a.nota !== '' && a.nota != null)
 }
 
 /* ── Upload card with drag & drop ────────────────────────────── */
@@ -755,7 +763,9 @@ function MateriaCard({
 }) {
   const target = vinculo === '__new__' ? materia.nome : vinculo
   const conflito = !!existing[target] && temNotas(existing[target])
-  const qtdAtual = conflito ? existing[target].notas.filter(n => n !== '' && n != null).length : 0
+  const qtdAtual = conflito
+    ? existing[target].avaliacoes.filter(a => a && a.nota !== '' && a.nota != null).length
+    : 0
   const nAval = materia.avaliacoes?.length || 0
   const isNew = vinculo === '__new__'
   const isAuto = !isNew && autoMatch?.nome === vinculo

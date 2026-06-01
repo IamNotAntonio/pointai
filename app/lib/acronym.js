@@ -18,6 +18,13 @@ function stripAccents(s) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
+// Chave canônica de comparação de nomes de matéria: sem acento, minúscula,
+// sem espaços nas pontas. Usar para dedupe case/acento-insensível
+// (perfil.materias ↔ materias_aluno).
+export function normalizeNome(s) {
+  return stripAccents(String(s ?? '')).toLowerCase().trim()
+}
+
 export function acronym(nome) {
   if (!nome || nome === 'geral' || nome === 'Chat Geral') return 'CG'
 

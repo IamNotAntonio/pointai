@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { normalizeNome } from './acronym'
 
 // Lazy singleton — avoids SSR instantiation
 let _client = null
@@ -122,6 +123,44 @@ export async function getPerfil() {
   }
   const local = localStorage.getItem('pointai_perfil')
   return local ? JSON.parse(local) : null
+}
+
+// Decisão de produto: toda matéria com linha em materias_aluno (criada por
+// importação ou manualmente em /notas) vira matéria OFICIAL do aluno — ou
+// seja, entra em perfil.materias também. Assim aparece no dashboard, sidebar
+// e chat (que leem perfil.materias), não só em /notas.
+//
+// Dedup case/acento-insensível via normalizeNome. Best-effort: erros são
+// logados e não propagados — uma falha aqui não pode derrubar o salvamento
+// da nota em si (a matéria já está persistida em materias_aluno).
+export async function addMateriaToPerfil(nome) {
+  const limpo = (nome || '').trim()
+  if (!limpo) return
+  const alvo = normalizeNome(limpo)
+  const contem = (p) =>
+    (p?.materias || '').split(',').map(s => s.trim()).filter(Boolean)
+      .some(m => normalizeNome(m) === alvo)
+
+  try {
+    // Fast-path: espelho local evita ida à rede quando já está no perfil.
+    if (typeof window !== 'undefined') {
+      try {
+        const local = JSON.parse(localStorage.getItem('pointai_perfil') || 'null')
+        if (local && contem(local)) return
+      } catch {}
+    }
+
+    // Lê o perfil autoritativo (Supabase) antes de escrever, pra não
+    // sobrescrever a lista com uma versão local desatualizada.
+    const perfil = await getPerfil()
+    if (!perfil || contem(perfil)) return
+
+    const lista = (perfil.materias || '').split(',').map(s => s.trim()).filter(Boolean)
+    lista.push(limpo)
+    await savePerfil({ ...perfil, materias: lista.join(', ') })
+  } catch (e) {
+    console.warn('[db] addMateriaToPerfil:', e?.message)
+  }
 }
 
 // ── Chat ───────────────────────────────────────────────────────
@@ -402,6 +441,9 @@ export async function upsertMateria({ nome, faltas, total_aulas, media_aprovacao
     .select('id,nome,faltas,total_aulas,media_aprovacao')
     .single()
   if (error) throw new Error(`Erro ao salvar matéria: ${error.message}`)
+  // Sincroniza o nome no perfil.materias (matéria oficial) — best-effort,
+  // não derruba o salvamento da matéria se a sincronização falhar.
+  await addMateriaToPerfil(data.nome)
   return data
 }
 

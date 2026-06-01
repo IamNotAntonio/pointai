@@ -27,7 +27,6 @@ export default function Notas() {
   const [materias,      setMaterias]      = useState([])    // nomes do perfil
   const [rows,          setRows]          = useState([])    // modelo novo (materias_aluno + avaliacoes)
   const [carregandoRows, setCarregandoRows] = useState(true)
-  const [dados,         setDados]         = useState({})    // modelo ANTIGO — usado só pela importação (coexiste até a Parte 3)
   const [portalModal,   setPortalModal]   = useState(false)
   const [canvasConfig,  setCanvasConfig]  = useState(null)
   const [moodleConfig,  setMoodleConfig]  = useState(null)
@@ -62,27 +61,23 @@ export default function Notas() {
     }
   }
 
-  // Reload (modelo ANTIGO) após import de boletim. A importação ainda grava
-  // no modelo antigo — migração para o modelo novo é Parte 3.
+  // Reload após import de boletim (modelo NOVO). A importação grava em
+  // materias_aluno + avaliacoes no Supabase antes de disparar o evento,
+  // então recarregamos as rows e o perfil (matérias novas criadas no import).
   useEffect(() => {
     function onImport(e) {
       if (e.detail?.kind !== 'notas') return
-      try {
-        const d = JSON.parse(localStorage.getItem('pointai_notas') || 'null')
-        if (d && typeof d === 'object') setDados(d)
-        const p = JSON.parse(localStorage.getItem('pointai_perfil') || 'null')
+      recarregarRows()
+      db.getPerfil().then(p => {
         if (p?.materias) {
-          const lista = p.materias.split(',').map(s => s.trim()).filter(Boolean)
-          setMaterias(lista)
+          setMaterias(p.materias.split(',').map(s => s.trim()).filter(Boolean))
         }
-        mostrarToast('✓ Notas importadas (boletim)')
-      } catch (err) {
-        console.error('[notas] reload after import failed', err)
-      }
+      }).catch(() => {})
+      mostrarToast('✓ Notas importadas (boletim)')
     }
     window.addEventListener('pointai-import-done', onImport)
     return () => window.removeEventListener('pointai-import-done', onImport)
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     async function carregar() {
@@ -91,9 +86,6 @@ export default function Notas() {
       setPerfil(p)
       const lista = (p.materias || '').split(',').map(m => m.trim()).filter(Boolean)
       setMaterias(lista)
-      // Modelo antigo (só para a importação coexistir)
-      const salvo = await db.getNotas()
-      setDados(salvo || {})
       // Modelo novo (fonte de verdade das notas nesta tela)
       await recarregarRows()
     }
@@ -215,7 +207,7 @@ export default function Notas() {
       const result = await resp.json()
       if (result.erro) mostrarToast(result.erro)
       else {
-        aplicarPreviewNotas(result.dados.materias)
+        await aplicarPreviewNotas(result.dados.materias)
         mostrarToast('Notas importadas do Canvas!')
       }
     } catch { mostrarToast('Erro ao conectar com o Canvas.') }
@@ -234,7 +226,7 @@ export default function Notas() {
       const result = await resp.json()
       if (result.erro) mostrarToast(result.erro)
       else {
-        aplicarPreviewNotas(result.dados.materias)
+        await aplicarPreviewNotas(result.dados.materias)
         mostrarToast('Notas importadas do Moodle!')
       }
     } catch { mostrarToast('Erro ao conectar com o Moodle.') }
@@ -327,27 +319,62 @@ export default function Notas() {
     }
   }
 
-  // Merge e save (modelo ANTIGO) — usado pela importação (IA + Canvas/Moodle).
-  function aplicarPreviewNotas(previewMaterias) {
-    const novo = { ...dados }
-    previewMaterias.forEach(m => {
-      const chave = matchMateria(materias, m.nome) || m.nome
-      novo[chave] = {
-        notas:      ([...(m.notas || [])].slice(0, 3).concat(['', '', ''])).slice(0, 3)
-                      .map(n => (n === null || n === undefined) ? '' : String(n)),
-        faltas:     m.faltas     ?? 0,
-        totalAulas: m.totalAulas ?? 60,
+  // Salva o preview da importação (IA foto/texto/planilha + Canvas/Moodle) no
+  // modelo NOVO (materias_aluno + avaliacoes). Estes fluxos SOBRESCREVEM as
+  // avaliações da matéria. Usa os nomes de avaliação quando a fonte fornece
+  // (campo `avaliacoes`); senão cai pra genérico "Avaliação N" a partir de
+  // `notas`. Erros propagam pra UI (toast + rethrow) — nada é engolido.
+  async function aplicarPreviewNotas(previewMaterias) {
+    if (!Array.isArray(previewMaterias) || !previewMaterias.length) return
+    try {
+      for (const m of previewMaterias) {
+        const nomeAlvo = matchMateria(materias, m.nome) || m.nome
+        const existente = rows.find(r => r.nome.toLowerCase() === nomeAlvo.toLowerCase())
+
+        // upsert da matéria: em matéria nova semeia defaults; em existente só
+        // atualiza faltas (preserva total de aulas e meta já configurados).
+        const patch = { nome: nomeAlvo, faltas: m.faltas ?? 0 }
+        if (!existente) {
+          patch.total_aulas = m.totalAulas ?? TOTAL_AULAS_PADRAO
+          patch.media_aprovacao = MEDIA_APROVACAO_PADRAO
+        }
+        const matRow = await db.upsertMateria(patch)
+
+        // Sobrescreve: remove as avaliações atuais antes de inserir as novas.
+        if (existente?.avaliacoes?.length) {
+          for (const a of existente.avaliacoes) {
+            if (a?.id) await db.deleteAvaliacao(a.id)
+          }
+        }
+
+        const avs = Array.isArray(m.avaliacoes) && m.avaliacoes.length
+          ? m.avaliacoes
+          : (m.notas || []).map((n, i) => ({ nome: `Avaliação ${i + 1}`, nota: n, peso: 1 }))
+        let idx = 0
+        for (const a of avs) {
+          if (a == null || a.nota === '' || a.nota == null || Number.isNaN(Number(a.nota))) continue
+          idx++
+          await db.addAvaliacao(matRow.id, {
+            nome: (a.nome && String(a.nome).trim()) || `Avaliação ${idx}`,
+            nota: Number(a.nota),
+            peso: a.peso != null && a.peso !== '' && !Number.isNaN(Number(a.peso)) ? Number(a.peso) : 1,
+          })
+        }
       }
-    })
-    setDados(novo)
-    db.saveNotas(novo)
+      await recarregarRows()
+    } catch (e) {
+      mostrarToast(e.message || 'Erro ao salvar notas importadas')
+      throw e
+    }
   }
 
-  function confirmarImport() {
+  async function confirmarImport() {
     const { preview } = modal
     if (!preview?.materias?.length) return
-    aplicarPreviewNotas(preview.materias)
-    fecharModal()
+    try {
+      await aplicarPreviewNotas(preview.materias)
+      fecharModal()
+    } catch { /* toast já exibido em aplicarPreviewNotas */ }
   }
 
   if (!perfil) return (

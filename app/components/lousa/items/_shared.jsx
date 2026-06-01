@@ -11,19 +11,47 @@ export function useCurrentMateria() {
 }
 
 /* ─── Notas helpers ─────────────────────────────────────────────── */
-// Storage model gravado por /notas e pelo import é:
-//   { [materia]: { notas: ['','',''], faltas, totalAulas } }
+// Modelo NOVO (Parte 3) — fonte de verdade — vindo de db.getMaterias():
+//   [{ id, nome, faltas, total_aulas, media_aprovacao, avaliacoes:[{id,nome,nota,peso}] }]
 // As views da Bento (NotasCard/Fullscreen, EvolucaoCard) esperam uma lista
-// achatada de avaliações { materia, titulo, nota, peso, data, faltas, maxFaltas }.
-// Esta função traduz do storage pra essa lista, ignorando notas vazias.
+// achatada de avaliações { materia, titulo, nota, peso, data, faltas, maxFaltas, meta }.
+// Esta função traduz pra essa lista, ignorando avaliações sem nota.
 //
-// Tolerante a whitespace/acento na comparação da chave: perfil.materias é
-// split-trim de uma string, e a chave do dados foi gravada com a mesma
-// origem — mas se algum import deixou caractere invisível, ainda casamos.
+// Compat: ainda aceita o modelo ANTIGO em objeto { [materia]: { notas:[...],
+// faltas, totalAulas } } caso algum caller legado o passe.
+//
+// Tolerante a whitespace/acento na comparação da chave.
 function normalizeKey(s) {
   return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 }
 
+// Modelo NOVO: uma linha de matéria (materias_aluno + avaliacoes embutidas).
+function recordsFromMateriaRow(row) {
+  if (!row || !Array.isArray(row.avaliacoes)) return []
+  const total = Number(row.total_aulas) || 60
+  const faltas = Number(row.faltas) || 0
+  const maxFaltas = Math.floor(total * 0.25)
+  const meta = Number(row.media_aprovacao) || 7
+  const out = []
+  for (const a of row.avaliacoes) {
+    if (!a || a.nota === '' || a.nota == null) continue
+    const n = Number(a.nota)
+    if (Number.isNaN(n)) continue
+    out.push({
+      materia: row.nome,
+      titulo: (a.nome && String(a.nome).trim()) || 'Avaliação',
+      nota: n,
+      peso: Number(a.peso ?? 1) || 1,
+      data: null,
+      faltas,
+      maxFaltas,
+      meta,
+    })
+  }
+  return out
+}
+
+// Modelo ANTIGO (3 slots) — mantido só por compatibilidade.
 function recordsFromEntry(materia, entry) {
   if (!entry || !Array.isArray(entry.notas)) return []
   const total = Number(entry.totalAulas) || 60
@@ -42,6 +70,7 @@ function recordsFromEntry(materia, entry) {
       data: null,
       faltas,
       maxFaltas,
+      meta: 7,
     })
   })
   return out
@@ -50,7 +79,16 @@ function recordsFromEntry(materia, entry) {
 export function notasDaMateria(notas, materia) {
   if (!notas || !materia) return []
 
-  // New (current) object model: { [materia]: { notas:[...], faltas, totalAulas } }
+  // Modelo NOVO (Parte 3): array de matérias com avaliações embutidas.
+  if (Array.isArray(notas) && notas.some(x => x && Array.isArray(x.avaliacoes))) {
+    const rows = notas.filter(x => x && Array.isArray(x.avaliacoes))
+    if (materia === 'geral') return rows.flatMap(recordsFromMateriaRow)
+    const target = normalizeKey(materia)
+    const row = rows.find(r => normalizeKey(r.nome) === target)
+    return row ? recordsFromMateriaRow(row) : []
+  }
+
+  // Modelo ANTIGO em objeto: { [materia]: { notas:[...], faltas, totalAulas } }
   if (!Array.isArray(notas) && typeof notas === 'object') {
     if (materia === 'geral') {
       return Object.entries(notas).flatMap(([mat, entry]) => recordsFromEntry(mat, entry))
@@ -91,6 +129,13 @@ export function corNota(n) {
   if (v >= 7) return '#22c55e'
   if (v >= 5) return '#fbbf24'
   return '#f87171'
+}
+
+// Cor pela MESMA regra da tela /notas: verde se média >= meta de aprovação,
+// vermelho se abaixo, cinza ("—") sem nota. meta default 7.
+export function corNotaMeta(media, meta = 7) {
+  if (media == null || Number.isNaN(Number(media))) return '#71717a'
+  return Number(media) >= Number(meta ?? 7) ? '#22c55e' : '#dc2626'
 }
 
 /* ─── Eventos helpers ───────────────────────────────────────────── */

@@ -10,7 +10,7 @@ import {
 import * as db from '../../../lib/db'
 import {
   useCurrentMateria,
-  notasDaMateria, mediaPonderada, sortByDate, corNota,
+  notasDaMateria, mediaPonderada, sortByDate, corNota, corNotaMeta,
   sharedItemCss, fullscreenCss,
 } from './_shared'
 
@@ -47,7 +47,10 @@ export function NotasCard({ materia, notas, onClick }) {
     return asc.map((n, i) => ({ name: i.toString(), nota: Number(n.nota) }))
   }, [lista])
 
-  const mediaColor = media == null ? '#71717a' : corNota(media)
+  // Cor pela regra da /notas (verde >= meta, vermelho <). 'geral' agrega
+  // várias matérias → usa meta padrão 7; matéria específica usa sua meta.
+  const meta = materia === 'geral' ? 7 : (lista[0]?.meta ?? 7)
+  const mediaColor = corNotaMeta(media, meta)
 
   return (
     <motion.button
@@ -118,7 +121,8 @@ function NotasFullscreenInner() {
 
   useEffect(() => {
     let alive = true
-    db.getNotas().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
+    // Modelo NOVO (Parte 3): fonte de verdade é db.getMaterias().
+    db.getMaterias().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
     return () => { alive = false }
   }, [])
 

@@ -47,27 +47,25 @@ function LousaInner() {
 
   useEffect(() => {
     let alive = true
-    db.getNotas().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
+    // Modelo NOVO (Parte 3): notas vêm de db.getMaterias() (materias_aluno + avaliacoes).
+    db.getMaterias().then(d => { if (alive) setNotas(d || []) }).catch(() => {})
     db.getEventos().then(d => { if (alive) setEventos(d || []) }).catch(() => {})
     fetchPlano().then(p => { if (alive) setIsProUser(p === 'pro') }).catch(() => {})
     return () => { alive = false }
   }, [])
 
   // Refresh notas/eventos when an import lands so the Bento cards update
-  // without a manual reload. Reads localStorage directly to avoid a Supabase
-  // round-trip that could lose the race against the just-finished upsert.
+  // without a manual reload. A importação grava no Supabase (modelo novo)
+  // antes de disparar o evento, então uma releitura via getMaterias pega
+  // os dados já persistidos.
   useEffect(() => {
     function onImport(e) {
       const kind = e.detail?.kind
-      try {
-        if (kind === 'notas') {
-          const d = JSON.parse(localStorage.getItem('pointai_notas') || 'null')
-          if (d && typeof d === 'object') setNotas(d)
-        } else if (kind === 'eventos') {
-          // Eventos é per-row no Supabase — vale uma releitura completa.
-          db.getEventos().then(evs => setEventos(evs || [])).catch(() => {})
-        }
-      } catch {}
+      if (kind === 'notas') {
+        db.getMaterias().then(d => setNotas(d || [])).catch(() => {})
+      } else if (kind === 'eventos') {
+        db.getEventos().then(evs => setEventos(evs || [])).catch(() => {})
+      }
     }
     window.addEventListener('pointai-import-done', onImport)
     return () => window.removeEventListener('pointai-import-done', onImport)
