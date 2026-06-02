@@ -95,11 +95,13 @@ export default function Evolucao() {
   const mediaDe   = (m) => { const r = getRow(m); return r ? db.calcularMedia(r.avaliacoes) : null }
   const metaDe    = (m) => { const r = getRow(m); return Number(r?.media_aprovacao) || 7 }
 
+  // Restantes = limite REAL (coluna limite_faltas) − faltas usadas. Retorna
+  // null quando a matéria não tem limite configurado (limite_faltas IS NULL)
+  // — nesse caso ela fica fora dos alertas e do agregado de faltas.
   function faltasRestantes(materia) {
     const r = getRow(materia)
-    if (!r) return null
-    const total = Number(r.total_aulas) || 60
-    return Math.floor(total * 0.25) - (Number(r.faltas) || 0)
+    if (!r || r.limite_faltas == null) return null
+    return Number(r.limite_faltas) - (Number(r.faltas) || 0)
   }
 
   const mediasValidas = materias.map(mediaDe).filter(v => v != null)
@@ -138,11 +140,18 @@ export default function Evolucao() {
     }
   })
 
-  // Donut chart — aggregate absences
-  const totalUsadas = materias.reduce((sum, m) => sum + (Number(getRow(m)?.faltas) || 0), 0)
+  // Donut chart — agrega faltas SÓ das matérias com limite configurado
+  // (limite_faltas não null). As sem limite ficam fora pra não distorcer
+  // o "restantes" geral (nada de total_aulas*0.25).
+  const totalUsadas = materias.reduce((sum, m) => {
+    const r = getRow(m)
+    if (!r || r.limite_faltas == null) return sum
+    return sum + (Number(r.faltas) || 0)
+  }, 0)
   const totalMax    = materias.reduce((sum, m) => {
-    const total = Number(getRow(m)?.total_aulas) || 60
-    return sum + Math.floor(total * 0.25)
+    const r = getRow(m)
+    if (!r || r.limite_faltas == null) return sum
+    return sum + Number(r.limite_faltas)
   }, 0)
   const totalRestantes = Math.max(0, totalMax - totalUsadas)
   const corDonut = totalUsadas >= totalMax ? '#dc2626'
@@ -333,7 +342,7 @@ export default function Evolucao() {
                           )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {fr !== null && fr > 3 && (
+                          {(fr === null || fr > 3) && (
                             <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{faltas} faltas</span>
                           )}
                           <span className={status.cls}>

@@ -28,9 +28,10 @@ function normalizeKey(s) {
 // Modelo NOVO: uma linha de matéria (materias_aluno + avaliacoes embutidas).
 function recordsFromMateriaRow(row) {
   if (!row || !Array.isArray(row.avaliacoes)) return []
-  const total = Number(row.total_aulas) || 60
   const faltas = Number(row.faltas) || 0
-  const maxFaltas = Math.floor(total * 0.25)
+  // Limite REAL de faltas = coluna limite_faltas (nullable). NULL = não
+  // configurado → maxFaltas null (não inventamos teto via total_aulas*0.25).
+  const maxFaltas = row.limite_faltas == null ? null : Number(row.limite_faltas)
   const meta = Number(row.media_aprovacao) || 7
   const out = []
   for (const a of row.avaliacoes) {
@@ -51,12 +52,13 @@ function recordsFromMateriaRow(row) {
   return out
 }
 
-// Modelo ANTIGO (3 slots) — mantido só por compatibilidade.
+// Modelo ANTIGO (3 slots) — mantido só por compatibilidade. O modelo antigo
+// não tem limite de faltas explícito, então maxFaltas fica null (não
+// inventamos teto via total*0.25).
 function recordsFromEntry(materia, entry) {
   if (!entry || !Array.isArray(entry.notas)) return []
-  const total = Number(entry.totalAulas) || 60
   const faltas = Number(entry.faltas) || 0
-  const maxFaltas = Math.floor(total * 0.25)
+  const maxFaltas = null
   const out = []
   entry.notas.forEach((raw, i) => {
     if (raw === '' || raw == null) return

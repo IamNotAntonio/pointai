@@ -373,7 +373,7 @@ export async function getMaterias() {
   const userId = await requireUserId()
   const { data, error } = await getClient()
     .from('materias_aluno')
-    .select('id,nome,faltas,total_aulas,media_aprovacao,avaliacoes(id,nome,nota,peso)')
+    .select('id,nome,faltas,total_aulas,limite_faltas,media_aprovacao,avaliacoes(id,nome,nota,peso)')
     .eq('user_id', userId)
     .order('nome', { ascending: true })
   if (error) throw new Error(`Erro ao carregar matérias: ${error.message}`)
@@ -382,6 +382,7 @@ export async function getMaterias() {
     nome: m.nome,
     faltas: m.faltas,
     total_aulas: m.total_aulas,
+    limite_faltas: m.limite_faltas,
     media_aprovacao: m.media_aprovacao,
     avaliacoes: m.avaliacoes || [],
   }))
@@ -390,19 +391,22 @@ export async function getMaterias() {
 // Cria ou atualiza uma matéria (match por user_id + nome). Campos não
 // informados ficam a cargo dos defaults da tabela no insert; no update,
 // só sobrescreve o que vier definido.
-export async function upsertMateria({ nome, faltas, total_aulas, media_aprovacao } = {}) {
+export async function upsertMateria({ nome, faltas, total_aulas, limite_faltas, media_aprovacao } = {}) {
   const userId = await requireUserId()
   if (!nome || !nome.trim()) throw new Error('Nome da matéria é obrigatório.')
 
   const row = { user_id: userId, nome: nome.trim() }
   if (faltas !== undefined) row.faltas = faltas
   if (total_aulas !== undefined) row.total_aulas = total_aulas
+  // limite_faltas é nullable: NULL = não configurado. Passa null explícito
+  // adiante quando informado (só ignora quando undefined).
+  if (limite_faltas !== undefined) row.limite_faltas = limite_faltas
   if (media_aprovacao !== undefined) row.media_aprovacao = media_aprovacao
 
   const { data, error } = await getClient()
     .from('materias_aluno')
     .upsert(row, { onConflict: 'user_id,nome' })
-    .select('id,nome,faltas,total_aulas,media_aprovacao')
+    .select('id,nome,faltas,total_aulas,limite_faltas,media_aprovacao')
     .single()
   if (error) throw new Error(`Erro ao salvar matéria: ${error.message}`)
   // Sincroniza o nome no perfil.materias (matéria oficial) — best-effort,

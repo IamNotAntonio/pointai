@@ -32,7 +32,7 @@ export async function POST(req) {
   const [perfilRes, materiasRes, eventosRes] = await Promise.all([
     supabase.from('perfis').select('nome,curso,universidade,semestre,materias,objetivo').eq('user_id', user.id).maybeSingle(),
     // Modelo NOVO (N avaliações): materias_aluno + avaliacoes embutidas.
-    supabase.from('materias_aluno').select('nome,faltas,total_aulas,media_aprovacao,avaliacoes(nota,peso)').eq('user_id', user.id).order('nome', { ascending: true }),
+    supabase.from('materias_aluno').select('nome,faltas,limite_faltas,media_aprovacao,avaliacoes(nota,peso)').eq('user_id', user.id).order('nome', { ascending: true }),
     supabase.from('eventos').select('id,titulo,data,tipo,materia').eq('user_id', user.id).order('data', { ascending: true }),
   ])
   const perfil = perfilRes.data || EMPTY_PERFIL
@@ -47,10 +47,13 @@ export async function POST(req) {
         const media = mediaPonderada(m.avaliacoes)
         const meta = Number(m.media_aprovacao) || 7
         const mediaTxt = media != null ? media.toFixed(1) : '—'
-        const totalAulas = Number(m.total_aulas) || 60
-        const limiteFaltas = Math.floor(totalAulas * 0.25)
+        // Limite REAL de faltas (coluna limite_faltas). null = não configurado.
+        const limiteFaltas = m.limite_faltas == null ? null : Number(m.limite_faltas)
+        const faltasTxt = limiteFaltas == null
+          ? `faltas ${m.faltas || 0} (limite não definido)`
+          : `faltas ${m.faltas || 0}/${limiteFaltas} permitidas`
         const aviso = media != null && media < meta ? ' ⚠ abaixo da meta' : ''
-        return `${m.nome}: média ${mediaTxt} (meta ${meta}), faltas ${m.faltas || 0}/${limiteFaltas} permitidas${aviso}`
+        return `${m.nome}: média ${mediaTxt} (meta ${meta}), ${faltasTxt}${aviso}`
       }).join('\n')
     : 'Sem dados de notas cadastrados'
 

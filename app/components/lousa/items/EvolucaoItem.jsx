@@ -129,7 +129,7 @@ function EvolucaoFullscreenInner() {
   const media = useMemo(() => mediaPonderada(lista), [lista])
   const ultima = useMemo(() => sortByDate(lista, 'asc').slice(-1)[0], [lista])
   const faltas = ultima?.faltas ?? null
-  const maxFaltas = ultima?.maxFaltas ?? 15
+  const maxFaltas = ultima?.maxFaltas ?? null // null = limite não configurado
 
   const upcoming = useMemo(() => {
     const arr = Array.isArray(eventos) ? eventos : []
@@ -175,9 +175,11 @@ function EvolucaoFullscreenInner() {
         <StatCard value={media != null ? media.toFixed(1) : '—'} label="Média atual" />
         <StatCard value={lista.length} label="Avaliações feitas" tone="neutral" />
         <StatCard
-          value={faltas == null ? '—' : `${faltas}/${maxFaltas}`}
-          label="Faltas"
-          tone={faltas != null && (faltas / maxFaltas) >= 0.8 ? 'danger' : faltas != null && (faltas / maxFaltas) >= 0.6 ? 'warn' : ''}
+          value={faltas == null ? '—' : maxFaltas == null ? String(faltas) : `${faltas}/${maxFaltas}`}
+          label={maxFaltas == null && faltas != null ? 'Faltas · defina o limite' : 'Faltas'}
+          tone={faltas != null && maxFaltas != null && maxFaltas > 0
+            ? ((faltas / maxFaltas) >= 0.8 ? 'danger' : (faltas / maxFaltas) >= 0.6 ? 'warn' : '')
+            : ''}
         />
         <StatCard value={upcoming} label="Eventos próximos" tone="neutral" />
       </div>

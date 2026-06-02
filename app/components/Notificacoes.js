@@ -16,7 +16,7 @@ function NotifIcon({ tipo }) {
 
 /* ── Notification data ───────────────────────────────────────── */
 // `materias` é o modelo NOVO (db.getMaterias): array de
-// {nome, faltas, total_aulas, media_aprovacao, avaliacoes:[{nota,peso}]}.
+// {nome, faltas, total_aulas, limite_faltas, media_aprovacao, avaliacoes:[{nota,peso}]}.
 function gerarNotificacoes(perfil, materias, eventos, lastAccess) {
   const notifs = []
   const hoje = new Date()
@@ -43,14 +43,14 @@ function gerarNotificacoes(perfil, materias, eventos, lastAccess) {
     })
   }
 
-  // 2. Limite de faltas (≤ 3 restantes) — modelo novo: faltas/total_aulas
+  // 2. Limite de faltas (≤ 3 restantes) — usa o limite REAL configurado
+  // (coluna limite_faltas). Sem limite definido (null) → não notifica.
   if (Array.isArray(materias)) {
     materias.forEach(m => {
       if (!m) return
-      const totalAulas = Number(m.total_aulas) || 0
-      const faltas     = Number(m.faltas)      || 0
-      if (totalAulas <= 0) return
-      const limite    = Math.floor(totalAulas * 0.25)
+      if (m.limite_faltas == null) return
+      const limite    = Number(m.limite_faltas)
+      const faltas    = Number(m.faltas) || 0
       const restantes = limite - faltas
       if (restantes < 0 || restantes > 3) return
       notifs.push({

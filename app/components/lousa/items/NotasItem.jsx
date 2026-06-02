@@ -54,7 +54,8 @@ function resumoMaterias(notas) {
         countComNota: comNota.length,
         totalAval: avaliacoes.length,
         faltas: Number(m.faltas) || 0,
-        maxFaltas: Math.floor((Number(m.total_aulas) || 60) * 0.25),
+        // Limite real (coluna limite_faltas). null = não configurado.
+        maxFaltas: m.limite_faltas == null ? null : Number(m.limite_faltas),
         avaliacoes,
       }
     })
@@ -82,7 +83,7 @@ function NotasCardMateria({ materia, notas, onClick }) {
   const media = mediaPonderada(lista)
   const ultima = sortByDate(lista, 'desc')[0]
   const faltas = ultima?.faltas ?? 0
-  const maxFaltas = ultima?.maxFaltas ?? 15
+  const maxFaltas = ultima?.maxFaltas ?? null // null = limite não configurado
   const reduce = useReducedMotion()
 
   const spark = useMemo(() => {
@@ -114,7 +115,7 @@ function NotasCardMateria({ materia, notas, onClick }) {
             {media != null ? media.toFixed(1) : '—'}
           </p>
           <p className="bento-card-stat">
-            {lista.length} {lista.length === 1 ? 'avaliação' : 'avaliações'} · {faltas}/{maxFaltas} faltas
+            {lista.length} {lista.length === 1 ? 'avaliação' : 'avaliações'} · {maxFaltas == null ? `${faltas} ${faltas === 1 ? 'falta' : 'faltas'} · defina o limite` : `${faltas}/${maxFaltas} faltas`}
           </p>
         </div>
         {spark.length >= 2 && (
@@ -263,9 +264,12 @@ function NotasFullscreenInner() {
   const sortedDesc = useMemo(() => sortByDate(lista, 'desc'), [lista])
   const ultima = sortedDesc[0]
   const faltas = ultima?.faltas ?? null
-  const maxFaltas = ultima?.maxFaltas ?? 15
-  const pctFaltas = faltas != null ? Math.min((faltas / maxFaltas) * 100, 100) : 0
-  const corFaltas = pctFaltas >= 80 ? '#f87171' : pctFaltas >= 60 ? '#fbbf24' : '#22c55e'
+  const maxFaltas = ultima?.maxFaltas ?? null // null = limite não configurado
+  const temLimite = maxFaltas != null
+  const pctFaltas = !temLimite || faltas == null
+    ? 0
+    : maxFaltas > 0 ? Math.min((faltas / maxFaltas) * 100, 100) : (faltas > 0 ? 100 : 0)
+  const corFaltas = !temLimite ? '#71717a' : pctFaltas >= 80 ? '#f87171' : pctFaltas >= 60 ? '#fbbf24' : '#22c55e'
 
   const isGeral = materia === 'geral'
 
@@ -360,13 +364,23 @@ function StatsGrid({ lista, media, faltas, maxFaltas, pct, corFaltas }) {
         <p className="lousa-fs-stat-label">Avaliações</p>
       </div>
       <div className="lousa-fs-stat-card">
-        <p className={`lousa-fs-stat-value ${pct >= 80 ? 'danger' : pct >= 60 ? 'warn' : ''}`} style={{ color: corFaltas }}>
-          {faltas ?? 0}<span style={{ fontSize: 16, color: '#71717a', fontWeight: 600 }}>/{maxFaltas}</span>
-        </p>
-        <p className="lousa-fs-stat-label">Faltas ({Math.round(pct)}%)</p>
-        <div className="lousa-fs-bar-wrap">
-          <div className="lousa-fs-bar-fill" style={{ width: `${pct}%`, background: corFaltas }} />
-        </div>
+        {maxFaltas == null ? (
+          <>
+            <p className="lousa-fs-stat-value" style={{ color: '#71717a' }}>{faltas ?? 0}</p>
+            <p className="lousa-fs-stat-label">Faltas · defina o limite</p>
+            <p className="lousa-fs-stat-sub">Configure o limite de faltas em /notas.</p>
+          </>
+        ) : (
+          <>
+            <p className={`lousa-fs-stat-value ${pct >= 80 ? 'danger' : pct >= 60 ? 'warn' : ''}`} style={{ color: corFaltas }}>
+              {faltas ?? 0}<span style={{ fontSize: 16, color: '#71717a', fontWeight: 600 }}>/{maxFaltas}</span>
+            </p>
+            <p className="lousa-fs-stat-label">Faltas ({Math.round(pct)}%)</p>
+            <div className="lousa-fs-bar-wrap">
+              <div className="lousa-fs-bar-fill" style={{ width: `${pct}%`, background: corFaltas }} />
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -499,6 +513,25 @@ function FaltasTab({ faltas, maxFaltas, pct, cor }) {
         <CalendarDays className="lousa-fs-empty-icon" style={{ color: '#22c55e', opacity: .5 }} />
         <p className="lousa-fs-empty-title" style={{ color: '#86efac' }}>Sem faltas registradas. Continue assim!</p>
         <p className="lousa-fs-empty-sub">Quando você marcar faltas, elas aparecem aqui com data.</p>
+      </div>
+    )
+  }
+
+  if (maxFaltas == null) {
+    return (
+      <div>
+        <div className="lousa-fs-card">
+          <p className="lousa-fs-card-title">
+            <AlertCircle size={16} strokeWidth={1.7} style={{ color: '#71717a' }} />
+            Resumo de faltas
+          </p>
+          <p style={{ fontSize: 32, fontWeight: 800, color: '#71717a', letterSpacing: '-.02em', lineHeight: 1, marginTop: 8 }}>
+            {faltas} <span style={{ fontSize: 18, color: '#71717a', fontWeight: 600 }}>faltas</span>
+          </p>
+          <p style={{ fontSize: 13, color: '#a1a1aa', marginTop: 6 }}>
+            Defina o limite de faltas desta matéria em /notas pra acompanhar quanto ainda pode faltar.
+          </p>
+        </div>
       </div>
     )
   }
@@ -637,7 +670,7 @@ function MateriaAccordion({ resumo, reduce, index }) {
                 )
               })}
               <p className="lousa-acc-foot">
-                Meta de aprovação: {resumo.meta} · {resumo.faltas}/{resumo.maxFaltas} faltas · edite em /notas
+                Meta de aprovação: {resumo.meta} · {resumo.maxFaltas == null ? `${resumo.faltas} faltas (defina o limite)` : `${resumo.faltas}/${resumo.maxFaltas} faltas`} · edite em /notas
               </p>
             </div>
           </motion.div>
