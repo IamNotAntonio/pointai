@@ -233,12 +233,18 @@ export default function PlanoEstudos() {
         .plano-week-pct{font-size:13px;color:var(--text-4);font-weight:600;margin-left:8px}
         .plano-bar{height:10px;border-radius:99px;background:var(--surface-3,rgba(255,255,255,.06));overflow:hidden;margin:10px 0 18px}
         .plano-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#1a7a4a,#22c55e)}
-        .plano-days{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
-        .plano-day{flex:0 0 auto;min-width:74px;border-radius:12px;padding:9px 10px;text-align:center;cursor:pointer;border:1px solid var(--border);background:var(--surface-2);transition:transform .12s,border-color .15s,background .15s;font-family:inherit}
+        /* Padding generoso pra não cortar o glow do "hoje" no overflow-x. */
+        .plano-days{display:flex;gap:8px;overflow-x:auto;padding:6px 4px 8px}
+        /* Borda uniforme em todos os estados: nunca muda de espessura, só de
+           cor; rings extras usam box-shadow (que respeita o border-radius).
+           Evita o outline+outline-offset, que renderizava quebrado nos cantos
+           arredondados em zoom não-inteiro. */
+        .plano-day{flex:0 0 auto;min-width:74px;border-radius:12px;padding:9px 10px;text-align:center;cursor:pointer;border:1px solid var(--border);background:var(--surface-2);box-sizing:border-box;transition:transform .12s,border-color .15s,background .15s,box-shadow .15s;font-family:inherit}
         .plano-day:hover{transform:translateY(-1px)}
         .plano-day[data-state="done"]{background:rgba(34,197,94,.16);border-color:rgba(34,197,94,.4)}
-        .plano-day[data-state="today"]{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand),0 0 18px rgba(34,197,94,.18)}
-        .plano-day[data-sel="true"]{outline:2px solid var(--brand);outline-offset:1px}
+        .plano-day[data-state="today"]{border-color:var(--brand);box-shadow:0 0 18px rgba(34,197,94,.18)}
+        .plano-day[data-sel="true"]{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand)}
+        .plano-day[data-state="today"][data-sel="true"]{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand),0 0 18px rgba(34,197,94,.18)}
         .plano-day-abrev{font-size:13px;font-weight:700;color:var(--text-1)}
         .plano-day-data{font-size:10.5px;color:var(--text-4);margin-top:1px}
         .plano-day-dot{display:inline-flex;align-items:center;justify-content:center;margin-top:5px;height:14px}

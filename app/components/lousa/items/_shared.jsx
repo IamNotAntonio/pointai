@@ -315,7 +315,10 @@ export const fullscreenCss = `
   .lousa-acc-body{padding:4px 16px 16px}
   .lousa-acc-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;padding:10px 0;font-size:13.5px;border-top:1px solid rgba(255,255,255,.04)}
   .lousa-acc-row-head{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#71717a;border-top:none;padding-top:6px}
-  .lousa-acc-foot{font-size:11.5px;color:#71717a;margin-top:12px;line-height:1.5}
+  .lousa-acc-foot{font-size:11.5px;color:#71717a;margin-top:8px;line-height:1.5}
+  .lousa-acc-faltas{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.04);line-height:1.4}
+  .lousa-acc-faltas-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .lousa-acc-faltas-txt{font-size:12.5px}
   @media (max-width:1023px){
     .lousa-fs-container{padding:18px 16px 32px}
     .lousa-fs-stats-grid{grid-template-columns:repeat(2, 1fr)}

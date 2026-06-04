@@ -669,14 +669,48 @@ function MateriaAccordion({ resumo, reduce, index }) {
                   </div>
                 )
               })}
+              <FaltasInline faltas={resumo.faltas} limite={resumo.maxFaltas} />
               <p className="lousa-acc-foot">
-                Meta de aprovação: {resumo.meta} · {resumo.maxFaltas == null ? `${resumo.faltas} faltas (defina o limite)` : `${resumo.faltas}/${resumo.maxFaltas} faltas`} · edite em /notas
+                Meta de aprovação: {resumo.meta} · edite em /notas
               </p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
+  )
+}
+
+// Linha discreta de faltas dentro do accordion (mesma lógica de cor da aba
+// Presença em /notas, MateriaCard.jsx: verde com margem > 2 restantes,
+// âmbar entre 1 e 2, vermelho no limite/estourado, cinza sem limite).
+function FaltasInline({ faltas, limite }) {
+  const f = Number(faltas) || 0
+  const temLimite = limite != null
+  const restantes = temLimite ? limite - f : null
+
+  let cor
+  if (!temLimite) cor = '#71717a'
+  else if (restantes <= 0) cor = '#dc2626'
+  else if (restantes <= 2) cor = '#d97706'
+  else cor = '#22c55e'
+
+  return (
+    <div className="lousa-acc-faltas">
+      <span className="lousa-acc-faltas-dot" style={{ background: cor }} aria-hidden />
+      {temLimite ? (
+        <span className="lousa-acc-faltas-txt">
+          <strong style={{ color: cor }}>{f} de {limite}</strong>
+          <span style={{ color: '#71717a' }}> {limite === 1 ? 'falta' : 'faltas'} · </span>
+          <strong style={{ color: cor }}>{Math.max(0, restantes)} {Math.abs(restantes) === 1 ? 'restante' : 'restantes'}</strong>
+        </span>
+      ) : (
+        <span className="lousa-acc-faltas-txt">
+          <strong style={{ color: '#a1a1aa' }}>{f}</strong>
+          <span style={{ color: '#71717a' }}> {f === 1 ? 'falta' : 'faltas'} · defina o limite em /notas</span>
+        </span>
+      )}
+    </div>
   )
 }
 

@@ -218,6 +218,14 @@ const BENTO_CSS = `
   .bento-cell-span-2{grid-column:span 2}
   .bento-cell-span-1{grid-column:span 1}
 
+  /* Contexto GERAL: notas (com lista de matérias) é mais alto que calendário
+     /evolução na mesma linha. O grid já estica a célula, mas o .bento-card
+     dentro ficava no content-height. Aqui forçamos o card a esticar pra
+     altura total da célula, eliminando o vão vertical. Não afeta matérias
+     específicas (escopo restrito a .bento-grid-geral). */
+  .bento-grid-geral .bento-cell{display:flex;flex-direction:column}
+  .bento-grid-geral .bento-cell>.bento-card{flex:1;align-self:stretch}
+
   /* Uniform card surface: same border-radius, border, bg, hover across all 6 */
   .bento-card{position:relative;width:100%;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:14px;min-height:110px;cursor:pointer;text-align:left;color:#d4d4d8;font-family:inherit;transition:background .15s,border-color .15s,box-shadow .15s;overflow:hidden;display:block}
   .bento-card:hover{background:rgba(255,255,255,.05);border-color:rgba(34,197,94,.3);box-shadow:0 0 20px rgba(34,197,94,.08)}
