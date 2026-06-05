@@ -43,12 +43,23 @@ export async function proxy(request) {
   const isProtected = PROTECTED.some(p => pathname.startsWith(p))
   const isLogin     = pathname === '/login'
 
+  // Canonical @supabase/ssr pattern: any response we return — including
+  // redirects — must carry the cookies that getUser()/refresh wrote onto
+  // `response`. Otherwise the renewed session Set-Cookie headers are dropped
+  // on redirect and the next request sees no session (the prod logout bug).
+  const withCookies = (redirect) => {
+    response.cookies.getAll().forEach(({ name, value, ...options }) =>
+      redirect.cookies.set(name, value, options)
+    )
+    return redirect
+  }
+
   if (!user && isProtected) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    return withCookies(NextResponse.redirect(new URL('/login', request.url)))
   }
 
   if (user && isLogin) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return withCookies(NextResponse.redirect(new URL('/dashboard', request.url)))
   }
 
   return response
