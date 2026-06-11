@@ -91,18 +91,19 @@ export async function POST(req) {
     return NextResponse.json({ seeds: [] })
   }
 
-  // 5. Triangle connections (A-B, B-C)
+  // 5. Conexões A-B e B-C com forças DIFERENTES — o layout usa
+  // distance ∝ 1/forca; forças iguais formavam um arranjo simétrico.
   if (inserted.length >= 3) {
     const [a, b, c] = inserted
-    const pairs = [
-      [a.id, b.id],
-      [b.id, c.id],
-    ].map(([x, y]) => [x, y].sort())
-    await supabase.from('conexoes').insert(pairs.map(([x, y]) => ({
+    const pares = [
+      { ids: [a.id, b.id].sort(), forca: 2 },
+      { ids: [b.id, c.id].sort(), forca: 1 },
+    ]
+    await supabase.from('conexoes').insert(pares.map(p => ({
       user_id: user.id,
-      conceito_a_id: x,
-      conceito_b_id: y,
-      forca: 1,
+      conceito_a_id: p.ids[0],
+      conceito_b_id: p.ids[1],
+      forca: p.forca,
     })))
   }
 

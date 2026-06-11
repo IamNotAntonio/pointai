@@ -5,10 +5,74 @@ import { motion, useReducedMotion, useMotionValue, useTransform, animate } from 
 import { Brain, Lock, Trash2, Maximize, RefreshCw } from 'lucide-react'
 import { useCurrentMateria, openPlansModal, sharedItemCss, fullscreenCss } from './_shared'
 import { fetchPlano } from '../../../lib/plano'
+import { corMateriaRgb, rgbStr, rgbaStr, tonePorPeso, raioNo } from './cerebroGraphTheme'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false })
 
 const CONNECTION_LIMIT_FREE = 500
+
+/* ─── Grafo: layout/estilo ───────────────────────────────────── */
+const PERF_THRESHOLD = 120     // acima: sem glow, menos labels, simulação mais curta
+const MAX_RENDER_NODES = 250   // teto de nós renderizados (top peso); resto vira contador
+const LABEL_ZOOM = 1.4         // zoom a partir do qual todos os labels aparecem
+const LABEL_ZOOM_PERF = 2.2
+const LABEL_TOP_N = 8          // labels sempre visíveis nos N nós de maior peso
+const LABEL_TOP_N_PERF = 5
+
+// source/target viram refs de objeto depois que o d3 inicia — normaliza.
+const idOf = v => (typeof v === 'object' && v !== null ? v.id : v)
+
+// Hash determinístico (djb2) de qualquer id — ruído estável entre renders.
+function hashId(s) {
+  const str = String(s)
+  let h = 5381
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+// Fator 1±amp determinístico por chave (ex.: ruido(id, 0.45) → 0.55–1.45).
+const ruido = (chave, amp) => 1 + amp * (((hashId(chave) % 1000) / 1000) * 2 - 1)
+
+// Gravidade suave: puxa cada nó pro SEU alvo (gx, gy) — um offset
+// determinístico perto do centro. Segura o grafo na viewport (drag não
+// "expulsa" os vizinhos) e, como cada alvo é diferente, torna o próprio
+// equilíbrio assimétrico. Força custom no contrato do d3 (sem import extra).
+const GRAVIDADE = 0.08
+function criarGravidade(strength) {
+  let nodos = []
+  function force(alpha) {
+    for (const n of nodos) {
+      n.vx += ((n.gx || 0) - n.x) * strength * alpha
+      n.vy += ((n.gy || 0) - n.y) * strength * alpha
+    }
+  }
+  force.initialize = ns => { nodos = ns }
+  return force
+}
+
+// Jitter inicial + alvo de gravidade por nó. Sem o jitter o d3 parte de um
+// arranjo determinístico e, com forças uniformes, grafos pequenos
+// estabilizam em polígonos regulares ("pentagrama").
+function prepararGrafo(data) {
+  const nodes = data?.nodes || []
+  const espalhe = 30 * Math.sqrt(nodes.length + 1)
+  return {
+    nodes: nodes.map(n => {
+      const ang = Math.random() * Math.PI * 2
+      const rad = espalhe * Math.sqrt(Math.random())
+      const h = hashId(n.id)
+      const angAlvo = ((h % 360) / 360) * Math.PI * 2
+      const radAlvo = 18 + ((h >> 9) % 53) // 18–70px do centro; bits distintos do ângulo
+      return {
+        ...n,
+        x: Math.cos(ang) * rad,
+        y: Math.sin(ang) * rad,
+        gx: Math.cos(angAlvo) * radAlvo,
+        gy: Math.sin(angAlvo) * radAlvo,
+      }
+    }),
+    links: (data?.links || []).map(l => ({ ...l })),
+  }
+}
 
 /* ─── Mini neurons SVG (card teaser) ─────────────────────────── */
 export const NEURONS = [
@@ -140,10 +204,14 @@ export function CerebroFullscreen() {
 
 function CerebroFullscreenInner() {
   const materia = useCurrentMateria()
+  const isGeral = materia === 'geral'
   const reduce = useReducedMotion()
   const [grafo, setGrafo] = useState({ nodes: [], links: [] })
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState(null)
+  const [hoverId, setHoverId] = useState(null)
+  // next/font gera um family-name hasheado — lê o computado pro canvas.
+  const fontRef = useRef('ui-sans-serif, system-ui, sans-serif')
   const [conceitoDetail, setConceitoDetail] = useState(null)
   const [mensagensRelacionadas, setMensagensRelacionadas] = useState([])
   const [isPro, setIsPro] = useState(false)
@@ -185,12 +253,12 @@ function CerebroFullscreenInner() {
             try { window.dispatchEvent(new CustomEvent('cerebro-updated', { detail: { seeded: seedData.seeds.length } })) } catch {}
           }
           const refresh = await fetch(`/api/cerebro/grafo?materia=${q}`)
-          if (refresh.ok) setGrafo(await refresh.json())
+          if (refresh.ok) setGrafo(prepararGrafo(await refresh.json()))
         } else {
-          setGrafo(grafoData)
+          setGrafo(prepararGrafo(grafoData))
         }
       } else {
-        setGrafo(grafoData)
+        setGrafo(prepararGrafo(grafoData))
       }
     } catch {
       setGrafo({ nodes: [], links: [] })
@@ -298,7 +366,185 @@ function CerebroFullscreenInner() {
 
   const hasNodes = (grafo.nodes?.length || 0) > 0
   const limitReached = !isPro && totalConexoes >= CONNECTION_LIMIT_FREE
-  const isGeral = materia === 'geral'
+
+  // ── Grafo: derivações de render ─────────────────────────────
+  // Fonte computada do body (next/font usa family hasheado) pros labels.
+  useEffect(() => {
+    try { fontRef.current = getComputedStyle(document.body).fontFamily || fontRef.current } catch {}
+  }, [])
+
+  // Teto de nós (vista geral densa): mantém os MAX_RENDER_NODES de maior peso.
+  const renderGrafo = useMemo(() => {
+    const nodes = grafo.nodes || []
+    if (nodes.length <= MAX_RENDER_NODES) return grafo
+    const top = [...nodes].sort((a, b) => (b.peso || 1) - (a.peso || 1)).slice(0, MAX_RENDER_NODES)
+    const keep = new Set(top.map(n => n.id))
+    return {
+      nodes: top,
+      links: (grafo.links || []).filter(l => keep.has(idOf(l.source)) && keep.has(idOf(l.target))),
+    }
+  }, [grafo])
+  const ocultos = (grafo.nodes?.length || 0) - (renderGrafo.nodes?.length || 0)
+  const perfMode = (renderGrafo.nodes?.length || 0) > PERF_THRESHOLD
+
+  // Estilo pré-computado por nó: cor por matéria (vista geral) ou tom por
+  // peso dentro da cor da matéria (vista de uma matéria) + raio + glow.
+  const styleMap = useMemo(() => {
+    const nodes = renderGrafo.nodes || []
+    const maxPeso = nodes.reduce((m, n) => Math.max(m, n.peso || 1), 1)
+    const corPorMateria = new Map()
+    const m = new Map()
+    for (const n of nodes) {
+      const chave = isGeral ? (n.materia || 'geral') : materia
+      if (!corPorMateria.has(chave)) corPorMateria.set(chave, corMateriaRgb(chave))
+      const base = corPorMateria.get(chave)
+      const rgb = isGeral ? base : tonePorPeso(base, Math.sqrt((n.peso || 1) / maxPeso))
+      m.set(n.id, { fill: rgbStr(rgb), glow: rgbaStr(rgb, 0.55), link: rgbaStr(rgb, 0.45), r: raioNo(n.peso) })
+    }
+    return m
+  }, [renderGrafo, isGeral, materia])
+
+  // Vizinhança direta (pro foco de hover/seleção).
+  const vizinhos = useMemo(() => {
+    const m = new Map()
+    for (const n of renderGrafo.nodes || []) m.set(n.id, new Set([n.id]))
+    for (const l of renderGrafo.links || []) {
+      const a = idOf(l.source); const b = idOf(l.target)
+      m.get(a)?.add(b); m.get(b)?.add(a)
+    }
+    return m
+  }, [renderGrafo])
+
+  const focusId = hoverId || selectedId
+  const focusSet = focusId ? (vizinhos.get(focusId) || null) : null
+  const focusLink = focusSet ? (styleMap.get(focusId)?.link || 'rgba(255,255,255,0.4)') : null
+
+  // Labels sempre visíveis: top N por peso (menos em perf mode).
+  const topLabelIds = useMemo(() => {
+    const n = perfMode ? LABEL_TOP_N_PERF : LABEL_TOP_N
+    return new Set(
+      [...(renderGrafo.nodes || [])]
+        .sort((a, b) => (b.peso || 1) - (a.peso || 1))
+        .slice(0, n)
+        .map(x => x.id)
+    )
+  }, [renderGrafo, perfMode])
+
+  // Legenda (vista geral): matérias presentes, mais conceitos primeiro.
+  const legendaMaterias = useMemo(() => {
+    if (!isGeral) return []
+    const cont = new Map()
+    for (const n of renderGrafo.nodes || []) {
+      const k = n.materia || 'geral'
+      cont.set(k, (cont.get(k) || 0) + 1)
+    }
+    return [...cont.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k)
+  }, [isGeral, renderGrafo])
+
+  // Forças heterogêneas: o EQUILÍBRIO precisa ser torto (não só a partida —
+  // jitter inicial sozinho apenas gira o polígono). Três mecanismos:
+  // 1. distance ∝ 1/forca com ±45% de ruído FIXO por id do link;
+  // 2. repulsão por peso com ±30% de ruído FIXO por id do nó;
+  // 3. gravidade por nó (alvos offset) no lugar do forceCenter — o center
+  //    transladava o grafo inteiro durante o drag ("todos fugiam").
+  const aplicarForcas = useCallback(fg => {
+    if (!fg) return
+    const link = fg.d3Force('link')
+    if (link?.distance) {
+      link.distance(l => {
+        const f = Math.max(1, Math.min(Number(l.forca) || 1, 8))
+        const chave = `${idOf(l.source)}|${idOf(l.target)}`
+        return (36 + 84 / f) * ruido(chave, 0.45)
+      })
+    }
+    const charge = fg.d3Force('charge')
+    if (charge?.strength) {
+      // Repulsão menor que antes (equilibra com a gravidade) e ruidosa por nó.
+      charge.strength(n => -(40 + 22 * Math.sqrt(n.peso || 1)) * ruido(n.id, 0.3))
+    }
+    fg.d3Force('center', null)
+    fg.d3Force('gravidade', criarGravidade(GRAVIDADE))
+  }, [])
+
+  // Ref callback: o componente é dynamic(ssr:false) — configura as forças
+  // assim que a instância monta (um effect com ref.current perderia o timing).
+  const setGraphRef = useCallback(inst => {
+    graphRef.current = inst
+    aplicarForcas(inst)
+  }, [aplicarForcas])
+
+  useEffect(() => {
+    if (renderGrafo.nodes?.length) {
+      aplicarForcas(graphRef.current)
+      graphRef.current?.d3ReheatSimulation?.()
+    }
+  }, [renderGrafo, aplicarForcas])
+
+  // Desenho custom dos nós: cor + glow sutil + label por demanda.
+  const paintNode = useCallback((node, ctx, scale) => {
+    const sty = styleMap.get(node.id)
+    if (!sty) return
+    const dim = focusSet ? !focusSet.has(node.id) : false
+    ctx.globalAlpha = dim ? 0.12 : node.is_seed ? 0.55 : 1
+    if (!dim && !perfMode) {
+      ctx.shadowColor = sty.glow
+      ctx.shadowBlur = 7
+    }
+    ctx.fillStyle = sty.fill
+    ctx.beginPath()
+    ctx.arc(node.x, node.y, sty.r, 0, 2 * Math.PI)
+    ctx.fill()
+    ctx.shadowBlur = 0
+
+    if (node.id === selectedId && !dim) {
+      ctx.strokeStyle = 'rgba(255,255,255,.85)'
+      ctx.lineWidth = 1.6 / scale
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, sty.r + 3 / scale, 0, 2 * Math.PI)
+      ctx.stroke()
+    }
+
+    // Label por demanda: zoom alto, top peso, hover ou selecionado — nunca todos.
+    const zoomLabel = perfMode ? LABEL_ZOOM_PERF : LABEL_ZOOM
+    const mostra = !dim && (scale >= zoomLabel || topLabelIds.has(node.id) || node.id === hoverId || node.id === selectedId)
+    if (mostra) {
+      const fs = Math.max(3, 11 / scale)
+      ctx.font = `600 ${fs}px ${fontRef.current}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
+      ctx.globalAlpha = 0.92
+      ctx.fillStyle = '#e4e4e7'
+      ctx.fillText(node.nome, node.x, node.y + sty.r + 3 / scale)
+    }
+    ctx.globalAlpha = 1
+  }, [styleMap, focusSet, selectedId, hoverId, topLabelIds, perfMode])
+
+  // Área clicável/hover coerente com o raio custom.
+  const paintPointer = useCallback((node, color, ctx) => {
+    const r = (styleMap.get(node.id)?.r || 6) + 4
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
+    ctx.fill()
+  }, [styleMap])
+
+  const linkCor = useCallback(l => {
+    if (!focusSet) return 'rgba(255,255,255,0.14)'
+    const toca = idOf(l.source) === focusId || idOf(l.target) === focusId
+    return toca ? focusLink : 'rgba(255,255,255,0.03)'
+  }, [focusSet, focusId, focusLink])
+
+  const linkLargura = useCallback(l => {
+    const base = Math.min(l.forca || 1, 4)
+    if (!focusSet) return base
+    const toca = idOf(l.source) === focusId || idOf(l.target) === focusId
+    return toca ? base + 0.6 : 0.5
+  }, [focusSet, focusId])
+
+  const onHover = useCallback(n => {
+    setHoverId(n?.id || null)
+    if (typeof document !== 'undefined') document.body.style.cursor = n ? 'pointer' : ''
+  }, [])
 
   return (
     <div className="lousa-fs-container cerebro-fs">
@@ -324,33 +570,48 @@ function CerebroFullscreenInner() {
           ) : hasNodes ? (
             <>
               <ForceGraph2D
-                ref={graphRef}
+                ref={setGraphRef}
                 width={dims.w}
                 height={dims.h}
-                graphData={grafo}
-                nodeRelSize={6}
-                nodeVal={n => Math.max(1, n.peso || 1)}
-                nodeColor={n => n.is_seed ? 'rgba(34,197,94,.5)' : '#22c55e'}
-                nodeLabel={n => `${n.nome}${n.is_seed ? ' (exemplo)' : ''}`}
-                linkColor={() => 'rgba(255,255,255,0.15)'}
-                linkWidth={l => Math.min(l.forca || 1, 4)}
+                graphData={renderGrafo}
+                nodeCanvasObjectMode={() => 'replace'}
+                nodeCanvasObject={paintNode}
+                nodePointerAreaPaint={paintPointer}
+                linkColor={linkCor}
+                linkWidth={linkLargura}
                 backgroundColor="rgba(0,0,0,0)"
+                autoPauseRedraw={false}
                 onNodeClick={n => setSelectedId(n.id)}
-                onNodeHover={n => {
-                  if (typeof document !== 'undefined') {
-                    document.body.style.cursor = n ? 'pointer' : ''
-                  }
-                }}
-                d3AlphaDecay={0.04}
+                onNodeHover={onHover}
+                enableNodeDrag={true}
+                d3AlphaDecay={perfMode ? 0.06 : 0.035}
                 d3VelocityDecay={0.4}
-                cooldownTime={5000}
-                onEngineStop={() => { try { graphRef.current?.zoomToFit?.(400, 40) } catch {} }}
-                enableNodeDrag={false}
+                warmupTicks={reduce ? 200 : 0}
+                cooldownTime={reduce ? 0 : perfMode ? 2200 : 4000}
+                onEngineStop={() => { try { graphRef.current?.zoomToFit?.(reduce ? 0 : 400, 40) } catch {} }}
               />
               <button onClick={centralizar} className="cerebro-recenter" type="button">
                 <Maximize size={13} strokeWidth={2} />
                 Centralizar
               </button>
+              {isGeral && legendaMaterias.length > 0 && (
+                <div className="cerebro-legend">
+                  {legendaMaterias.slice(0, 8).map(m => (
+                    <span key={m} className="cerebro-legend-item">
+                      <i style={{ background: rgbStr(corMateriaRgb(m)) }} />
+                      {m}
+                    </span>
+                  ))}
+                  {legendaMaterias.length > 8 && (
+                    <span className="cerebro-legend-item cerebro-legend-more">+{legendaMaterias.length - 8} matérias</span>
+                  )}
+                </div>
+              )}
+              {ocultos > 0 && (
+                <div className="cerebro-trim-badge">
+                  Mostrando os {MAX_RENDER_NODES} conceitos mais relevantes · +{ocultos} ocultos — filtre por matéria pra ver todos
+                </div>
+              )}
             </>
           ) : (
             <div className="cerebro-graph-empty">
@@ -501,6 +762,11 @@ const CEREBRO_FS_CSS = `
   @keyframes cerebroSpin{to{transform:rotate(360deg)}}
   .cerebro-recenter{position:absolute;left:14px;bottom:14px;display:inline-flex;align-items:center;gap:6px;background:rgba(15,15,15,.85);border:1px solid rgba(255,255,255,.08);color:#d4d4d8;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;font-family:inherit;backdrop-filter:blur(8px);transition:background .15s,border-color .15s}
   .cerebro-recenter:hover{background:rgba(20,20,20,.95);border-color:rgba(34,197,94,.3);color:#22c55e}
+  .cerebro-legend{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:5px;background:rgba(10,10,10,.72);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:9px 12px;backdrop-filter:blur(8px);max-width:200px}
+  .cerebro-legend-item{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:#d4d4d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cerebro-legend-item i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .cerebro-legend-more{color:#71717a}
+  .cerebro-trim-badge{position:absolute;right:14px;bottom:14px;font-size:11px;font-weight:600;color:#a1a1aa;background:rgba(10,10,10,.78);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:6px 10px;backdrop-filter:blur(8px);max-width:300px;line-height:1.45}
 
   .cerebro-panel{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;overflow-y:auto;min-height:0;display:flex;flex-direction:column}
   .cerebro-paywall{background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.22);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:#fbbf24;display:flex;flex-direction:column;gap:8px}
