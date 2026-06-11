@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { calcularMedia } from '../lib/db'
 import AvaliacaoRow from './AvaliacaoRow'
+import CalculadoraMeta from './CalculadoraMeta'
 
 const MEDIA_APROVACAO_PADRAO = 7.0
 const LIMITE_VISIVEL = 4 // avaliações mostradas antes de "Ver todas"
@@ -465,6 +466,16 @@ export default function MateriaCard({
                 <Plus size={15} strokeWidth={2.2} /> {adicionando ? 'Adicionando…' : 'Adicionar avaliação'}
               </button>
             </div>
+
+            {/* Calculadora "Quanto preciso tirar?" (cálculo client-side, sem IA) */}
+            {avaliacoes.length > 0 && (
+              <CalculadoraMeta
+                avaliacoes={avaliacoes}
+                metaPadrao={meta}
+                nomeMateria={nome}
+                reduce={reduce}
+              />
+            )}
           </motion.div>
         ) : (
           <motion.div
