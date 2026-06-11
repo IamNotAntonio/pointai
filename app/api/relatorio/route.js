@@ -45,6 +45,14 @@ export async function POST(req) {
     // SECURITY: perfil + matérias + eventos from authenticated session — never trust the body.
     const { supabase, user } = await requireUser()
     if (!user) return Response.json({ error: 'unauthorized' }, { status: 401 })
+
+    // Modo do relatório vem do query string (?periodo=semana|mes). Não usamos
+    // o body porque ele é descartado por segurança (anti-spoof de dados do
+    // usuário). O modo é só um seletor de UI — não é dado do usuário, então
+    // query string é seguro e segue a convenção Next.js para read-params.
+    const url = new URL(req.url)
+    const modo = url.searchParams.get('periodo') === 'mes' ? 'mes' : 'semana'
+
     const [perfilRes, materiasRes, eventosRes] = await Promise.all([
       supabase.from('perfis').select('nome,curso,universidade,semestre,materias,objetivo').eq('user_id', user.id).maybeSingle(),
       // Modelo NOVO (N avaliações): materias_aluno + avaliacoes embutidas.
@@ -97,7 +105,7 @@ export async function POST(req) {
       materias_em_risco: materiasEmRisco,
     }
 
-    /* ── Prompt: pede APENAS texto/conclusões (números são nossos) ─ */
+    /* ── Resumo das notas em texto (usado pelo prompt de AMBOS os modos) ── */
     const notasStr = materias.length
       ? materias.map((m) => {
           const media = mediaPonderada(m.avaliacoes)
@@ -112,6 +120,85 @@ export async function POST(req) {
         }).join('\n')
       : 'Sem dados de notas cadastrados'
 
+    /* ── Modo MÊS: balanço consolidado, sem tendência temporal ────── */
+    if (modo === 'mes') {
+      // Rótulo "Junho 2026" (sem "de") — pt-BR retornaria "junho de 2026".
+      const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+      const hoje = new Date()
+      const periodoMes = `${MESES[hoje.getMonth()]} ${hoje.getFullYear()}`
+
+      // Indicadores do mês: 2 cards (media_geral_mes, materias_em_risco).
+      const indicadoresMes = {
+        media_geral_mes: mediaGeral != null ? Number(mediaGeral.toFixed(2)) : null,
+        materias_em_risco: materiasEmRisco,
+      }
+
+      // Lista de TODAS as matérias para a tela / PDF.
+      const materiasOut = materiasComDados.map((m) => {
+        const raw = materias.find(x => x.nome === m.nome)?.avaliacoes || []
+        const nAvaliacoes = raw.filter(a => a && a.nota !== null && a.nota !== undefined && a.nota !== '' && !Number.isNaN(Number(a.nota))).length
+        return {
+          nome: m.nome,
+          media: m.media != null ? Number(m.media.toFixed(2)) : null,
+          meta: m.meta,
+          n_avaliacoes: nAvaliacoes,
+          faltas: m.faltas,
+          limite_faltas: m.limiteFaltas,
+          em_risco: m.emRisco,
+        }
+      })
+
+      // Texto do balanço — única parte gerada pela IA. Cálculos numéricos
+      // ficam server-side acima; aqui ela só interpreta.
+      const promptMes = `Você é um analista acadêmico para universitários brasileiros. Escreva um BALANÇO DO MÊS de ${periodoMes} para o aluno.
+
+Perfil do aluno:
+- Nome: ${perfil.nome}
+- Curso: ${perfil.curso} (${perfil.semestre})
+- Universidade: ${perfil.universidade}
+- Objetivo: ${perfil.objetivo}
+
+Situação acadêmica ATUAL (consolidada — você NÃO tem dados de meses anteriores):
+${notasStr}
+
+REGRAS CRÍTICAS:
+- NÃO afirme tendências nem evolução temporal: nada de "subiu", "caiu", "melhorou", "piorou", "comparado a", "em relação a", "vem evoluindo". Você só tem o ESTADO ATUAL.
+- Fale diretamente com ${perfil.nome || 'o aluno'}, tom honesto e encorajador (nunca punitivo).
+- Foque em INTERPRETAR o panorama atual: quais matérias estão sólidas, quais merecem atenção, o que faz sentido priorizar daqui pra frente.
+- NÃO repita os números crus (eles aparecem em cards e na lista à parte). Use linguagem qualitativa.
+- 2 a 4 parágrafos curtos em markdown. Pode usar listas com "-" e **negrito**. NÃO use títulos (## etc).
+- Se não houver matérias ou avaliações cadastradas, reconheça e oriente a começar.
+
+Responda APENAS com JSON puro, sem markdown, neste formato exato:
+{"texto":"...markdown do balanço..."}`
+
+      const respostaMes = await cliente.messages.create({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1400,
+        messages: [{ role: 'user', content: promptMes }],
+      })
+
+      // Parse defensivo: se a IA não devolveu JSON puro, tenta o texto cru.
+      let balancoTexto = ''
+      try {
+        const parsed = extractJSON(respostaMes.content[0].text)
+        balancoTexto = String(parsed?.texto || '').trim()
+      } catch {
+        balancoTexto = String(respostaMes.content[0].text || '').trim()
+      }
+      if (!balancoTexto) throw new Error('A IA não retornou o balanço. Tente novamente.')
+
+      return Response.json({
+        relatorio_mes: {
+          periodo: periodoMes,
+          indicadores: indicadoresMes,
+          materias: materiasOut,
+          balanco: { texto: balancoTexto },
+        },
+      })
+    }
+
+    /* ── Prompt: pede APENAS texto/conclusões (números são nossos) ─ */
     const eventosStr = eventos?.length
       ? eventos.slice(0, 10).map(e => `- ${e.data}: ${e.titulo} (${e.tipo}${e.materia ? ' · ' + e.materia : ''})`).join('\n')
       : 'Sem eventos cadastrados'
