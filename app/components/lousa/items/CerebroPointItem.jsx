@@ -18,6 +18,13 @@ const LABEL_ZOOM = 1.4         // zoom a partir do qual todos os labels aparecem
 const LABEL_ZOOM_PERF = 2.2
 const LABEL_TOP_N = 8          // labels sempre visíveis nos N nós de maior peso
 const LABEL_TOP_N_PERF = 5
+const ANIM_THRESHOLD = 250     // respiração/poeira animam até aqui (== teto de render)
+const RESPIRO_PX = 3.5         // amplitude base da flutuação ("respiração") dos nós
+const NASCIMENTO_MS = 800      // duração do "brotar" de um conceito novo
+const PULSO_PERIODO_MS = 3600  // ciclo do pulso de glow dos nós top
+const PULSO_AMP = 6            // amplitude do pulso (blur 7±6)
+const PULSO_TOP_N = 15         // quantos nós (por peso) pulsam
+const POEIRA_QTD = 78          // pontos de poeira estelar no fundo
 
 // source/target viram refs de objeto depois que o d3 inicia — normaliza.
 const idOf = v => (typeof v === 'object' && v !== null ? v.id : v)
@@ -47,6 +54,22 @@ function criarGravidade(strength) {
   }
   force.initialize = ns => { nodos = ns }
   return force
+}
+
+// Poeira estelar: pontos minúsculos em ESPAÇO DO GRAFO (ganham paralaxe no
+// zoom/pan), opacidade baixíssima — clima de profundidade, não céu estrelado.
+function criarPoeira() {
+  return Array.from({ length: POEIRA_QTD }, () => {
+    const ang = Math.random() * Math.PI * 2
+    const rad = 650 * Math.sqrt(Math.random())
+    return {
+      x: Math.cos(ang) * rad,
+      y: Math.sin(ang) * rad,
+      r: 0.5 + Math.random() * 0.7,    // px de TELA (divide pelo zoom ao desenhar)
+      alpha: 0.10 + Math.random() * 0.12,
+      fase: Math.random() * Math.PI * 2,
+    }
+  })
 }
 
 // Jitter inicial + alvo de gravidade por nó. Sem o jitter o d3 parte de um
@@ -386,6 +409,10 @@ function CerebroFullscreenInner() {
   }, [grafo])
   const ocultos = (grafo.nodes?.length || 0) - (renderGrafo.nodes?.length || 0)
   const perfMode = (renderGrafo.nodes?.length || 0) > PERF_THRESHOLD
+  // Vida (respiração/poeira) é barata — senos + arcs — e fica ligada até o
+  // teto de render (250). O caro é o shadowBlur, que o perfMode corta em 120:
+  // a vista geral degrada o glow ANTES de perder a respiração.
+  const vivo = (renderGrafo.nodes?.length || 0) <= ANIM_THRESHOLD
 
   // Estilo pré-computado por nó: cor por matéria (vista geral) ou tom por
   // peso dentro da cor da matéria (vista de uma matéria) + raio + glow.
@@ -399,7 +426,13 @@ function CerebroFullscreenInner() {
       if (!corPorMateria.has(chave)) corPorMateria.set(chave, corMateriaRgb(chave))
       const base = corPorMateria.get(chave)
       const rgb = isGeral ? base : tonePorPeso(base, Math.sqrt((n.peso || 1) / maxPeso))
-      m.set(n.id, { fill: rgbStr(rgb), glow: rgbaStr(rgb, 0.55), link: rgbaStr(rgb, 0.45), r: raioNo(n.peso) })
+      m.set(n.id, {
+        fill: rgbStr(rgb),
+        glow: rgbaStr(rgb, 0.55),
+        link: rgbaStr(rgb, 0.45),
+        r: raioNo(n.peso),
+        fase: (hashId(n.id) % 628) / 100, // 0–2π: respiração/pulso dessincronizados
+      })
     }
     return m
   }, [renderGrafo, isGeral, materia])
@@ -430,6 +463,16 @@ function CerebroFullscreenInner() {
     )
   }, [renderGrafo, perfMode])
 
+  // Nós que pulsam o glow: top PULSO_TOP_N por peso (mais amplo que os labels).
+  const pulsoIds = useMemo(() => {
+    return new Set(
+      [...(renderGrafo.nodes || [])]
+        .sort((a, b) => (b.peso || 1) - (a.peso || 1))
+        .slice(0, PULSO_TOP_N)
+        .map(x => x.id)
+    )
+  }, [renderGrafo])
+
   // Legenda (vista geral): matérias presentes, mais conceitos primeiro.
   const legendaMaterias = useMemo(() => {
     if (!isGeral) return []
@@ -440,6 +483,33 @@ function CerebroFullscreenInner() {
     }
     return [...cont.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k)
   }, [isGeral, renderGrafo])
+
+  // ── Vida: nascimento de conceitos + camadas de ambiente ─────
+  const conhecidosRef = useRef(null)        // Set de ids; null = primeira carga (não anima)
+  const nascimentosRef = useRef(new Map())  // id → timestamp do "brotar"
+  const poeiraRef = useRef(null)            // poeira estelar (gerada 1x por mount)
+  const vinhetaRef = useRef(null)           // gradiente da vinheta (cache por dims)
+
+  // Troca de matéria = grafo novo inteiro: re-baseline, ninguém brota.
+  useEffect(() => {
+    conhecidosRef.current = null
+    nascimentosRef.current.clear()
+  }, [materia])
+
+  // Diff de ids a cada carga (cerebro-updated → loadGrafo → renderGrafo):
+  // só ids inéditos ganham animação de nascimento; existentes não re-animam.
+  useEffect(() => {
+    const ids = new Set((renderGrafo.nodes || []).map(n => n.id))
+    if (conhecidosRef.current === null || reduce) {
+      conhecidosRef.current = ids
+      return
+    }
+    const agora = performance.now()
+    for (const id of ids) {
+      if (!conhecidosRef.current.has(id)) nascimentosRef.current.set(id, agora)
+    }
+    conhecidosRef.current = ids
+  }, [renderGrafo, reduce])
 
   // Forças heterogêneas: o EQUILÍBRIO precisa ser torto (não só a partida —
   // jitter inicial sozinho apenas gira o polígono). Três mecanismos:
@@ -480,19 +550,53 @@ function CerebroFullscreenInner() {
     }
   }, [renderGrafo, aplicarForcas])
 
-  // Desenho custom dos nós: cor + glow sutil + label por demanda.
+  // Desenho custom dos nós: cor + glow + respiração + nascimento + label.
+  // Animações vivem SÓ no loop de desenho (offsets por tempo) — a simulação
+  // do d3 nunca é reaquecida por elas.
   const paintNode = useCallback((node, ctx, scale) => {
     const sty = styleMap.get(node.id)
     if (!sty) return
+    const t = performance.now()
+    const anima = !reduce && vivo
     const dim = focusSet ? !focusSet.has(node.id) : false
+
+    // Respiração: drift senoidal com fase própria por nó; amplitude cresce
+    // de leve com o raio (nó grande respira proporcionalmente, não fica tímido).
+    let x = node.x
+    let y = node.y
+    if (anima) {
+      const amp = RESPIRO_PX * (1 + sty.r / 50)
+      x += Math.sin(t / 1600 + sty.fase) * amp
+      y += Math.cos(t / 1900 + sty.fase * 1.7) * amp
+    }
+
+    // Nascimento: brota de 25% → 100% do raio com glow extra decrescente.
+    let r = sty.r
+    let glowExtra = 0
+    const nasc = nascimentosRef.current.get(node.id)
+    if (nasc != null) {
+      const prog = (t - nasc) / NASCIMENTO_MS
+      if (prog >= 1) {
+        nascimentosRef.current.delete(node.id)
+      } else {
+        const e = 1 - Math.pow(1 - prog, 3) // easeOutCubic
+        r = sty.r * (0.25 + 0.75 * e)
+        glowExtra = 14 * (1 - prog)
+      }
+    }
+
     ctx.globalAlpha = dim ? 0.12 : node.is_seed ? 0.55 : 1
     if (!dim && !perfMode) {
+      // Pulso lento de glow nos nós top (fase própria); os demais ficam fixos.
+      const pulso = anima && pulsoIds.has(node.id)
+        ? PULSO_AMP * Math.sin((t / PULSO_PERIODO_MS) * 2 * Math.PI + sty.fase)
+        : 0
       ctx.shadowColor = sty.glow
-      ctx.shadowBlur = 7
+      ctx.shadowBlur = Math.max(1, 7 + pulso) + glowExtra
     }
     ctx.fillStyle = sty.fill
     ctx.beginPath()
-    ctx.arc(node.x, node.y, sty.r, 0, 2 * Math.PI)
+    ctx.arc(x, y, r, 0, 2 * Math.PI)
     ctx.fill()
     ctx.shadowBlur = 0
 
@@ -500,7 +604,7 @@ function CerebroFullscreenInner() {
       ctx.strokeStyle = 'rgba(255,255,255,.85)'
       ctx.lineWidth = 1.6 / scale
       ctx.beginPath()
-      ctx.arc(node.x, node.y, sty.r + 3 / scale, 0, 2 * Math.PI)
+      ctx.arc(x, y, r + 3 / scale, 0, 2 * Math.PI)
       ctx.stroke()
     }
 
@@ -514,10 +618,10 @@ function CerebroFullscreenInner() {
       ctx.textBaseline = 'top'
       ctx.globalAlpha = 0.92
       ctx.fillStyle = '#e4e4e7'
-      ctx.fillText(node.nome, node.x, node.y + sty.r + 3 / scale)
+      ctx.fillText(node.nome, x, y + r + 3 / scale)
     }
     ctx.globalAlpha = 1
-  }, [styleMap, focusSet, selectedId, hoverId, topLabelIds, perfMode])
+  }, [styleMap, focusSet, selectedId, hoverId, topLabelIds, pulsoIds, perfMode, vivo, reduce])
 
   // Área clicável/hover coerente com o raio custom.
   const paintPointer = useCallback((node, color, ctx) => {
@@ -527,6 +631,43 @@ function CerebroFullscreenInner() {
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
     ctx.fill()
   }, [styleMap])
+
+  // Camada de ambiente, desenhada ANTES dos nós a cada frame:
+  // vinheta em espaço de tela + poeira estelar em espaço do grafo.
+  const paintPre = useCallback((ctx, scale) => {
+    const t = performance.now()
+
+    // Vinheta radial (espaço de TELA — independe de zoom/pan).
+    ctx.save()
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const { w, h } = dims
+    const v = vinhetaRef.current
+    if (!v || v.w !== w || v.h !== h || v.ctx !== ctx) {
+      const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.72)
+      g.addColorStop(0, 'rgba(244,244,245,0.05)')  // centro perceptivelmente mais claro
+      g.addColorStop(0.4, 'rgba(0,0,0,0)')
+      g.addColorStop(1, 'rgba(0,0,0,0.55)')        // bordas bem mais escuras
+      vinhetaRef.current = { w, h, ctx, g }
+    }
+    ctx.fillStyle = vinhetaRef.current.g
+    ctx.fillRect(0, 0, w, h)
+    ctx.restore()
+
+    // Poeira: estática em reduce; drift lento no resto (barato — 78 arcs).
+    if (!poeiraRef.current) poeiraRef.current = criarPoeira()
+    const anima = !reduce && vivo
+    ctx.fillStyle = '#e4e4e7'
+    for (const p of poeiraRef.current) {
+      const dx = anima ? Math.sin(t / 9000 + p.fase) * 3 : 0
+      const dy = anima ? Math.cos(t / 11000 + p.fase) * 3 : 0
+      ctx.globalAlpha = p.alpha
+      ctx.beginPath()
+      ctx.arc(p.x + dx, p.y + dy, p.r / scale, 0, 2 * Math.PI)
+      ctx.fill()
+    }
+    ctx.globalAlpha = 1
+  }, [dims, reduce, vivo])
 
   const linkCor = useCallback(l => {
     if (!focusSet) return 'rgba(255,255,255,0.14)'
@@ -574,6 +715,7 @@ function CerebroFullscreenInner() {
                 width={dims.w}
                 height={dims.h}
                 graphData={renderGrafo}
+                onRenderFramePre={paintPre}
                 nodeCanvasObjectMode={() => 'replace'}
                 nodeCanvasObject={paintNode}
                 nodePointerAreaPaint={paintPointer}
